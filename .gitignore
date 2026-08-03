@@ -1,15 +1,32 @@
-Binaries
-DerivedDataCache
-Intermediate
-Saved
-.vscode
-.vs
+# ====================================
+# Unreal Engine Folders
+# ====================================
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+Build/
+
+# Ignore built-in plugin build artifacts
+Plugins/*/Binaries/
+Plugins/*/Intermediate/
+
+# ====================================
+# Visual Studio 2026 & VS Code
+# ====================================
+.vs/
+.vscode/
+*.sln
+*.slnx
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# C++ Compiler / Linker outputs
 *.VC.db
 *.opensdf
 *.opendb
 *.sdf
-*.sln
-*.slnx
-*.suo
-*.xcodeproj
-*.xcworkspace
+*.ipch
+*.db
