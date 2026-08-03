@@ -30,3 +30,4 @@ Plugins/*/Intermediate/
 *.sdf
 *.ipch
 *.db
+UpgradeLog.htm
