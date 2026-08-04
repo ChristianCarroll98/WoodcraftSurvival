@@ -31,3 +31,8 @@ Plugins/*/Intermediate/
 *.ipch
 *.db
 UpgradeLog.htm
+
+# ====================================
+# Blender
+# ====================================
+*.blend[0-9]*
