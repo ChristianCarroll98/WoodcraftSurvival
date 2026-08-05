@@ -7,9 +7,11 @@ Intermediate/
 Saved/
 Build/
 
-# Ignore built-in plugin build artifacts
+# Ignore built-in plugin build artifacts and git LFS binaries
 Plugins/*/Binaries/
 Plugins/*/Intermediate/
+lfs/
+
 
 # ====================================
 # Visual Studio 2026 & VS Code
