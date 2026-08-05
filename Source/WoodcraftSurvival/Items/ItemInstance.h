@@ -25,13 +25,9 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Item")
 	FGuid UniqueId;
 
-	/** How many items are in this stack. */
+	/** Current durability or health of this instance (only meaningful if the definition has a DurabilityFragment or HealthFragment?). */
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = "Item")
-	int32 StackCount = 1;
-
-	/** Current durability of this instance (only meaningful if the definition has a DurabilityFragment). */
-	UPROPERTY(Replicated, BlueprintReadWrite, Category = "Item")
-	float CurrentDurability = 100.f;
+	float CurrentHealth = 100.f;
 
 	/** Forwards the request to the Definition. Returns nullptr if the definition is missing or has no such fragment. */
 	template<typename T>

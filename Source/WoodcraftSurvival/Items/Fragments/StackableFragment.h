@@ -5,8 +5,9 @@
 #include "StackableFragment.generated.h"
 
 /**
- * Allows an item to stack.
- * If this fragment is missing, the item is treated as non-stackable.
+ * Defines how the player carries multiple of this item.
+ * ItemInstances themselves never stack — each instance is always one item.
+ * This fragment only describes carry limits and visual representation when the player holds several.
  */
 UCLASS(EditInlineNew, DefaultToInstanced)
 class WOODCRAFTSURVIVAL_API UStackableFragment : public UItemFragment
@@ -15,7 +16,15 @@ class WOODCRAFTSURVIVAL_API UStackableFragment : public UItemFragment
 
 public:
 
-	/** Maximum number of items that can exist in one stack. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Stacking", meta = (ClampMin = "1"))
+	/** Maximum number of this item the player may carry / hold at once. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Carrying", meta = (ClampMin = "1"))
 	int32 MaxStackSize = 1;
+
+	/**
+	 * Relative transforms used when visually showing multiple items
+	 * (e.g. extra sticks attached while held under the arm).
+	 * Index 0 = first extra item, Index 1 = second extra item, etc.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Carrying|Visual")
+	TArray<FTransform> ISMCMeshTransforms;
 };

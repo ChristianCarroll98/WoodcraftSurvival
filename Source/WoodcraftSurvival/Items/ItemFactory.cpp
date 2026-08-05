@@ -2,15 +2,13 @@
 #include "ItemDefinition.h"
 #include "ItemInstance.h"
 #include "ItemActor.h"
-#include "Fragments/StackableFragment.h"
 #include "Fragments/DurabilityFragment.h"
 #include "Engine/World.h"
 
 AItemActor* UItemFactory::SpawnItemFromDefinition(
 	UObject* WorldContextObject,
 	const UItemDefinition* Definition,
-	FTransform SpawnTransform,
-	int32 StackCount)
+	FTransform SpawnTransform)
 {
 	if (!WorldContextObject || !Definition)
 	{
@@ -23,39 +21,32 @@ AItemActor* UItemFactory::SpawnItemFromDefinition(
 		return nullptr;
 	}
 
-	// 1. Create the runtime instance
-	UItemInstance* NewInstance = NewObject<UItemInstance>(WorldContextObject);	// outer can be adjusted later
+	// 1. Create a single runtime instance
+	UItemInstance* NewInstance = NewObject<UItemInstance>(WorldContextObject);
 	NewInstance->Definition = Definition;
 	NewInstance->UniqueId = FGuid::NewGuid();
-	NewInstance->StackCount = FMath::Max(1, StackCount);
 
-	// Clamp stack count if the item has a StackableFragment
-	if (const UStackableFragment* StackFrag = Definition->FindFragment<UStackableFragment>())
-	{
-		NewInstance->StackCount = FMath::Clamp(NewInstance->StackCount, 1, StackFrag->MaxStackSize);
-	}
-	else
-	{
-		NewInstance->StackCount = 1;	// non-stackable
-	}
-
-	// Set starting durability if the item has a DurabilityFragment
+	// 2. Set starting durability if the item has a DurabilityFragment
 	if (const UDurabilityFragment* DurabilityFrag = Definition->FindFragment<UDurabilityFragment>())
 	{
-		NewInstance->CurrentDurability = DurabilityFrag->MaxDurability;
+		NewInstance->CurrentHealth = DurabilityFrag->MaxDurability;
 	}
 
-	// 2. Spawn the actor
+	// 3. Spawn the actor
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
-	AItemActor* NewActor = World->SpawnActor<AItemActor>(AItemActor::StaticClass(), SpawnTransform, SpawnParams);
+	AItemActor* NewActor = World->SpawnActor<AItemActor>(
+		AItemActor::StaticClass(),
+		SpawnTransform,
+		SpawnParams);
+
 	if (!NewActor)
 	{
 		return nullptr;
 	}
 
-	// 3. Initialize the actor with the instance
+	// 4. Initialize the actor with the instance (sets mesh, stores the instance, etc.)
 	NewActor->InitializeFromInstance(NewInstance);
 
 	return NewActor;

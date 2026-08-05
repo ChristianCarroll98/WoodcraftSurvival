@@ -7,6 +7,5 @@ void UItemInstance::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 
 	DOREPLIFETIME(UItemInstance, Definition);
 	DOREPLIFETIME(UItemInstance, UniqueId);
-	DOREPLIFETIME(UItemInstance, StackCount);
-	DOREPLIFETIME(UItemInstance, CurrentDurability);
+	DOREPLIFETIME(UItemInstance, CurrentHealth);
 }
