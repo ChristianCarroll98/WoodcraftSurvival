@@ -1,0 +1,89 @@
+**Desert Wyvern – Comprehensive Reference Notes**
+
+### Section 1: Lore, Morphology, and Behavior
+
+**Evolutionary Lore**  
+The Desert Wyvern is an offshoot of the monitor lizard lineage that began as semi-arboreal forest dwellers. Early forms developed lateral skin folds for short glides between trees and rock faces. As regional climates dried and continuous forest retreated, populations became isolated on rocky escarpments, mesas, and canyon systems. Selection favored longer glides, larger size, stronger flight musculature, skeletal lightening through air sacs, and eventual limited powered flight for launching from height and exploiting desert thermals. The modern animal retains clear monitor ancestry in its head shape, flexible neck, forked tongue, scaly hide, and climbing-oriented limbs while carrying a specialized flight apparatus.
+
+**Overall Morphology**  
+Adults have a compact but powerful build optimized for low-to-the-ground climbing and thermal soaring. The body is deep-chested and relatively short from shoulders to hips (approximately 6 ft in average individuals), with a longer neck and a very long tapering tail (up to ~20 ft). The animal is primarily quadrupedal on the ground and remains low-slung for a low center of gravity.
+
+**Head and Neck**  
+Monitor-like skull approximately 1.5 ft long, with large forward-facing eyes and a flexible neck roughly 2 ft long. The neck attaches higher on the chest than in living monitors to accommodate the expanded flight girdle. The head is normally held slightly above the chest and can rise higher when the animal is alert or perched.
+
+**Chest, Shoulders, and Forelimbs**  
+The chest is deep and boxy in side view but not extremely wide from the front. A prominent keeled sternum anchors large pectoralis muscles and is largely hidden by muscle mass, creating a protruding, bird-like chest profile that sits close to the ground. Robust, strut-like coracoids brace the shoulder joints to the sternum. Lengthened clavicles provide additional lateral support. Scapulae lie relatively flat against the ribcage and are anchored by strong tendons; slightly extended neural spines on the anterior vertebrae assist the wing-elevating muscles.  
+
+The shoulder joints sit to the sides of the neck base at roughly mid-height relative to the neck’s emergence. At rest the upper arms are roughly horizontal and swept slightly back. The forearms angle downward and outward. The two robust wing digits (with thick pads and long curved claws) rest near or just below shoulder height and serve as the primary walking and climbing forelimbs. The three elongated wing-supporting digits fold close against the radius/ulna, giving the forelimbs a somewhat lanky appearance when the membrane is collapsed. Humerus is slightly shorter than the combined radius + ulna.
+
+**Wing Membrane**  
+The membrane attaches along the flank from the armpit region to approximately hip level and does not incorporate the hind legs. When folded, the three long digits lie close to the forearm and body; the membrane gathers into a few broad, soft longitudinal folds and bunched sections rather than fine accordion pleats. It has enough elasticity and internal fiber structure to thicken and stay relatively close to the limb, though the trailing edge may show soft lobes or slight sagging.
+
+**Torso and Hips**  
+The ribcage is deep anteriorly to support the keel and air sacs; posterior ribs are reduced so the body tapers into a distinct but relatively short waist. The pelvis is low, moderately broad, and only slightly less squat than a pure monitor pelvis. Hip sockets face more downward and outward than in living monitors, allowing a semi-erect but still clearly splayed femoral posture. Overall hip height is significantly lower than shoulder height, producing a downward-sloping back line.
+
+**Hind Limbs**  
+Short, thick, and moderately to noticeably splayed (greater splay emphasized for climbing stability). Proportions remain close to monitor ratios but with a modestly more upright femoral angle. The animal is digitigrade while moving (walking on the toes) and settles onto the arches when at rest. Feet are elongated with a 3-forward + 2-rear toe arrangement and long, strongly curved claws specialized for gripping rock and seizing prey. Claws are tensioned so they contact the ground only lightly or remain slightly raised during normal walking, reducing wear.
+
+**Tail**  
+Long, muscular at the base, and steadily tapering. Distal vertebrae carry elongated neural spines supporting a small vertical membrane used for yaw control in flight. On the ground the tail stays near the substrate and is actively pressed into cracks or against surfaces while climbing.
+
+**Sexual Dimorphism**  
+Males are slightly larger and bulkier, with broader heads, thicker neck bases, and higher color saturation plus stronger contrast in their splotches. Females are slightly slimmer and more streamlined, with narrower heads and lower color saturation within the same randomized desert palette.
+
+**Coloration**  
+Mostly flat color with soft, irregular splotches. Low-saturation desert tones (tans, dusty grays, muted olive-greens, bluish-grays) are randomized at spawn. Underside and wing membranes are clearly lighter. The overall effect prioritizes silhouette, value contrast, and material difference (body vs membrane) over fine scale detail.
+
+**Locomotion and Posture**  
+Ground movement is a deliberate, low, moderately laterally undulating crawl-walk with a wide stance (forelimb pads roughly 4–5 ft apart). Lateral body flexion is present but reduced in the stiffened anterior torso. Front limbs take somewhat shorter, careful steps; hind limbs provide more drive. Short accelerating bursts are possible for takeoff.  
+
+Climbing is strong on vertical and near-vertical rock: stance widens, hips drop, body presses close to the surface, and the tail braces actively. A signature move is the reverse leap from a cliff face followed by a mid-air twist into flight.  
+
+Flight is primarily thermal soaring with limited powered flapping for launch, short climbs, and combat. The animal strongly prefers launching from height; ground takeoff is possible but energetically costly and involves a bipedal sprint with wings open. The center of gravity sits near or just behind the shoulder/wing-root region, kept forward by the heavy chest musculature and balanced by the long tail.
+
+**Resting and Sleeping**  
+The animal settles into a low, often slightly asymmetrical crouch with the chest close to the ground. It commonly leans more weight onto one shoulder. The neck curves downward and usually to one side so the head rests on the ground, a forelimb, or against the body. Wings remain folded along the flanks. The tail lies loosely curved on the ground. Fully upright resting postures are not sustained for long periods.
+
+**Behavior and Ecology**  
+Solitary to loosely territorial. Spends much of its time perched on high ledges observing. Aggression is driven by hunger, proximity, current condition, and nesting status. It is an opportunistic hunter and scavenger. Intra-species encounters involve mutual assessment via displays and vocalizations; the loser must leave the immediate area and is prohibited from taking a higher perch than the winner (height is both a practical and social advantage). Nesting individuals show strong site fidelity and greatly reduced tolerance for intruders. Seasonal shifts affect activity levels, hunting windows, and territorial intensity, with a distinct nesting window producing the strongest behavioral change.
+
+---
+
+### Section 2: Gameplay Aspects
+
+**Spawn and Habitat**  
+Rare sub-boss encounter. Highest spawn density in core rocky mesa, cliff, and escarpment POIs; low density on adjacent rocky slopes; very rare elsewhere. Preferred terrain provides natural perches, thermal generation, and verticality.
+
+**Core AI Loop**  
+Perch and observe as the default state. Continuously evaluate hunger, season, health, and nearby stimuli (prey, carcasses, rivals, player). Decisions branch into repositioning (climb or short flight), hunting, scavenging, territorial defense, social display, combat, or disengage.
+
+**Player Interaction and Telegraphing**  
+- Distant/unaware: Continues normal ecological behavior.  
+- Aware but not aggressive: Watches, may reposition, gives warning hisses.  
+- Aggressive: Full combat repertoire modulated by hunger, health, and nesting status.  
+
+Hunger is telegraphed primarily through vocalization frequency and intensity (soft hisses → sustained hisses → full composite roar used at longer range) plus restless body language. Nesting is telegraphed by strong site fidelity to one ledge, visible nest debris, earlier and more intense threat displays, and distinct urgent vocal patterns.
+
+**Combat Behavior**  
+Alternates aerial claw strikes, grab-and-drop attempts, and grounded bite-plus-wing-claw attacks. At higher health the animal is confident and may attempt grabs or direct charges. As health drops it becomes more conservative, favoring hit-and-run aerial attacks. Below critical thresholds it prioritizes climbing or reverse-leaping out of reach.  
+
+Severe damage to the wing spars or membrane permanently grounds the individual for the remainder of its spawn cycle. A grounded wyvern faces the player, backsteps or sidesteps when possible, and becomes highly aggressive only if cornered. It will not regain flight. If the player leaves for a long period the grounded animal eventually despawns.
+
+**Intra-Species and Ecological Interactions**  
+Uses size, disposition, and seasonal tags to evaluate other creatures. Treats small and medium prey as opportunistic targets when hungry, contests carcasses with mid-sized predators, and generally avoids or cautiously observes very large or specialized threats (such as the Tar Toad). Same-species interactions emphasize display, parallel perching, short aerial sparring, and clear displacement rules (especially the “no higher perch than the winner” constraint).  
+
+**Seasonal and Life-Cycle Hooks**  
+Activity, ranging distance, and territorial thresholds shift across the arid seasonal cycle (hot-dry, cooling, cooler, warming/pre-nesting). Nesting season produces the strongest override of normal behavior. The systems are modular so eggs, juveniles, and maturation can be added later without redesigning the adult AI.
+
+**Movement and Animation Priorities for Implementation**  
+- Quadrupedal walk/trot with moderate lateral undulation and wide stance.  
+- Climb cycles with widening splay and lowering hips.  
+- Reverse-leap → mid-air twist → flight transition.  
+- Folded-wing locomotion that keeps the long digits close to the forearm and the membrane in broad gathered folds.  
+- Distinct resting/sleeping poses that keep the body low and the head lowered.  
+- Display and social animations that scale in intensity by sex and season.  
+
+**Harvesting**  
+Defeat yields a unique trophy, scale hide suitable for specialized armor, large quantities of meat/bone/tendon, and at least one signature material that enables a unique craftable with a thematic bonus (consistent with the game’s design philosophy for significant creatures).
+
+This document consolidates every major morphological, behavioral, and gameplay decision into a single reference for modeling, animation, AI, and future polishing.

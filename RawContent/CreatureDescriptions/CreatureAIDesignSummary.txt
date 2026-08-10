@@ -1,0 +1,105 @@
+**AI & Creature System Design Summary**  
+*Survival Crafting Game – UE 5.8.1*
+
+### Core Goals
+- Multidimensional interactions (not just “attack on sight”).
+- Combat is risky, avoidable, and high-reward.
+- Strong player agency and choice (fight, avoid, prepare, tame/capture, exploit environment).
+- Realism and readable creature behavior.
+- Highly extendable and maintainable with limited AI experience.
+- Performance-conscious (distance-based LOD + future pure-data simulation layer).
+
+### High-Level Architecture
+- **Primary decision system**: State Trees (preferred over classic Behavior Trees in UE 5.8.1 for better modularity, tick control, and Linked Assets).
+- **Data-driven core**: Species defined by Primary Data Assets.
+- **Runtime brain**: Lightweight Creature Context component on each actor that holds all live values the StateTree reads.
+- **Shared modules**: Reusable Linked StateTree assets for common behaviors (Investigate, MoveToPreferredRange, MeleeAttack, Flee, FollowLeader, etc.).
+- New creatures are mostly data + mesh/animations + 0–2 unique tasks/Linked Assets.
+
+### Key Systems
+
+**1. Creature Context Component**  
+Central runtime data store. Contains:
+- Health / HealthPct
+- Permanent dispositions (rolled once on spawn)
+- Temporary modifiers (Hunger, Injury, etc.)
+- GroupSize, CurrentLeader, DistanceBand
+- Look target & LookWeight
+- Current evaluation results (PerceivedAggression, PerceivedThreat of current target)
+- FlightDisabled and other body-part flags
+- Species tags (Size Class, Role)
+
+**2. Permanent Dispositions** (personality – set once on spawn)
+Core shared set (species can enable/disable and set ranges):
+- Aggression
+- Bravery
+- Food Drive
+- Curiosity
+- (Pack Loyalty – mainly for social species)
+
+Ranges are kept relatively narrow so creatures still clearly read as their species, just with individual tendencies.
+
+**3. Temporary Modifiers**
+- Hunger, Injury, Fatigue, recent combat stress, etc.
+- Applied as multipliers/additives on top of permanent dispositions at decision time.
+
+**4. Target Evaluation System**
+When a creature considers another actor (player, prey, rival, etc.) it calculates:
+- **Perceived Aggression** of the target (from target’s effective Aggression + observable behavior)
+- **Perceived Threat** of the target (relative to self)
+
+Threat factors include:
+- Size Class comparison
+- Ecological Role (Prey / Neutral / Predator / Apex / Player)
+- Own Bravery, Injury, ally count, etc.
+
+Decision examples:
+- High Aggression + Low Threat → more likely to attack
+- High Aggression + High Threat → more likely to flee or keep distance
+
+**5. Species Tags**
+- Size Class (Tiny → Huge)
+- Role (Prey, Neutral, Predator, ApexPredator, Player)
+Used for fast, data-driven relative threat calculations.
+
+**6. Animation & Look-At**
+- Per size/locomotion class AnimBPs or Linked Anim Graphs.
+- Montage lookup via Data Asset (StateTree tasks request abstract actions like “Attack_Melee”).
+- Dynamic head/neck Look-At driven by Context (LookTarget + LookWeight). Weight is state-dependent and distance-aware. Strong clamping and smoothing required.
+
+**7. Variation**
+- Size: small random scale on spawn + optional SizeClass.
+- Color: either predefined material variants or random within artist-defined ranges via Dynamic Material Instances.
+- Personality: the disposition system above.
+
+### Performance Strategy
+- Distance bands from player control tick rates, perception frequency, evaluation frequency, and EQS usage.
+- High Detail (near player) → full systems.
+- Medium / Low → progressively heavier throttling.
+- Far away → pure data simulation layer (future) or despawn. Promote to full Actors only when the player approaches.
+
+### Foundation Creature: Wolf
+Built first to establish all shared systems:
+- Solo = more skittish
+- Pack = more aggressive
+- Howl → temporary grouping around largest/leader wolf
+- Individuals can randomly peel off
+- Can hunt other animals (lower priority than player threat or pack business)
+- Uses full disposition + evaluation + distance banding
+
+### Example Advanced Creature: Wyvern
+Builds directly on the same foundation with added phases:
+- High HP + Flight OK → confident mix of grounded and aerial (including grab-and-drop)
+- Mid HP + Flight OK → prioritizes flying slash attacks
+- Low HP + Flight OK → soars high out of reach
+- FlightDisabled (wing damage) → grounded only, faces player, backsteps/dodges, becomes more aggressive if cornered
+- Clear visual feedback: failed takeoff with flopping wing when FlightDisabled is set
+
+### Design Principles (Always Apply)
+- Species identity remains dominant; individual variation only shifts tendencies.
+- Prefer data and composition over deep inheritance or unique code.
+- Keep top-level StateTrees shallow; push complexity into reusable Linked Assets.
+- Telegraphs and readable feedback are mandatory (especially for wing damage and phase changes).
+- Throttle everything by distance early.
+
+This design prioritizes long-term maintainability and interesting emergent behavior while remaining implementable step-by-step, starting with the wolf.
