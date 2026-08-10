@@ -1,12 +1,12 @@
-UE TEXTURE NOTES
+Woodcraft Survival Notes
 
-
+notes on ORM textures:
 Step 1: Fix the Texture Settings (Crucial)Import your ORM texture into Unreal Engine.Double-click the texture to open its settings.In the right panel, uncheck the box for SRGB.Change the Compression Settings dropdown to Masks (no sRGB).If you skip this, Unreal applies gamma correction to your math channels, making your roughness channel way darker (shinier) than it actually is.
+
 
 NEXT TIME:
 
-make player BP compile
-spawn stick item and attach to phys control for test
-use weapon bone as parent from anim ref skeletal mesh
-visually see main mesh
-profit.
+spawn stick item and attach to phys control for test - in progress
+
+
+make default grip transform whatever unarmed neutral should be? or an X to make it obvious idk? also its not tracking relative to player the hands are circling around so fix that too.
