@@ -14,7 +14,8 @@ public class WoodcraftSurvival : ModuleRules
 			"Engine",
 			"InputCore",
 			"EnhancedInput",
-			"GameplayTags"
+			"GameplayTags",
+			"PhysicsControl"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] {  });
