@@ -67,13 +67,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Held Item")
 	TObjectPtr<UItemDefinition> UnarmedDefinition;
 
-	/** Physics Control component used for the left hand. Assigned in the Player Blueprint. */
+	/** Physics Control component used to create and remove controls. Assigned in the Player Blueprint. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Held Item|Physics")
-	TObjectPtr<UPhysicsControlComponent> PhysicsControlLeft;
-
-	/** Physics Control component used for the right hand. Assigned in the Player Blueprint. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Held Item|Physics")
-	TObjectPtr<UPhysicsControlComponent> PhysicsControlRight;
+	TObjectPtr<UPhysicsControlComponent> PhysicsControl;
 
 	/** The skeletal mesh that owns the WeaponBone_L / WeaponBone_R sockets (SK_FPArmsAnimRef). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Held Item|Physics")
@@ -95,11 +91,7 @@ private:
 	 * Used by Control Rig IK. Computes from the item's GripPrimary / GripSecondary socket
 	 * and applies left-hand mirroring when required.
 	 */
-	UFUNCTION(BlueprintPure, Category = "Held Item")
 	FTransform GetGripTransform(EHand Hand) const;
-
-	/** Mirrors a grip transform for left-hand use. */
-	FTransform MirrorGripTransform(const FTransform& Source) const;
 
 	/** Currently active control name for the left hand. */
 	UPROPERTY()

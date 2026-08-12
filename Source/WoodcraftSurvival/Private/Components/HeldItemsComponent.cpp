@@ -105,78 +105,25 @@ bool UHeldItemsComponent::IsTwoHanded() const
 FTransform UHeldItemsComponent::GetGripTransform(EHand Hand) const
 {
 	AItemActor* Item = GetHeldItem(Hand);
-	if (!Item)
+	if (!Item || !AnimRefMesh)
 	{
 		return FTransform::Identity;
 	}
 
-	// Find the mesh that has the grip sockets
-	UStaticMeshComponent* MeshComp = Item->FindComponentByClass<UStaticMeshComponent>();
-	if (!MeshComp)
-	{
-		return Item->GetActorTransform();
-	}
+	const FName WeaponBoneName = (Hand == EHand::Left) ? TEXT("WeaponBone_L") : TEXT("WeaponBone_R");
+	const FName HandBoneName = (Hand == EHand::Left) ? TEXT("Hand_L") : TEXT("Hand_R");
 
-	// Default to GripPrimary. Later we can choose GripSecondary for the secondary hand on two-handed items.
-	const FName SocketName = TEXT("GripPrimary");
+	// Current animated relative offset (Hand relative to WeaponBone)
+	const FTransform WeaponBoneTM = AnimRefMesh->GetSocketTransform(WeaponBoneName, RTS_World);
+	const FTransform HandTM = AnimRefMesh->GetSocketTransform(HandBoneName, RTS_World);
+	const FTransform Relative = HandTM.GetRelativeTransform(WeaponBoneTM);
 
-	if (!MeshComp->DoesSocketExist(SocketName))
-	{
-		return MeshComp->GetComponentTransform();
-	}
+	// Apply that relative offset to the current item transform
+	// (item is being driven by Physics Control on the WeaponBone)
+	const FTransform ItemTM = Item->GetActorTransform();
+	FTransform GripTM = Relative * ItemTM;
 
-	FTransform GripTransform = MeshComp->GetSocketTransform(SocketName, RTS_World);
-
-	// Apply left-hand mirror for one-handed items
-	if (Hand == EHand::Left)
-	{
-		//GripTransform = MirrorGripTransform(GripTransform);
-	}
-
-	return GripTransform;
-}
-
-FTransform UHeldItemsComponent::MirrorGripTransform(const FTransform& Source) const
-{
-	AActor* Owner = GetOwner();
-	if (!Owner)
-	{
-		return Source;
-	}
-
-	const FTransform OwnerTM = Owner->GetActorTransform();
-
-	// 1. Bring into owner local space
-	FTransform Local = Source.GetRelativeTransform(OwnerTM);
-
-	// 2. Mirror position across the character's local YZ plane (negate X)
-	FVector MirroredLocation = Local.GetLocation();
-	MirroredLocation.X *= -1.0f;
-
-	// 3. Properly mirror the rotation
-	//    We reflect the basis vectors across the same plane
-	const FQuat Rot = Local.GetRotation();
-
-	FVector Forward = Rot.GetForwardVector();
-	FVector Right = Rot.GetRightVector();
-	FVector Up = Rot.GetUpVector();
-
-	// Reflect across local YZ plane
-	Forward.X *= -1.0f;
-	Right.X *= -1.0f;
-	// Up.X stays the same for a standard hand mirror
-
-	// Rebuild rotation from mirrored axes
-	// Note: Forward = X, Right = Y, Up = Z in Unreal
-	FMatrix MirroredMatrix = FRotationMatrix::MakeFromXY(Forward, Right);
-	FQuat MirroredRotation = MirroredMatrix.ToQuat();
-
-	// 4. Write back
-	Local.SetLocation(MirroredLocation);
-	Local.SetRotation(MirroredRotation);
-
-	// 5. Back to world space
-	return Local * OwnerTM;
+	return GripTM;
 }
 
 void UHeldItemsComponent::GetGripTransforms(FTransform& GripTransformLeft, FTransform& GripTransformRight) const
@@ -197,6 +144,7 @@ void UHeldItemsComponent::EquipUnarmed(EHand Hand)
 		UnarmedDefinition,
 		GetOwner()->GetActorTransform());
 
+	// Hide the unarmed actor's mesh so it doesn't appear in the world. It will still be used for grip transforms and collision.
 	UnarmedActor->SetHidden(true);
 
 	if (!UnarmedActor)
@@ -214,8 +162,6 @@ void UHeldItemsComponent::EquipUnarmed(EHand Hand)
 	}
 
 	AttachItemToControl(UnarmedActor, Hand);
-
-	// TODO: Hide the Unarmed mesh
 }
 
 void UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand)
@@ -225,8 +171,7 @@ void UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand)
 		return;
 	}
 
-	UPhysicsControlComponent* PhysControl = (Hand == EHand::Left) ? PhysicsControlLeft : PhysicsControlRight;
-	if (!PhysControl || !AnimRefMesh)
+	if (!PhysicsControl || !AnimRefMesh)
 	{
 		return;
 	}
@@ -257,9 +202,9 @@ void UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand)
 	}
 
 	FPhysicsControlData ControlData;
-	ControlData.LinearStrength = 5.0f;
+	ControlData.LinearStrength = 3.0f;
 	ControlData.LinearDampingRatio = 1.3f;
-	ControlData.AngularStrength = 50.0f;
+	ControlData.AngularStrength = 5.0f;
 	ControlData.AngularDampingRatio = 1.2f;
 	ControlData.bUseSkeletalAnimation = true;
 	ControlData.bDisableCollision = true;
@@ -269,7 +214,7 @@ void UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand)
 	FPhysicsControlTarget ControlTarget;
 
 	// Create the control using the AnimRef mesh + correct weapon bone
-	FName NewControlName = PhysControl->CreateControl(
+	FName NewControlName = PhysicsControl->CreateControl(
 		AnimRefMesh,
 		BoneName,
 		ItemMesh,
@@ -297,8 +242,7 @@ void UHeldItemsComponent::DetachItemFromControl(EHand Hand)
 		return;
 	}
 
-	UPhysicsControlComponent* PhysControl = (Hand == EHand::Left) ? PhysicsControlLeft : PhysicsControlRight;
-	if (!PhysControl)
+	if (!PhysicsControl)
 	{
 		return;
 	}
@@ -307,7 +251,7 @@ void UHeldItemsComponent::DetachItemFromControl(EHand Hand)
 
 	if (!ActiveControl.IsNone())
 	{
-		PhysControl->DestroyControl(ActiveControl);
+		PhysicsControl->DestroyControl(ActiveControl);
 		ActiveControl = NAME_None;
 	}
 
