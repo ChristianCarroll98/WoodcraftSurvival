@@ -102,6 +102,18 @@ bool UHeldItemsComponent::IsTwoHanded() const
 	return false;
 }
 
+FTransform UHeldItemsComponent::GetRelativeTransformBetweenWeaponAndHandBones(EHand Hand) const
+{
+	const FName WeaponBoneName = (Hand == EHand::Left) ? TEXT("WeaponBone_L") : TEXT("WeaponBone_R");
+	const FName HandBoneName = (Hand == EHand::Left) ? TEXT("Hand_L") : TEXT("Hand_R");
+
+	// Current animated relative offset (Hand relative to WeaponBone)
+	const FTransform WeaponBoneTransform = AnimRefMesh->GetSocketTransform(WeaponBoneName, RTS_World);
+	const FTransform HandTransform = AnimRefMesh->GetSocketTransform(HandBoneName, RTS_World);
+	return HandTransform.GetRelativeTransform(WeaponBoneTransform);
+}
+
+
 FTransform UHeldItemsComponent::GetGripTransform(EHand Hand) const
 {
 	AItemActor* Item = GetHeldItem(Hand);
@@ -110,20 +122,14 @@ FTransform UHeldItemsComponent::GetGripTransform(EHand Hand) const
 		return FTransform::Identity;
 	}
 
-	const FName WeaponBoneName = (Hand == EHand::Left) ? TEXT("WeaponBone_L") : TEXT("WeaponBone_R");
-	const FName HandBoneName = (Hand == EHand::Left) ? TEXT("Hand_L") : TEXT("Hand_R");
-
-	// Current animated relative offset (Hand relative to WeaponBone)
-	const FTransform WeaponBoneTM = AnimRefMesh->GetSocketTransform(WeaponBoneName, RTS_World);
-	const FTransform HandTM = AnimRefMesh->GetSocketTransform(HandBoneName, RTS_World);
-	const FTransform Relative = HandTM.GetRelativeTransform(WeaponBoneTM);
+	FTransform Relative = GetRelativeTransformBetweenWeaponAndHandBones(Hand);
 
 	// Apply that relative offset to the current item transform
 	// (item is being driven by Physics Control on the WeaponBone)
-	const FTransform ItemTM = Item->GetActorTransform();
-	FTransform GripTM = Relative * ItemTM;
+	const FTransform ItemTransform = Item->GetActorTransform();
+	FTransform GripTransform = Relative * ItemTransform;
 
-	return GripTM;
+	return GripTransform;
 }
 
 void UHeldItemsComponent::GetGripTransforms(FTransform& GripTransformLeft, FTransform& GripTransformRight) const
@@ -144,7 +150,7 @@ void UHeldItemsComponent::EquipUnarmed(EHand Hand)
 		UnarmedDefinition,
 		GetOwner()->GetActorTransform());
 
-	// Hide the unarmed actor's mesh so it doesn't appear in the world. It will still be used for grip transforms and collision.
+	// Hide the unarmed actor so it doesn't appear in the world. It will still be used for grip transforms and collision.
 	UnarmedActor->SetHidden(true);
 
 	if (!UnarmedActor)
@@ -185,21 +191,15 @@ void UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand)
 	// Destroy any existing control for this hand first
 	DetachItemFromControl(Hand);
 
+	if (Hand == EHand::Left)
+	{
+		ItemMesh->SetRelativeScale3D(FVector(-1.0f, 1.0f, 1.0f)); // Mirror the item mesh for the left hand
+	}
+
 	// Disable collision for the item mesh while it's being held
 	ItemMesh->SetCollisionResponseToChannel(ECollisionChannel::ECC_GameTraceChannel2, ECollisionResponse::ECR_Ignore);
 
-	const FName BoneName = (Hand == EHand::Left) ? TEXT("WeaponBone_L") : TEXT("WeaponBone_R");
-	const FName GripSocketName = TEXT("GripPrimary");
-
-	// --- Get the grip socket location in the item's local space ---
-	FVector CustomControlPoint = FVector::ZeroVector;
-
-	if (ItemMesh->DoesSocketExist(GripSocketName))
-	{
-		// Socket transform relative to the mesh component
-		const FTransform SocketTM = ItemMesh->GetSocketTransform(GripSocketName, RTS_Component);
-		CustomControlPoint = SocketTM.GetLocation();
-	}
+	const FName WeaponBoneName = (Hand == EHand::Left) ? TEXT("WeaponBone_L") : TEXT("WeaponBone_R");
 
 	FPhysicsControlData ControlData;
 	ControlData.LinearStrength = 3.0f;
@@ -209,20 +209,21 @@ void UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand)
 	ControlData.bUseSkeletalAnimation = true;
 	ControlData.bDisableCollision = true;
 	ControlData.bUseCustomControlPoint = true;
-	ControlData.CustomControlPoint = CustomControlPoint;
+	// --- Get the wrist offset from the weapon bone for the custom control point so the item bends at the wrist
+	ControlData.CustomControlPoint = GetRelativeTransformBetweenWeaponAndHandBones(Hand).GetLocation();
 
 	FPhysicsControlTarget ControlTarget;
 
 	// Create the control using the AnimRef mesh + correct weapon bone
 	FName NewControlName = PhysicsControl->CreateControl(
 		AnimRefMesh,
-		BoneName,
+		WeaponBoneName,
 		ItemMesh,
 		NAME_None,
 		ControlData,
 		ControlTarget,
 		TEXT("HeldItems"),
-		"PC_"
+		"WSPC_"
 	);
 
 	if (Hand == EHand::Left)
@@ -256,7 +257,7 @@ void UHeldItemsComponent::DetachItemFromControl(EHand Hand)
 	}
 
 
-	// Restore collision for the item mesh
+	// Restore collision and scale for the item mesh
 	AActor* Item = GetHeldItem(Hand);
 
 	if (Item)
@@ -264,6 +265,10 @@ void UHeldItemsComponent::DetachItemFromControl(EHand Hand)
 		UStaticMeshComponent* ItemMesh = Item->FindComponentByClass<UStaticMeshComponent>();
 		if (ItemMesh)
 		{
+			if (Hand == EHand::Left)
+			{
+				ItemMesh->SetRelativeScale3D(FVector(1.0f, 1.0f, 1.0f)); // Reset scale to normal in case was mirrored for left hand
+			}
 			ItemMesh->SetCollisionResponseToChannel(ECollisionChannel::ECC_GameTraceChannel2, ECollisionResponse::ECR_Block);
 		}
 	}

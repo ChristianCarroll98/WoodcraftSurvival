@@ -86,6 +86,9 @@ private:
 	/** Destroys / disables the Physics Control for the given hand. */
 	void DetachItemFromControl(EHand Hand);
 
+	/** Returns the relative transform between the specified weapon bone and hand bone from the current animation frame. */
+	FTransform GetRelativeTransformBetweenWeaponAndHandBones(EHand Hand) const;
+
 	/**
 	 * Returns the world-space grip transform for the given hand.
 	 * Used by Control Rig IK. Computes from the item's GripPrimary / GripSecondary socket
