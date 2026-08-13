@@ -1,5 +1,5 @@
 **Full Description of the Intended Item System**  
-*(Updated 2026-08-12 – current locked design + next priorities)*
+*(Updated 2026-08-13 – post hold-system + fragment design lock-in)*
 
 ### 1. High-Level Goals
 - Fully data-driven item definitions using Primary Data Assets + Fragments.
@@ -15,28 +15,34 @@
 ### 2. Core Code Types
 
 **UItemDefinition** (Primary Data Asset)  
-Contains an array (or map) of `UItemFragment*` instances.  
+Contains an array of `UItemFragment*` instances.  
 This is the pure data definition of an item type (Stick, Axe, Unarmed, etc.).
 
 **UItemFragment** (abstract base)  
 Lightweight, instanced, edit-inline objects that add specific capabilities.  
-Examples: Stackable, Durability, Fuel, Equippable, Damage.
+Examples: Equippable, Durability, Fuel, Damage, etc.
+
+- Fragments are **primarily pure data**.
+- Data is exposed as `UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)`.
+- Allowed exception: a lightweight virtual `OnItemSpawned(AItemActor* ItemActor)` for one-time initialization only.
+- `OnItemSpawned` may set initial runtime values (e.g. CurrentHealth = MaxDurability) or spawn a matching runtime component when ongoing behaviour is truly needed.
+- Fragments must **not** hold mutable runtime state or perform per-frame work.
 
 **UItemInstance**  
-Runtime object that points to its `UItemDefinition` and holds any per-instance state (current durability, etc.).  
+Runtime object that holds a pointer to its `UItemDefinition` and any per-instance mutable state (CurrentHealth, UniqueId, etc.).  
+The Definition pointer is kept for the lifetime of the instance (UI, repair, tooltips, save/load, etc.).  
 Created by the factory. Never stacked.
 
 **AItemActor**  
 The actual actor in the world.  
 - Owns a static mesh component.  
 - Holds a reference to its `UItemInstance`.  
-- Implements `IItemActorInterface`.  
-- Can be simulated or driven by Physics Control.  
+- `InitializeFromInstance()` sets the mesh and calls `OnItemSpawned` on every fragment.  
 - Survives pickup/drop cycles (never destroyed on pickup).
 
 **UItemFactory**  
-Responsible for spawning `AItemActor` + creating the matching `UItemInstance`.  
-Always spawns single-item instances.
+Responsible for creating the `UItemInstance`, spawning the `AItemActor`, and handing the instance to the actor.  
+Stays thin — real configuration happens inside `AItemActor::InitializeFromInstance`.
 
 **EHand** (in `WoodcraftTypes.h`)  
 ```cpp
@@ -49,113 +55,109 @@ enum class EHand : uint8
 };
 ```
 
-### 3. Equippable System
+### 3. Equippable System & Collision
 
-**UEquippableFragment** (minimal)
-```cpp
-bool bTwoHanded = false;
-```
+**UEquippableFragment**  
+Currently minimal (`bTwoHanded`).  
+In `OnItemSpawned` it configures the actor to respond to the Equippable trace channel
 
-**Hand Ownership**
-- One primary hand owns the item (`EHand::Left` or `EHand::Right`).
-- When `bTwoHanded == true`, the opposite hand is treated as secondary.
+**Collision Channels (locked approach)**  
+- Every item uses Object Type = `ITEM`.  
+- Equippable items additionally set:
+  ```cpp
+  Mesh->SetCollisionResponseToChannel(COLLISION_EQUIPPABLE, ECR_Overlap);
+  ```
+- Pickup uses a **Trace Channel** called `EQUIPPABLE` so the sphere sweep only hits valid equippable items.
+- This keeps the ITEM object channel free for other interactions while giving clean targeting for pickup.
+
+**Hand Ownership**  
+- One primary hand owns the item.  
+- `bTwoHanded == true` → opposite hand becomes secondary.  
 - Player can hold two different one-handed items at the same time.
 
 ### 4. Animation & Attachment Architecture (Locked)
 
 Two skeletal meshes on the player:
 
-- **FPArmsMeshAnimRef** (invisible, no collision, truth source for pose info)  
-  Pure animation authority. Plays all montages and hold poses. Performs **zero** IK.  
-  Physics Control is attached to `WeaponBone_L` / `WeaponBone_R` on this mesh.
+- **FPArmsMeshAnimRef** (invisible, no collision, truth source)  
+  Pure animation authority. Plays montages and hold poses. Zero IK.  
+  Physics Control is driven from `WeaponBone_L` / `WeaponBone_R`.
 
-- **FPArmsMeshVisible** (visible, IK to held item)  
-  Copies the pose from AnimRef every frame, then applies Control Rig IK to the grip targets supplied by `UHeldItemsComponent`.
+- **FPArmsMeshVisible** (visible)  
+  Copies pose from AnimRef, then Control Rig IK to grip targets supplied by `UHeldItemsComponent`.
 
-**Physics Control** (not classic Physics Constraint)  
-- One `UPhysicsControlComponent` named PhysicsControl on the character.
-- When an item is held, a control is created that drives the item relative to the corresponding WeaponBone on the AnimRef.  
-- Gives the item real momentum and physical reaction while still following the hand.  
-- Strength will later be tuned (and possibly driven by item mass) for light vs heavy feel.
+**Physics Control**  
+- One `UPhysicsControlComponent` on the character.  
+- Drives the held item relative to the corresponding AnimRef WeaponBone.  
+- Gives real momentum while still following the hand.
 
-**Dynamic Grip Transform**  
-Every frame the component calculates:
-
+**Dynamic Grip Transform** (every frame)  
 ```
 Relative = AnimRef.HandBone.GetRelativeTransform(AnimRef.WeaponBone)
 GripTarget = Relative * ItemWorldTransform
 ```
+Left-hand IK works without extra transform mirroring.
 
-This keeps the visible hand locked to the actual physics-driven item while automatically staying correct for any animation.  
-Left-hand IK works correctly with this method without extra mathematical mirroring of the transform.
+**Left-hand item mesh mirroring (implemented)**  
+- Only the mesh component is scaled: `SetRelativeScale3D(FVector(-1.f, 1.f, 1.f))` when held in left hand.  
+- Scale is forced back to `(1,1,1)` on detach.  
+- Actor root scale stays positive (avoids Physics Control issues).
 
-**Left-hand item mesh mirroring**  
-For simplicity and to avoid future inconsistencies with asymmetrical items, the held item mesh will be mirrored (scale X = -1) when held in the left hand.
+### 5. Held Item Safety (implemented)
 
-### 5. UHeldItemsComponent Responsibilities
+`PreventItemStuck(EHand)` runs every tick from `UHeldItemsComponent`.
 
-- Manages both hands (`HeldItemLeft` / `HeldItemRight`).
-- Always has a valid item in each hand (Unarmed item when empty).
+- Measures distance between AnimRef **HandBone** and the current **GripLocation** (more accurate than WeaponBone→item for long weapons).
+- Hysteresis (enter ~55, exit ~40 — tune as needed).
+- When stuck: changes collision **responses** on WorldStatic, WorldDynamic, and custom channels (macros) COLLISION_ITEM and soon COLLISION_STRUCTURE and COLLISION_CREATURE to `Ignore`.  
+- When free: restores them to `Block`.  
+- **Never** uses `SetCollisionEnabled(NoCollision)` — that invalidates Physics Control bodies.
+- light Control Rig stretch on the visible arms complement so the hand stays visually glued without the elbows snapping in when item pulled away from player.
+
+### 6. UHeldItemsComponent Responsibilities
+
+- Manages both hands (always a valid item — Unarmed when empty).
 - `TryPickup` / `TryDrop`.
-- Creates / destroys Physics Controls on attach / detach, immediately replacing one item with another (picked up -> unarmed, or vice versa)
-- Dynamically calculates grip transforms every frame for Control Rig IK.
-- Mirrors the item mesh when held in the left hand.
-- Notifies the item actor when it becomes held or released.
+- Creates / destroys Physics Controls on attach / detach.
+- Dynamic grip transform calculation every frame.
+- Left-hand mesh mirroring.
+- `PreventItemStuck` safety.
+- Will also own the targeted-item query and (for now) highlight driving logic.
 - Provides clean Blueprint API.
 
-### 6. Player Structure
+Note: The component is currently large (many helpers). This is accepted while the hold/pickup systems are in active development. Public API stays small; helpers stay private. Split later only when stable groups of responsibility appear.
 
-- C++ class `AWoodcraftCharacter` owns the `UHeldItemsComponent`.
-- WoodcraftPlayer Blueprint is a subclass of AWoodcraftCharacter.
-- C++ owns state and rules; Blueprint owns presentation (animation, Control Rig, Physics Control tuning, meshes).
+### 7. Player Structure
 
-### 7. Unarmed Handling (Locked)
+- C++ `AWoodcraftCharacter` owns the `UHeldItemsComponent`.
+- WoodcraftPlayer Blueprint subclasses it.
+- C++ owns state and rules; Blueprint owns presentation (animation, Control Rig, Physics Control tuning).
 
-Unarmed is a **real item** (`DA_Unarmed` + simple mesh).  
-Both hands start with Unarmed on BeginPlay.  
+### 8. Unarmed Handling (Locked)
+
+Unarmed is a real item (`DA_Unarmed`).  
+Both hands start with Unarmed.  
 Dropping an item immediately equips Unarmed in that hand.  
-This eliminates null-hand special cases throughout the pipeline.
+Eliminates null-hand special cases.
 
-### 8. Current Status (as of 2026-08-12)
+### 9. Current Status (2026-08-13)
 
-**Working**
-- Item Factory + spawning
-- `AWoodcraftCharacter` + `UHeldItemsComponent`
-- Physics Control attach to AnimRef WeaponBones
-- Dynamic grip transform calculation (right and left hand IK targets correct)
-- Basic hold feel with Physics Control
+**Working / Implemented**
+- Item Factory + spawning + `InitializeFromInstance`
+- Fragment `OnItemSpawned` loop (data-driven init)
+- Physics Control attach + dynamic grip (both hands)
+- Left-hand mesh mirroring (scale X = -1 on mesh only)
+- `PreventItemStuck` (response-based, HandBone↔Grip distance, hysteresis)
+- Basic hold feel
 
-**Known remaining polish on hold**
-- Disable collision on the held item when the Physics Control is stretched too far or the item goes behind the player (caught on geometry)
-- Always mirror left-hand held item mesh
-- Strength vs item mass tuning of physics control (later)
-
-### 9. Next Priority Order
-
-1. **Held item safety**
-   - Disable collision (and possibly lower Physics Control strength) when the item is stretched too far from the WeaponBone or ends up behind the player.
-
-2. **Left-hand item mesh mirroring**
-   - Scale X = -1 on the item mesh when held in the left hand (simple, permanent solution for the current item set).
-
-3. **Full Pickup / Drop loop**
-   - Q held = pickup/drop mode
-   - Camera trace for looked-at item
-   - LMB = left hand, RMB = right hand (spatial default, with future settings flip)
-   - Pickup montage on AnimRef + Anim Notify to finalize Physics Control attach
-   - Drop breaks control, restores simulation, equips Unarmed
-
-4. **Item Highlight**
-   - All equippable items within pickup radius → subtle gray stencil / custom depth
-   - Currently looked-at item → stronger pale green / yellow
-   - Reuse existing stencil material
-
-5. **Basic Extend functionality**
-   - Soft references to neutral vs extended animation assets
-   - Ability to swap them on the fly (for reaching / interacting)
-
-6. Later: swinging, inventory, two-handed, damage application, etc.
+**In progress / Next**
+1. Basic `TryPickup` / `TryDrop` using sphere sweep on the `EQUIPPABLE` Trace Channel (so mirroring can be fully tested).
+2. Proper Q-mode input (hold Q → LMB/RMB for left/right).
+3. Pickup montage + Anim Notify timing (can come after basic attach works).
+4. Dual item highlight (nearby gray + targeted stronger) — lives in HeldItemsComponent for now.
+5. Basic Extend (neutral vs extended anim soft refs).
+6. Later: swinging, inventory, two-handed rules, damage, mass-based Physics Control strength, etc.
 
 ---
 
-This document reflects the design as locked on 2026-08-12 after solving the grip orientation issues via dynamic WeaponBone→Hand calculation and confirming Physics Control + dual-mesh IK architecture.
+This document reflects the design state after the hold-system safety pass, left-hand mirroring, fragment initialization policy, and collision channel decisions of 2026-08-13.

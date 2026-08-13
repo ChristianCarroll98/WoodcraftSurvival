@@ -17,6 +17,8 @@ class WOODCRAFTSURVIVAL_API UDurabilityFragment : public UItemFragment
 	GENERATED_BODY()
 
 public:
+	
+	void OnItemSpawned(AItemActor* ItemActor);
 
 	/** Base maximum durability for this item type. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Durability", meta = (ClampMin = "1.0"))

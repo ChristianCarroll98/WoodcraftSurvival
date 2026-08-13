@@ -2,10 +2,10 @@
 
 #pragma once
 
-#include "CoreMinimal.h"
 #include "Items/Fragments/ItemFragment.h"
-#include "Core/WoodcraftTypes.h"
 #include "EquippableFragment.generated.h"
+
+class AItemActor;
 
 /**
  * Data required to hold / equip an item in the hands.

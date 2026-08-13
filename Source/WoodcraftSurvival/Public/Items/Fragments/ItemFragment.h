@@ -4,8 +4,9 @@
 
 #include "CoreMinimal.h"
 #include "UObject/Object.h"
-#include "Items/ItemActor.h"
 #include "ItemFragment.generated.h"
+
+class AItemActor;
 
 /**
  * Base class for all item fragments.

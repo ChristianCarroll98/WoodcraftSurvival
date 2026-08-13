@@ -3,7 +3,8 @@
 #include "Items/ItemActor.h"
 #include "Items/ItemInstance.h"
 #include "Items/ItemDefinition.h"
-#include "Components/StaticMeshComponent.h"
+#include "Items/Fragments/ItemFragment.h"
+#include <Components/StaticMeshComponent.h>
 
 AItemActor::AItemActor()
 {
@@ -12,10 +13,9 @@ AItemActor::AItemActor()
 	// Create the mesh component and make it the root
 	MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComponent"));
 	SetRootComponent(MeshComponent);
-
-	// Reasonable defaults for a world item
+	
 	MeshComponent->SetSimulatePhysics(true);
-	MeshComponent->SetCollisionProfileName(TEXT("Item"));	// or your preferred profile
+	MeshComponent->SetCollisionProfileName(TEXT("Item"));
 	
 }
 
@@ -26,10 +26,7 @@ UItemInstance* AItemActor::GetItemInstance() const
 
 void AItemActor::InitializeFromInstance(UItemInstance* Instance)
 {
-	if (!Instance || !Instance->Definition)
-	{
-		return;
-	}
+	if (!Instance || !Instance->Definition) return
 
 	ItemInstance = Instance;
 
@@ -41,10 +38,8 @@ void AItemActor::InitializeFromInstance(UItemInstance* Instance)
 
 	for (UItemFragment* Fragment : Instance->Definition->Fragments)
 	{
-		if (Fragment)
-		{
-			Fragment->OnItemSpawned(this);
-		}
+		// Call each fragment's OnItemSpawned function on this item to allow them to initialize the item actor
+		if (Fragment) Fragment->OnItemSpawned(this);
 	}
 
 	// You can add more initialization here later (collision, materials, etc.)

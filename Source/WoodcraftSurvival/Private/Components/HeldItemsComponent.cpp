@@ -3,8 +3,8 @@
 #include "Components/HeldItemsComponent.h"
 #include "Items/ItemActor.h"
 #include "Items/ItemFactory.h"
-#include "Components/StaticMeshComponent.h"
-#include "Components/SkeletalMeshComponent.h"
+#include "Core/WoodcraftTypes.h"
+#include <PhysicsControlComponent.h>
 
 UHeldItemsComponent::UHeldItemsComponent()
 {
@@ -149,7 +149,7 @@ void UHeldItemsComponent::PreventItemStuck(EHand Hand)
 	if (Distance > EnterUnsafeDistance && !bItemStuck)
 	{
 		SetItemStuck(Hand, true);
-		Mesh->SetCollisionResponseToChannel(COLLISION_WORLD, ECR_Ignore);
+		Mesh->SetCollisionResponseToChannel(TRACE_WORLD, ECR_Ignore);
 		Mesh->SetCollisionResponseToChannel(COLLISION_ITEM, ECR_Ignore);
 		//Mesh->SetCollisionResponseToChannel(COLLISION_CREATURE, ECR_Ignore);
 		//Mesh->SetCollisionResponseToChannel(COLLISION_STRUCTURE, ECR_Ignore);
@@ -159,7 +159,7 @@ void UHeldItemsComponent::PreventItemStuck(EHand Hand)
 	else if (Distance < ExitUnsafeDistance && bItemStuck)
 	{
 		SetItemStuck(Hand, false);
-		Mesh->SetCollisionResponseToChannel(COLLISION_WORLD, ECR_Block);
+		Mesh->SetCollisionResponseToChannel(TRACE_WORLD, ECR_Block);
 		Mesh->SetCollisionResponseToChannel(COLLISION_ITEM, ECR_Block);
 		//Mesh->SetCollisionResponseToChannel(COLLISION_CREATURE, ECR_Ignore);
 		//Mesh->SetCollisionResponseToChannel(COLLISION_STRUCTURE, ECR_Ignore);
@@ -194,7 +194,7 @@ AItemActor* UHeldItemsComponent::FindLookedAtItem(float Radius, float MaxDistanc
 
 	FCollisionShape Sphere = FCollisionShape::MakeSphere(Radius);
 
-	if (GetWorld()->SweepSingleByChannel(Hit, CameraLocation, TraceEnd, FQuat::Identity, COLLISION_EQUIPPABLE, Sphere, Params))
+	if (GetWorld()->SweepSingleByChannel(Hit, CameraLocation, TraceEnd, FQuat::Identity, TRACE_EQUIPPABLE, Sphere, Params))
 	{
 		return Cast<AItemActor>(Hit.GetActor());
 	}

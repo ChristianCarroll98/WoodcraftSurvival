@@ -5,7 +5,6 @@
 #include "Items/ItemInstance.h"
 #include "Items/ItemActor.h"
 #include "Items/Fragments/DurabilityFragment.h"
-#include "Engine/World.h"
 
 AItemActor* UItemFactory::SpawnItemFromDefinition(
 	UObject* WorldContextObject,
@@ -18,38 +17,25 @@ AItemActor* UItemFactory::SpawnItemFromDefinition(
 	}
 
 	UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
-	if (!World)
-	{
-		return nullptr;
-	}
+	if (!World) return nullptr;
 
-	// 1. Create a single runtime instance
+	// Create the single runtime instance for this new ItemActor.
+	//This is where all mutable state (durability, stack count, etc.) will live.
 	UItemInstance* NewInstance = NewObject<UItemInstance>(WorldContextObject);
-	NewInstance->Definition = Definition;
 	NewInstance->UniqueId = FGuid::NewGuid();
+	NewInstance->Definition = Definition;
 
-	// 2. Set starting durability if the item has a DurabilityFragment
-	if (const UDurabilityFragment* DurabilityFrag = Definition->FindFragment<UDurabilityFragment>())
-	{
-		NewInstance->CurrentHealth = DurabilityFrag->MaxDurability;
-	}
-
-	// 3. Spawn the actor
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
-	AItemActor* NewActor = World->SpawnActor<AItemActor>(
-		AItemActor::StaticClass(),
-		SpawnTransform,
-		SpawnParams);
-
-	if (!NewActor)
-	{
-		return nullptr;
-	}
+	AItemActor* NewItem = World->SpawnActor<AItemActor>(
+			AItemActor::StaticClass(),
+			SpawnTransform,
+			SpawnParams);
+	if (!NewItem) return nullptr;
 
 	// 4. Initialize the actor with the instance (sets mesh, stores the instance, etc.)
-	NewActor->InitializeFromInstance(NewInstance);
+	NewItem->InitializeFromInstance(NewInstance);
 
-	return NewActor;
+	return NewItem;
 }

@@ -2,12 +2,12 @@
 
 #pragma once
 
-#include "CoreMinimal.h"
 #include "Core/WoodcraftTypes.h"
 #include "Components/ActorComponent.h"
-#include "PhysicsControlComponent.h"
 #include "HeldItemsComponent.generated.h"
 
+class UPhysicsControlComponent;
+class USkeletalMeshComponent;
 class AItemActor;
 class UItemDefinition;
 
