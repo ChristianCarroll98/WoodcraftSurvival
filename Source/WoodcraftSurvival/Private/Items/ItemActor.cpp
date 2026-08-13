@@ -15,7 +15,7 @@ AItemActor::AItemActor()
 
 	// Reasonable defaults for a world item
 	MeshComponent->SetSimulatePhysics(true);
-	MeshComponent->SetCollisionProfileName(TEXT("PhysicsActor"));	// or your preferred profile
+	MeshComponent->SetCollisionProfileName(TEXT("Item"));	// or your preferred profile
 }
 
 UItemInstance* AItemActor::GetItemInstance() const

@@ -54,6 +54,8 @@ public:
 protected:
 
 	virtual void BeginPlay() override;
+	virtual void TickComponent(float DeltaTime, ELevelTick TickType,
+			FActorComponentTickFunction* ThisTickFunction) override;
 
 	/** Item currently held in the left hand. */
 	UPROPERTY(BlueprintReadOnly, Category = "Held Item")
@@ -77,6 +79,10 @@ protected:
 
 private:
 
+	FName GetWeaponBoneName(EHand Hand) const;
+
+	FName GetHandBoneName(EHand Hand) const;
+
 	/** Equips the Unarmed item into the specified hand. */
 	void EquipUnarmed(EHand Hand);
 
@@ -88,6 +94,9 @@ private:
 
 	/** Returns the relative transform between the specified weapon bone and hand bone from the current animation frame. */
 	FTransform GetRelativeTransformBetweenWeaponAndHandBones(EHand Hand) const;
+	
+	/** Returns the world-space transform for the weapon bone specified for the specified hand. */
+	FTransform GetWeaponboneTransform(EHand Hand) const;
 
 	/**
 	 * Returns the world-space grip transform for the given hand.
@@ -96,6 +105,9 @@ private:
 	 */
 	FTransform GetGripTransform(EHand Hand) const;
 
+	/** Updates collision based on the distance an item is from the control parent to prevent items getting stuck. */
+	void PreventItemStuck(EHand Hand);
+
 	/** Currently active control name for the left hand. */
 	UPROPERTY()
 	FName ActiveControlLeft;
@@ -103,4 +115,10 @@ private:
 	/** Currently active control name for the right hand. */
 	UPROPERTY()
 	FName ActiveControlRight;
+
+	bool bLeftItemStuck = false;
+	bool bRightItemStuck = false;
+
+	bool GetItemStuck(EHand Hand);
+	void SetItemStuck(EHand Hand, bool bStuck);
 };
