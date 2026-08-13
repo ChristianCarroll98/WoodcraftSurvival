@@ -149,7 +149,7 @@ void UHeldItemsComponent::PreventItemStuck(EHand Hand)
 	if (Distance > EnterUnsafeDistance && !bItemStuck)
 	{
 		SetItemStuck(Hand, true);
-		Mesh->SetCollisionResponseToChannel(TRACE_WORLD, ECR_Ignore);
+		//Mesh->SetCollisionResponseToChannel(TRACE_WORLD, ECR_Ignore);
 		Mesh->SetCollisionResponseToChannel(COLLISION_ITEM, ECR_Ignore);
 		//Mesh->SetCollisionResponseToChannel(COLLISION_CREATURE, ECR_Ignore);
 		//Mesh->SetCollisionResponseToChannel(COLLISION_STRUCTURE, ECR_Ignore);
@@ -159,7 +159,7 @@ void UHeldItemsComponent::PreventItemStuck(EHand Hand)
 	else if (Distance < ExitUnsafeDistance && bItemStuck)
 	{
 		SetItemStuck(Hand, false);
-		Mesh->SetCollisionResponseToChannel(TRACE_WORLD, ECR_Block);
+		//Mesh->SetCollisionResponseToChannel(TRACE_WORLD, ECR_Block);
 		Mesh->SetCollisionResponseToChannel(COLLISION_ITEM, ECR_Block);
 		//Mesh->SetCollisionResponseToChannel(COLLISION_CREATURE, ECR_Ignore);
 		//Mesh->SetCollisionResponseToChannel(COLLISION_STRUCTURE, ECR_Ignore);
