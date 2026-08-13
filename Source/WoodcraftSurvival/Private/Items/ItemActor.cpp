@@ -16,6 +16,7 @@ AItemActor::AItemActor()
 	// Reasonable defaults for a world item
 	MeshComponent->SetSimulatePhysics(true);
 	MeshComponent->SetCollisionProfileName(TEXT("Item"));	// or your preferred profile
+	
 }
 
 UItemInstance* AItemActor::GetItemInstance() const
@@ -36,6 +37,14 @@ void AItemActor::InitializeFromInstance(UItemInstance* Instance)
 	if (UStaticMesh* Mesh = Instance->Definition->StaticMesh.LoadSynchronous())
 	{
 		MeshComponent->SetStaticMesh(Mesh);
+	}
+
+	for (UItemFragment* Fragment : Instance->Definition->Fragments)
+	{
+		if (Fragment)
+		{
+			Fragment->OnItemSpawned(this);
+		}
 	}
 
 	// You can add more initialization here later (collision, materials, etc.)

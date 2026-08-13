@@ -79,9 +79,7 @@ protected:
 
 private:
 
-	FName GetWeaponBoneName(EHand Hand) const;
-
-	FName GetHandBoneName(EHand Hand) const;
+	// ---------- private methods ----------
 
 	/** Equips the Unarmed item into the specified hand. */
 	void EquipUnarmed(EHand Hand);
@@ -92,33 +90,50 @@ private:
 	/** Destroys / disables the Physics Control for the given hand. */
 	void DetachItemFromControl(EHand Hand);
 
-	/** Returns the relative transform between the specified weapon bone and hand bone from the current animation frame. */
-	FTransform GetRelativeTransformBetweenWeaponAndHandBones(EHand Hand) const;
-	
-	/** Returns the world-space transform for the weapon bone specified for the specified hand. */
-	FTransform GetWeaponboneTransform(EHand Hand) const;
-
-	/**
-	 * Returns the world-space grip transform for the given hand.
-	 * Used by Control Rig IK. Computes from the item's GripPrimary / GripSecondary socket
-	 * and applies left-hand mirroring when required.
-	 */
-	FTransform GetGripTransform(EHand Hand) const;
-
 	/** Updates collision based on the distance an item is from the control parent to prevent items getting stuck. */
 	void PreventItemStuck(EHand Hand);
 
+	/** Sets the stuck status for the item in the given hand. */
+	void SetItemStuck(EHand Hand, bool bStuck);
+
+
+	// ---------- const helpers ----------
+
+	/** Returns the name of the weapon bone for the given hand. */
+	FName GetWeaponBoneName(EHand Hand) const;
+
+	/** Returns the name of the hand bone for the given hand. */
+	FName GetHandBoneName(EHand Hand) const;
+
+	/** Returns the relative transform between the specified weapon bone and hand bone from the current animation frame. */
+	FTransform GetRelativeTransformBetweenWeaponAndHandBones(EHand Hand) const;
+
+	/** Returns the world-space transform for the weapon bone specified for the specified hand. */
+	FTransform GetWeaponBoneTransform(EHand Hand) const;
+
+	/** Returns the world-space IK target transform for the given hand. */
+	FTransform GetGripTransform(EHand Hand) const;
+
+	/** Returns true if the item in the given hand is currently stuck (too far from the control parent). */
+	bool GetItemStuck(EHand Hand) const;
+	
+	/** Returns the item actor that the player is currently looking at, within the specified max distance. */
+	AItemActor* FindLookedAtItem(float Radius = 5.f, float MaxDistance = 250.f) const;
+
+	// Returns all equippable items currently in range (for the gray highlight)
+	//void GetItemsInPickupRange(TArray<AItemActor*>& OutItems, float Radius = 120.f) const;
+
+	// ---------- private class variables ----------
+
 	/** Currently active control name for the left hand. */
-	UPROPERTY()
 	FName ActiveControlLeft;
 
 	/** Currently active control name for the right hand. */
-	UPROPERTY()
 	FName ActiveControlRight;
 
+	/** Whether the item in the left hand is currently stuck (too far from the control parent). */
 	bool bLeftItemStuck = false;
-	bool bRightItemStuck = false;
 
-	bool GetItemStuck(EHand Hand);
-	void SetItemStuck(EHand Hand, bool bStuck);
+	/** Whether the item in the right hand is currently stuck (too far from the control parent). */
+	bool bRightItemStuck = false;
 };

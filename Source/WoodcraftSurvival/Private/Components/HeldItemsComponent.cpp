@@ -98,7 +98,7 @@ FTransform UHeldItemsComponent::GetRelativeTransformBetweenWeaponAndHandBones(EH
 	return HandTransform.GetRelativeTransform(WeaponBoneTransform);
 }
 
-FTransform UHeldItemsComponent::GetWeaponboneTransform(EHand Hand) const
+FTransform UHeldItemsComponent::GetWeaponBoneTransform(EHand Hand) const
 {
 	if (!AnimRefMesh)
 	{
@@ -131,47 +131,74 @@ void UHeldItemsComponent::PreventItemStuck(EHand Hand)
 	AItemActor* Item = GetHeldItem(Hand);
 	if (!Item) return;
 
-	UStaticMeshComponent* Mesh = Item->FindComponentByClass<UStaticMeshComponent>();
+	UStaticMeshComponent* Mesh = Item->GetItemMesh();
 	if (!Mesh) return;
 
-	const FName WeaponBoneName = GetWeaponBoneName(Hand);
+	// Check distance between AnimRef hand bone and grip IK target
+	const FVector HandBoneLocation = AnimRefMesh->GetSocketLocation(GetHandBoneName(Hand));
+	const FVector GripLocation = GetGripTransform(Hand).GetLocation();
 
-	// AnimRef is the invisible mesh that owns the WeaponBones
-	const FVector BoneLoc = AnimRefMesh->GetSocketLocation(WeaponBoneName);
-	const FVector ItemLoc = Item->GetActorLocation();
+	const float Distance = FVector::Dist(HandBoneLocation, GripLocation);
 
-	const float Distance = FVector::Dist(BoneLoc, ItemLoc);
-
-	// Hysteresis to prevent flickering
-	const float EnterUnsafeDistance = 55.0f; // tune these
+	// Hysteresis to prevent flickering - TODO: tune later
+	const float EnterUnsafeDistance = 55.0f;
 	const float ExitUnsafeDistance = 40.0f;
-
-	FString HandStr = Hand == EHand::Left ? "Left - " : "Right - ";
-	FString DistanceStr = FString::Printf(TEXT("Distance: %.1f"), Distance);
-	FString FullString = HandStr + DistanceStr;
-	if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 0.0f, FColor::Cyan, FullString);
 
 	bool bItemStuck = GetItemStuck(Hand);
 
 	if (Distance > EnterUnsafeDistance && !bItemStuck)
 	{
 		SetItemStuck(Hand, true);
+		Mesh->SetCollisionResponseToChannel(COLLISION_WORLD, ECR_Ignore);
+		Mesh->SetCollisionResponseToChannel(COLLISION_ITEM, ECR_Ignore);
+		//Mesh->SetCollisionResponseToChannel(COLLISION_CREATURE, ECR_Ignore);
+		//Mesh->SetCollisionResponseToChannel(COLLISION_STRUCTURE, ECR_Ignore);
 		Mesh->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Ignore);
 		Mesh->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Ignore);
 	}
-	else if (Distance < ExitUnsafeDistance && !bItemStuck)
+	else if (Distance < ExitUnsafeDistance && bItemStuck)
 	{
 		SetItemStuck(Hand, false);
+		Mesh->SetCollisionResponseToChannel(COLLISION_WORLD, ECR_Block);
+		Mesh->SetCollisionResponseToChannel(COLLISION_ITEM, ECR_Block);
+		//Mesh->SetCollisionResponseToChannel(COLLISION_CREATURE, ECR_Ignore);
+		//Mesh->SetCollisionResponseToChannel(COLLISION_STRUCTURE, ECR_Ignore);
 		Mesh->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
 		Mesh->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
 	}
 }
 
-bool UHeldItemsComponent::GetItemStuck(EHand Hand)
+bool UHeldItemsComponent::GetItemStuck(EHand Hand) const
 {
 	if (Hand == EHand::None) return false;
 
 	return (Hand == EHand::Left) ? bLeftItemStuck : bRightItemStuck;
+}
+
+AItemActor* UHeldItemsComponent::FindLookedAtItem(float Radius, float MaxDistance) const
+{
+	APlayerController* PlayerController = GetWorld()->GetFirstPlayerController();
+	if (!PlayerController) return nullptr;
+
+	FVector CameraLocation;
+	FRotator CameraRotation;
+	PlayerController->GetPlayerViewPoint(CameraLocation, CameraRotation);
+
+	const FVector TraceEnd = CameraLocation + CameraRotation.Vector() * MaxDistance;
+
+	FHitResult Hit;
+	FCollisionQueryParams Params;
+	Params.AddIgnoredActor(GetOwner());
+	Params.AddIgnoredActor(GetHeldItem(EHand::Left));
+	Params.AddIgnoredActor(GetHeldItem(EHand::Right));
+
+	FCollisionShape Sphere = FCollisionShape::MakeSphere(Radius);
+
+	if (GetWorld()->SweepSingleByChannel(Hit, CameraLocation, TraceEnd, FQuat::Identity, COLLISION_EQUIPPABLE, Sphere, Params))
+	{
+		return Cast<AItemActor>(Hit.GetActor());
+	}
+	return nullptr;
 }
 
 void UHeldItemsComponent::SetItemStuck(EHand Hand, bool bStuck)
@@ -179,7 +206,7 @@ void UHeldItemsComponent::SetItemStuck(EHand Hand, bool bStuck)
 	if (Hand == EHand::None) return;
 
 	FString HandStr = Hand == EHand::Left ? "Left - " : "Right - ";
-	FString StuckStr = bStuck ? TEXT("true") : TEXT("false");
+	FString StuckStr = bStuck ? TEXT("SetItemStuck set true") : TEXT("SetItemStuck set false");
 	FString FullString = HandStr + StuckStr;
 	if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 20.0f, FColor::Cyan, FullString);
 
@@ -215,11 +242,12 @@ void UHeldItemsComponent::EquipUnarmed(EHand Hand)
 		GetOwner(),
 		UnarmedDefinition,
 		GetOwner()->GetActorTransform());
+	if (!UnarmedActor) return;
 
 	// Hide the unarmed actor so it doesn't appear in the world. It will still be used for grip transforms and collision.
 	UnarmedActor->SetHidden(true);
-
-	if (!UnarmedActor) return;
+	// Set the transform of the unarmed actor to match the weapon bone for the hand to prevent hands jerking away on spawn.
+	UnarmedActor->SetActorTransform(GetWeaponBoneTransform(Hand));
 
 	if (Hand == EHand::Left) HeldItemLeft = UnarmedActor;
 	else HeldItemRight = UnarmedActor;
@@ -231,7 +259,7 @@ void UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand)
 {
 	if (!Item || Hand == EHand::None || !PhysicsControl || !AnimRefMesh) return;
 
-	UStaticMeshComponent* ItemMesh = Item->FindComponentByClass<UStaticMeshComponent>();
+	UStaticMeshComponent* ItemMesh = Item->GetItemMesh();
 	if (!ItemMesh) return;
 
 	// Destroy any existing control for this hand first
@@ -243,7 +271,7 @@ void UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand)
 	}
 
 	// Disable collision for the item mesh while it's being held
-	ItemMesh->SetCollisionResponseToChannel(ECollisionChannel::ECC_GameTraceChannel2, ECollisionResponse::ECR_Ignore);
+	ItemMesh->SetCollisionResponseToChannel(COLLISION_PLAYER, ECollisionResponse::ECR_Ignore);
 
 	const FName WeaponBoneName = GetWeaponBoneName(Hand);
 
@@ -290,18 +318,18 @@ void UHeldItemsComponent::DetachItemFromControl(EHand Hand)
 
 
 	// Restore collision and scale for the item mesh
-	AActor* Item = GetHeldItem(Hand);
+	AItemActor* Item = GetHeldItem(Hand);
 
 	if (Item)
 	{
-		UStaticMeshComponent* ItemMesh = Item->FindComponentByClass<UStaticMeshComponent>();
+		UStaticMeshComponent* ItemMesh = Item->GetItemMesh();
 		if (ItemMesh)
 		{
 			if (Hand == EHand::Left)
 			{
 				ItemMesh->SetRelativeScale3D(FVector(1.0f, 1.0f, 1.0f)); // Reset scale to normal in case was mirrored for left hand
 			}
-			ItemMesh->SetCollisionResponseToChannel(ECollisionChannel::ECC_GameTraceChannel2, ECollisionResponse::ECR_Block);
+			ItemMesh->SetCollisionResponseToChannel(COLLISION_PLAYER, ECollisionResponse::ECR_Block);
 		}
 	}
 }

@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "UObject/Object.h"
+#include "Items/ItemActor.h"
 #include "ItemFragment.generated.h"
 
 /**
@@ -16,6 +17,8 @@ class WOODCRAFTSURVIVAL_API UItemFragment : public UObject
 {
 	GENERATED_BODY()
 
-	// No properties or functions yet.
+public:
+	virtual void OnItemSpawned(AItemActor* ItemActor) {}
+
 	// Concrete fragments will add their own data (MaxStackSize, BurnTime, etc.).
 };

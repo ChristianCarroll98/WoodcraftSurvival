@@ -24,9 +24,13 @@ public:
 
 	AItemActor();
 
-	// ----- IItemActorInterface -----
+	// ---------- IItemActorInterface ----------
 	virtual UItemInstance* GetItemInstance() const override;
 	virtual void InitializeFromInstance(UItemInstance* Instance) override;
+
+	// ---------- base class helper functions ----------
+
+	UStaticMeshComponent* GetItemMesh() const { return MeshComponent; }
 
 protected:
 
