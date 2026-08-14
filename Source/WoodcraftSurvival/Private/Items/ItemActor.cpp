@@ -14,8 +14,8 @@ AItemActor::AItemActor()
 	MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComponent"));
 	SetRootComponent(MeshComponent);
 	
-	MeshComponent->SetSimulatePhysics(true);
 	MeshComponent->SetCollisionProfileName(TEXT("Item"));
+	MeshComponent->SetSimulatePhysics(true);
 	
 }
 
@@ -26,7 +26,7 @@ UItemInstance* AItemActor::GetItemInstance() const
 
 void AItemActor::InitializeFromInstance(UItemInstance* Instance)
 {
-	if (!Instance || !Instance->Definition) return
+	if (!Instance || !Instance->Definition) return;
 
 	ItemInstance = Instance;
 

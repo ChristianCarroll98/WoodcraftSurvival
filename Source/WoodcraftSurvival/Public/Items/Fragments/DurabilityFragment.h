@@ -2,7 +2,6 @@
 
 #pragma once
 
-#include "CoreMinimal.h"
 #include "ItemFragment.h"
 #include "DurabilityFragment.generated.h"
 
@@ -18,7 +17,7 @@ class WOODCRAFTSURVIVAL_API UDurabilityFragment : public UItemFragment
 
 public:
 	
-	void OnItemSpawned(AItemActor* ItemActor);
+	void OnItemInstanceCreated(UItemInstance* Instance) override;
 
 	/** Base maximum durability for this item type. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Durability", meta = (ClampMin = "1.0"))

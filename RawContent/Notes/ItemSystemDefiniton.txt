@@ -1,14 +1,16 @@
 **Full Description of the Intended Item System**  
-*(Updated 2026-08-13 – post hold-system + fragment design lock-in)*
+*(Updated 2026-08-14 – ItemFactorySubsystem, fragment split, Unarmed, pickup design)*
 
 ### 1. High-Level Goals
 - Fully data-driven item definitions using Primary Data Assets + Fragments.
-- One `UItemInstance` = one physical item in the world (no stacking of instances).
-- World representation is always an `AItemActor` that is never destroyed on pickup.
+- `UItemInstance` is the long-lived identity of a specific item. It is only destroyed when the item is truly consumed, broken, or used up in crafting.
+- `AItemActor` is the current world representation and **may** be destroyed and recreated (storage, inventory, load/save, etc.).
+- For normal world pickup/drop the Actor is **not** destroyed — it is attached/detached.
 - Clean separation of concerns:
   - **Data** → Definitions + Fragments
-  - **Runtime state** → `UItemInstance`
-  - **World presence** → `AItemActor`
+  - **Runtime state** → `UItemInstance` (long-lived)
+  - **World presence** → `AItemActor` (disposable)
+  - **Creation** → `UItemFactorySubsystem`
   - **Player holding logic** → `UHeldItemsComponent`
   - **Presentation** → Animation, Control Rig, Physics Control (mostly Blueprint + component)
 
@@ -24,27 +26,47 @@ Examples: Equippable, Durability, Fuel, Damage, etc.
 
 - Fragments are **primarily pure data**.
 - Data is exposed as `UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)`.
-- Allowed exception: a lightweight virtual `OnItemSpawned(AItemActor* ItemActor)` for one-time initialization only.
-- `OnItemSpawned` may set initial runtime values (e.g. CurrentHealth = MaxDurability) or spawn a matching runtime component when ongoing behaviour is truly needed.
-- Fragments must **not** hold mutable runtime state or perform per-frame work.
+- Two lightweight virtuals (no mutable runtime state, no per-frame work):
+
+```cpp
+/** Called only once when a new UItemInstance is first created from a Definition.
+ *  Use for default runtime values (CurrentHealth = MaxDurability, etc.). */
+virtual void OnItemInstanceCreated(UItemInstance* Instance) {}
+
+/** Called every time an AItemActor is spawned/initialized for an Instance.
+ *  Use only for actor-side setup (collision responses, components, mesh tweaks).
+ *  Never write default values into the Instance here. */
+virtual void OnItemSpawned(AItemActor* ItemActor) {}
+```
 
 **UItemInstance**  
-Runtime object that holds a pointer to its `UItemDefinition` and any per-instance mutable state (CurrentHealth, UniqueId, etc.).  
-The Definition pointer is kept for the lifetime of the instance (UI, repair, tooltips, save/load, etc.).  
-Created by the factory. Never stacked.
+Runtime object that holds a pointer to its `UItemDefinition` Primary Data Asset and any per-instance mutable state (CurrentHealth, UniqueId, etc.).  
+Created with `NewObject<UItemInstance>(GetTransientPackage())`.
+Never stacked. Only destroyed when the item is consumed/broken.
 
 **AItemActor**  
 The actual actor in the world.  
 - Owns a static mesh component.  
 - Holds a reference to its `UItemInstance`.  
 - `InitializeFromInstance()` sets the mesh and calls `OnItemSpawned` on every fragment.  
-- Survives pickup/drop cycles (never destroyed on pickup).
+- May be destroyed and later recreated from the same Instance (storage, etc.).  
+- For normal ground ↔ hand cycles the actor is kept alive.
 
-**UItemFactory**  
-Responsible for creating the `UItemInstance`, spawning the `AItemActor`, and handing the instance to the actor.  
-Stays thin — real configuration happens inside `AItemActor::InitializeFromInstance`.
+**UItemFactorySubsystem** (`UWorldSubsystem`)  
+Single authority for creation. Access via `GetWorld()->GetSubsystem<UItemFactorySubsystem>()` or a cached `TObjectPtr` on components.
 
-**EHand** (in `WoodcraftTypes.h`)  
+Public API:
+```cpp
+UItemInstance* CreateItemInstanceFromDefinition(UItemDefinition* Definition);
+AItemActor*    SpawnItemActorFromDefinition(UItemDefinition* Definition, const FTransform& SpawnTransform);
+AItemActor*    SpawnItemActorFromInstance(UItemInstance* Instance, const FTransform& SpawnTransform);
+```
+
+- `CreateItemInstanceFromDefinition` creates the Instance and calls `Fragment->OnItemInstanceCreated` on all fragments.
+- `SpawnItemActorFromInstance` spawns the Actor and calls `Actor->InitializeFromInstance` (which runs `OnItemSpawned`).
+- `SpawnItemActorFromDefinition` is the convenience path (Create + Spawn).
+
+**EHand** (in `WoodcraftTypes.h`)
 ```cpp
 UENUM(BlueprintType)
 enum class EHand : uint8
@@ -59,15 +81,15 @@ enum class EHand : uint8
 
 **UEquippableFragment**  
 Currently minimal (`bTwoHanded`).  
-In `OnItemSpawned` it configures the actor to respond to the Equippable trace channel
+In `OnItemSpawned` it configures the actor to respond to the Equippable trace channel.
 
 **Collision Channels (locked approach)**  
-- Every item uses Object Type = `ITEM`.  
+- Every item uses Object Type = `Item`.  
 - Equippable items additionally set:
   ```cpp
-  Mesh->SetCollisionResponseToChannel(COLLISION_EQUIPPABLE, ECR_Overlap);
+  Mesh->SetCollisionResponseToChannel(TRACE_EQUIPPABLE, ECR_Overlap); // TRACE_EQUIPPABLE is macro for corresponding ECC_GameTraceChannel
   ```
-- Pickup uses a **Trace Channel** called `EQUIPPABLE` so the sphere sweep only hits valid equippable items.
+- Pickup uses a **Trace Channel** called `Equippable` so the sphere sweep only hits valid equippable items.
 - This keeps the ITEM object channel free for other interactions while giving clean targeting for pickup.
 
 **Hand Ownership**  
@@ -91,7 +113,7 @@ Two skeletal meshes on the player:
 - Drives the held item relative to the corresponding AnimRef WeaponBone.  
 - Gives real momentum while still following the hand.
 
-**Dynamic Grip Transform** (every frame)  
+**Dynamic Grip Transform** (every frame)
 ```
 Relative = AnimRef.HandBone.GetRelativeTransform(AnimRef.WeaponBone)
 GripTarget = Relative * ItemWorldTransform
@@ -107,17 +129,16 @@ Left-hand IK works without extra transform mirroring.
 
 `PreventItemStuck(EHand)` runs every tick from `UHeldItemsComponent`.
 
-- Measures distance between AnimRef **HandBone** and the current **GripLocation** (more accurate than WeaponBone→item for long weapons).
+- Measures distance between AnimRef **HandBone** and the current **GripLocation**.
 - Hysteresis (enter ~55, exit ~40 — tune as needed).
-- When stuck: changes collision **responses** on WorldStatic, WorldDynamic, and custom channels (macros) COLLISION_ITEM and soon COLLISION_STRUCTURE and COLLISION_CREATURE to `Ignore`.  
+- When stuck: changes collision **responses** on WorldStatic, WorldDynamic, and custom channels (macros) COLLISION_ITEM and later COLLISION_STRUCTURE/COLLISION_CREATURE to `Ignore`.  
 - When free: restores them to `Block`.  
 - **Never** uses `SetCollisionEnabled(NoCollision)` — that invalidates Physics Control bodies.
-- light Control Rig stretch on the visible arms complement so the hand stays visually glued without the elbows snapping in when item pulled away from player.
+- Light Control Rig stretch on the visible arms so the hand stays visually glued.
 
 ### 6. UHeldItemsComponent Responsibilities
 
 - Manages both hands (always a valid item — Unarmed when empty).
-- `TryPickup` / `TryDrop`.
 - Creates / destroys Physics Controls on attach / detach.
 - Dynamic grip transform calculation every frame.
 - Left-hand mesh mirroring.
@@ -125,39 +146,71 @@ Left-hand IK works without extra transform mirroring.
 - Will also own the targeted-item query and (for now) highlight driving logic.
 - Provides clean Blueprint API.
 
-Note: The component is currently large (many helpers). This is accepted while the hold/pickup systems are in active development. Public API stays small; helpers stay private. Split later only when stable groups of responsibility appear.
+**Pickup / Drop API (design locked, implementation pending)**
+
+```cpp
+// Low-level
+bool TryPickup(AItemActor* Item, EHand Hand);
+bool TryDrop(EHand Hand);
+
+// Q-mode entry point (LMB/RMB while holding Q)
+void TryPickupOrDrop(EHand Hand);
+```
+
+**TryPickupOrDrop decision tree (basic version)**
+- Looking at valid item + hand is Unarmed → Pickup
+- Looking at valid item + hand occupied → Do nothing (swap later)
+- Looking at empty space + hand occupied → Drop
+- Looking at empty space + hand Unarmed → Do nothing
+
+**Pickup feel decisions**
+- Target is locked at the moment of input confirmation (turning mid-animation does not change the target).
+- Small sphere sweep (≈8 cm radius, ~150–180 cm distance) on `TRACE_EQUIPPABLE` from camera.
+- Prefer letting existing Physics Control + IK grip target “suck” the item into pose. No forced teleport for normal world items.
+- Hard teleport / snap is reserved mainly for re-equipping Unarmed.
+- 12-frame reach montage + AnimNotify (or end of anim detect, TBD) near the end for finalization.
+- Pickup range is intentionally longer than real arm reach (fun > strict realism). No crouching required for normal ground items.
+
+Note: The component is currently large. This is accepted while the hold/pickup systems are in active development. Public API stays small; helpers stay private.
 
 ### 7. Player Structure
 
 - C++ `AWoodcraftCharacter` owns the `UHeldItemsComponent`.
 - WoodcraftPlayer Blueprint subclasses it.
 - C++ owns state and rules; Blueprint owns presentation (animation, Control Rig, Physics Control tuning).
+- `UHeldItemsComponent` caches `TObjectPtr<UItemFactorySubsystem> ItemFactory` set in `BeginPlay`.
 
 ### 8. Unarmed Handling (Locked)
 
-Unarmed is a real item (`DA_Unarmed`).  
-Both hands start with Unarmed.  
-Dropping an item immediately equips Unarmed in that hand.  
-Eliminates null-hand special cases.
+- Unarmed is a real item (`DA_Unarmed`).
+- Store **only** the `UItemDefinition*` (no permanent Unarmed Instances).
+- On equip: `Factory->SpawnItemActorFromDefinition(UnarmedDefinition)` then normal attach path.
+- On replace with a real item: simply `Destroy()` the Unarmed actor.
+- Both hands start with Unarmed.
+- Dropping an item immediately re-equips Unarmed in that hand.
+- Eliminates null-hand special cases.
 
-### 9. Current Status (2026-08-13)
+### 9. Current Status (2026-08-14)
 
 **Working / Implemented**
-- Item Factory + spawning + `InitializeFromInstance`
-- Fragment `OnItemSpawned` loop (data-driven init)
+- `UItemFactorySubsystem` (World Subsystem) with the three creation methods
+- Instance outered to `GetTransientPackage()`
+- Fragment split: `OnItemInstanceCreated` + `OnItemSpawned`
+- `AItemActor::InitializeFromInstance` calls `OnItemSpawned`
 - Physics Control attach + dynamic grip (both hands)
 - Left-hand mesh mirroring (scale X = -1 on mesh only)
 - `PreventItemStuck` (response-based, HandBone↔Grip distance, hysteresis)
 - Basic hold feel
+- Unarmed approach decided (Definition only, spawn/destroy actor)
 
 **In progress / Next**
-1. Basic `TryPickup` / `TryDrop` using sphere sweep on the `EQUIPPABLE` Trace Channel (so mirroring can be fully tested).
-2. Proper Q-mode input (hold Q → LMB/RMB for left/right).
-3. Pickup montage + Anim Notify timing (can come after basic attach works).
-4. Dual item highlight (nearby gray + targeted stronger) — lives in HeldItemsComponent for now.
+1. Basic `TryPickup` / `TryDrop` + `TryPickupOrDrop` (sphere sweep on EQUIPPABLE) so left-hand mirroring can be fully tested end-to-end.
+2. Q-mode input (hold Q → LMB/RMB).
+3. Pickup montage + AnimNotify timing.
+4. Dual item highlight (nearby gray + targeted stronger).
 5. Basic Extend (neutral vs extended anim soft refs).
-6. Later: swinging, inventory, two-handed rules, damage, mass-based Physics Control strength, etc.
+6. Later: swinging, inventory/storage (Actor destroy/recreate from Instance), two-handed rules, damage, mass-based Physics Control strength, etc.
 
 ---
 
-This document reflects the design state after the hold-system safety pass, left-hand mirroring, fragment initialization policy, and collision channel decisions of 2026-08-13.
+This document reflects the design state after the ItemFactorySubsystem conversion, fragment responsibility split, Unarmed simplification, Instance longevity rules, and pickup interaction decisions of 2026-08-14.

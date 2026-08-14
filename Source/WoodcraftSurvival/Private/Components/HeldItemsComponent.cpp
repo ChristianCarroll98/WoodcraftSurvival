@@ -2,7 +2,7 @@
 
 #include "Components/HeldItemsComponent.h"
 #include "Items/ItemActor.h"
-#include "Items/ItemFactory.h"
+#include "Items/ItemFactorySubsystem.h"
 #include "Core/WoodcraftTypes.h"
 #include <PhysicsControlComponent.h>
 
@@ -14,6 +14,8 @@ UHeldItemsComponent::UHeldItemsComponent()
 void UHeldItemsComponent::BeginPlay()
 {
 	Super::BeginPlay();
+
+	ItemFactory = GetWorld()->GetSubsystem<UItemFactorySubsystem>();
 
 	// Both hands start with Unarmed
 	EquipUnarmed(EHand::Left);
@@ -238,16 +240,29 @@ void UHeldItemsComponent::EquipUnarmed(EHand Hand)
 {
 	if (!UnarmedDefinition || Hand == EHand::None) return;
 
-	AItemActor* UnarmedActor = UItemFactory::SpawnItemFromDefinition(
-		GetOwner(),
+	AItemActor* UnarmedActor = ItemFactory->SpawnItemActorFromDefinition(
 		UnarmedDefinition,
-		GetOwner()->GetActorTransform());
-	if (!UnarmedActor) return;
+		GetWeaponBoneTransform(Hand) // Spawn at current hand location
+	);
+
+
+
+	if (!UnarmedActor)
+	{
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(
+				0,				// Unique key (-1 prevents overwriting, always making a new line)
+				5.0f,			// Duration to display the text in seconds
+				FColor::Cyan,	// Text color
+				TEXT("UnarmedActor reference invalid")	// The text message
+			);
+		}
+		return;
+	}
 
 	// Hide the unarmed actor so it doesn't appear in the world. It will still be used for grip transforms and collision.
-	UnarmedActor->SetHidden(true);
-	// Set the transform of the unarmed actor to match the weapon bone for the hand to prevent hands jerking away on spawn.
-	UnarmedActor->SetActorTransform(GetWeaponBoneTransform(Hand));
+	UnarmedActor->SetActorHiddenInGame(true);
 
 	if (Hand == EHand::Left) HeldItemLeft = UnarmedActor;
 	else HeldItemRight = UnarmedActor;

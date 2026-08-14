@@ -3,13 +3,14 @@
 #pragma once
 
 #include "Core/WoodcraftTypes.h"
-#include "Components/ActorComponent.h"
+#include <Components/ActorComponent.h>
 #include "HeldItemsComponent.generated.h"
 
 class UPhysicsControlComponent;
 class USkeletalMeshComponent;
 class AItemActor;
 class UItemDefinition;
+class UItemFactorySubsystem;
 
 /**
  * Manages items held in both hands.
@@ -124,6 +125,10 @@ private:
 	//void GetItemsInPickupRange(TArray<AItemActor*>& OutItems, float Radius = 120.f) const;
 
 	// ---------- private class variables ----------
+
+	/** The item factory subsystem used to create and spawn item actors. */
+	UPROPERTY()
+	TObjectPtr<UItemFactorySubsystem> ItemFactory;
 
 	/** Currently active control name for the left hand. */
 	FName ActiveControlLeft;
