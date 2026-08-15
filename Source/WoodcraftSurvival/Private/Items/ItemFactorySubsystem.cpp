@@ -12,9 +12,9 @@ UItemInstance* UItemFactorySubsystem::CreateItemInstanceFromDefinition(UItemDefi
 
 	UItemInstance* NewInstance = NewObject<UItemInstance>(GetTransientPackage());
 	NewInstance->UniqueId = FGuid::NewGuid();
-	NewInstance->Definition = Definition;
+	NewInstance->ItemDefinition = Definition;
 
-	for (UItemFragment* Fragment : NewInstance->Definition->Fragments)
+	for (UItemFragment* Fragment : NewInstance->ItemDefinition->Fragments)
 	{
 		// Call each fragment's initialization function to set default values
 		if (Fragment) Fragment->OnItemInstanceCreated(NewInstance);

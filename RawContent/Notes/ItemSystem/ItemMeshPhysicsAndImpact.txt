@@ -1,0 +1,253 @@
+**Item Mesh, Physics & Impact Response System**
+*(Woodcraft Survival – 2026-08-15 – Finalized)*
+
+This document defines the authoritative approach for item collision, mass, part identification, and impact effects/sounds.  
+Logical materials have been removed; Physical Materials are the single source of truth for both simulation behaviour and impact feedback.
+
+---
+
+### 1. Goals
+
+- Realistic mass and center of mass derived automatically from Physical Material density + simple collision primitives.
+- Support for tools/weapons with distinct materials (e.g. wooden handle + stone/metal head) using two Static Mesh Components.
+- Ability to identify which part of an item was hit via the collision primitive name (`Blunt`, `Sharp`, `Point`, `Head`, etc.) for damage multipliers and special feedback.
+- Impact sound + VFX driven directly by the Physical Materials involved in the collision.
+- Extremely simple authoring for basic items (sticks, bones, rocks). Clear extension path for tools that need a second mesh.
+- Keep runtime code and Definition data minimal. Soft object pointers on Definitions.
+- Max two meshes per item (Primary = handle/base, optional Secondary = head/blade).
+
+---
+
+### 2. Core Concepts
+
+**Visuals**
+- Single material slot per mesh (BaseColor + ORM + Normal).
+- Primary mesh and Secondary mesh are authored as separate Static Mesh assets (supports future in-game crafting/assembly).
+
+**Multi-Mesh Structure (AItemActor)**
+- Every item has a **PrimaryMeshComponent** (always present). This is the handle or the single body for simple items.
+- Optional **SecondaryMeshComponent** (head, blade, etc.), created only when needed.
+- `GetItemPrimaryMesh()` / `GetMeshComponent()` returns the Primary. Physics Control, attachment, and IK drive from the Primary.
+- Secondary is attached to Primary and **welded** so the actor behaves as one rigid body.
+
+**Collision**
+- Collision Complexity = `Use Simple Collision As Complex` on every mesh.
+- Author one or more simple primitives (capsules, boxes, spheres).
+- **Name every primitive** after the damage type / interaction it represents:
+  - `Blunt` – sticks, clubs, most simple tools / handles
+  - `Sharp` / `Blade` – cutting edges
+  - `Point` / `Pierce` – stabbing tips
+  - `Head` – when the head has distinct behaviour
+- Multiple primitives may share the same name.
+- Apply the `TRACE_EQUIPPABLE` response (and any other needed responses) to both components when present.
+
+**Physical Material (single source of truth)**
+- Set on each Static Mesh asset (Simple Collision Physical Material).
+- Controls friction / restitution, density → automatic mass, and impact sound + VFX.
+- Because Primary and Secondary are separate components, a hit on the head returns the head’s Physical Material and a hit on the handle returns the handle’s Physical Material.
+
+**Mass & Center of Mass**
+- Automatic. No manual Mass or CenterOfMassOffset in the baseline.
+- Each mesh contributes mass = density(PhysMat) × volume(of its simple primitives).
+- After Secondary is welded to Primary, Unreal calculates the combined mass and combined center of mass automatically.
+
+**Part / Damage Identification**
+- The name of the collision primitive that was hit *is* the damage type / part key (`Blunt`, `Sharp`, `Point`, `Head`, etc.).
+- Extract it from the hit (shape name / element). Use it directly for damage multipliers and special feedback.
+- No extra data map is required on the Definition.
+
+**Placement of Secondary Mesh**
+- Each mesh is authored in Blender with its origin at a meaningful location.
+- Relative placement is stored as `SecondaryRelativeTransform` on the Item Definition.
+- Alternative: socket named `HeadAttach` on the Primary mesh.
+
+---
+
+### 3. Code Architecture
+
+#### 3.1 `UItemDefinition` fields
+
+```cpp
+UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Display")
+FText DisplayName;
+
+UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Display")
+TSoftObjectPtr<UStaticMesh> PrimaryMesh;
+
+UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Display")
+TSoftObjectPtr<UStaticMesh> SecondaryMesh;
+
+UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Display", meta = (EditCondition = "SecondaryMesh != nullptr"))
+FTransform SecondaryRelativeTransform = FTransform::Identity;
+```
+
+No material maps. No mass properties.
+
+#### 3.2 `UItemPhysicsFragment`
+
+Presence of this fragment means the item is a simulated physics object.  
+No properties are required.
+
+```cpp
+UCLASS(EditInlineNew, DefaultToInstanced)
+class WOODCRAFTSURVIVAL_API UItemPhysicsFragment : public UItemFragment
+{
+	GENERATED_BODY()
+
+public:
+	virtual void OnItemSpawned(AItemActor* ItemActor) override;
+};
+```
+
+**Authoritative `OnItemSpawned` implementation:**
+
+```cpp
+void UItemPhysicsFragment::OnItemSpawned(AItemActor* ItemActor)
+{
+	if (!ItemActor) return;
+
+	UStaticMeshComponent* Primary = ItemActor->GetItemPrimaryMesh();
+	if (!IsValid(Primary) || Primary->GetStaticMesh() == nullptr) return;
+
+	Primary->SetSimulatePhysics(true);
+	Primary->SetUseCCD(true);
+	Primary->SetLinearDamping(0.05f);
+	Primary->SetAngularDamping(1.0f);
+	Primary->CanCharacterStepUpOn = ECB_No;
+
+	UStaticMeshComponent* Secondary = ItemActor->GetItemSecondaryMesh();
+	if (IsValid(Secondary) && Secondary->GetStaticMesh() != nullptr)
+	{
+		Secondary->SetSimulatePhysics(true);
+		Secondary->SetUseCCD(true);
+		Secondary->SetLinearDamping(0.05f);
+		Secondary->SetAngularDamping(1.0f);
+		Secondary->CanCharacterStepUpOn = ECB_No;
+		Secondary->WeldTo(Primary);
+	}
+
+	// Always recreate on the Primary
+	Primary->RecreatePhysicsState();
+}
+```
+
+Notes:
+- CCD reduces tunneling of small/thin items.
+- Light linear + moderate angular damping stops endless spinning.
+- `CanCharacterStepUpOn = ECB_No` prevents characters from treating the item as a step.
+- Welding + `RecreatePhysicsState` must happen after both components have simulation enabled.
+
+#### 3.3 Secondary Mesh Creation (in `AItemActor::InitializeFromInstance`)
+
+```cpp
+// Secondary mesh (optional)
+if (!Instance->ItemDefinition->SecondaryMesh.IsNull())
+{
+	if (UStaticMesh* SecondaryMesh = Instance->ItemDefinition->SecondaryMesh.LoadSynchronous())
+	{
+		SecondaryMeshComponent = NewObject<UStaticMeshComponent>(this, TEXT("SecondaryMeshComponent"));
+
+		SecondaryMeshComponent->SetStaticMesh(SecondaryMesh);
+		SecondaryMeshComponent->SetRelativeTransform(Instance->ItemDefinition->SecondaryRelativeTransform);
+		SecondaryMeshComponent->SetCollisionProfileName(TEXT("Item"));
+
+		SecondaryMeshComponent->SetupAttachment(PrimaryMeshComponent);
+		SecondaryMeshComponent->RegisterComponent();
+	}
+}
+```
+
+Order is important: NewObject → set data → SetupAttachment → RegisterComponent.  
+Do **not** call `WeldTo` or `SetSimulatePhysics` here — leave that to the PhysicsFragment.
+
+#### 3.4 Impact Response System
+
+Impact feedback is driven directly by the Physical Materials involved in the collision.
+
+```cpp
+USTRUCT(BlueprintType)
+struct FImpactResponse
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TSoftObjectPtr<UPhysicalMaterial> MaterialA;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TSoftObjectPtr<UPhysicalMaterial> MaterialB;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TSoftObjectPtr<USoundBase> ImpactSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TSoftObjectPtr<UNiagaraSystem> ImpactEffect;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	float BaseVolumeMultiplier = 1.0f;
+};
+```
+
+Runtime helper keys on the two `UPhysicalMaterial*` from the hit and scales by speed + incidence angle.
+
+#### 3.5 Extracting Part Name (for future damage)
+
+```cpp
+FName PartName = /* extract shape / element name from the hit */;
+// PartName will be "Blunt", "Sharp", "Point", "Head", etc.
+```
+
+---
+
+### 4. Item Authoring Process
+
+#### 4.1 Mesh Preparation (Blender)
+1. Model Primary (and Secondary if needed) as separate objects.
+2. Origins at meaningful locations.
+3. Single material per mesh, export.
+
+#### 4.2 Static Mesh Setup (Unreal)
+1. Collision Complexity = `Use Simple Collision As Complex`.
+2. Add simple primitives. Name them after the damage type (`Blunt`, `Sharp`, `Point`, `Head`…).
+3. Assign the correct Physical Material (with realistic density).
+4. Save.
+
+#### 4.3 Data Asset Setup
+1. DisplayName, PrimaryMesh.
+2. SecondaryMesh + SecondaryRelativeTransform (only if needed).
+3. Add `UItemPhysicsFragment` (presence enables simulation + welding).
+4. Add `UEquippableFragment` if pickable.
+5. Save.
+
+#### 4.4 Examples
+
+**Stick**
+- PrimaryMesh only. Primitives named `Blunt`. Physical Material = Wood.
+- Has `UItemPhysicsFragment`.
+- Part / damage name = `Blunt`.
+
+**Stone Hand Axe**
+- Primary = handle (`Blunt` or `Handle`, Wood PhysMat).
+- Secondary = head (`Head` or `Blunt`, Stone PhysMat) + relative transform.
+- Has `UItemPhysicsFragment` (welds the two bodies).
+- Impacts automatically use the correct Physical Material of the part that was hit.
+
+---
+
+### 5. Known Issues / Future Work
+
+- Character walking into items can launch them at high velocity. Investigate collision response with Pawn/Character, mass ratios, and possibly a custom collision profile or impulse clamping later.
+- Safety check for items falling through the floor (CCD enabled but need a just-in-case to prevent player item loss)
+- Fully dynamic assembly at craft time.
+- `UItemDamageFragment` that keys off the same primitive names.
+
+---
+
+### 6. Summary Checklist for a New Item
+
+1. Blender → separate meshes if needed, good origins, export.
+2. Static Mesh(es): named primitives (`Blunt` etc.), correct Physical Material + density, simple collision.
+3. Definition: PrimaryMesh (+ Secondary + relative transform if needed).
+4. Add `UItemPhysicsFragment` + `UEquippableFragment` if required.
+5. Test: mass feels right, no tunneling (CCD), impacts use correct PhysMat, part name extracts as expected, does not spin forever (damping).
+
+This document is now considered finalized for the current stage of development. Make only targeted manual edits later if needed.

@@ -2,11 +2,12 @@
 
 #pragma once
 
-#include "CoreMinimal.h"
-#include "Engine/DataAsset.h"
-#include "GameplayTagContainer.h"
+#include "Core/WoodcraftTypes.h"
 #include "Fragments/ItemFragment.h"
+#include "GameplayTagContainer.h"
 #include "ItemDefinition.generated.h"
+
+class UPrimaryDataAsset;
 
 /**
  * Static definition of an item (the template).
@@ -20,15 +21,29 @@ class WOODCRAFTSURVIVAL_API UItemDefinition : public UPrimaryDataAsset
 
 public:
 
-	/** Mesh used when the item is in the world or held in hand. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Visual")
-	TSoftObjectPtr<UStaticMesh> StaticMesh;
+	UItemDefinition();
 
-	/** Icon for UI. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Visual")
+	/** Mesh used when the item is in the world or held in hand */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Visual|Collision")
+	TSoftObjectPtr<UStaticMesh> PrimaryMesh;
+
+	/** Optional secondary mesh for tool/weapon heads */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Visual|Collision")
+	TSoftObjectPtr<UStaticMesh> SecondaryMesh;
+
+	/** Relative transform of the secondary mesh from the primary mesh */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Visual|Collision")
+	FTransform SecondaryRelativeTransform = FTransform::Identity;
+
+	/** Display name for UI */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Visual|UI")
+	FText DisplayName;
+
+	/** Icon for UI */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Visual|UI")
 	TSoftObjectPtr<UTexture2D> Icon;
 
-	/** Gameplay tags that describe this item (Item.Resource.Wood, Item.Fuel, Item.Tool, …). */
+	/** Gameplay tags that describe this item (Item.Resource.Wood, Item.Fuel, Item.Tool, …) */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tags")
 	FGameplayTagContainer ItemTags;
 

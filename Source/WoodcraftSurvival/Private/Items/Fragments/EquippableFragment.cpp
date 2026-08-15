@@ -6,8 +6,10 @@
 
 void UEquippableFragment::OnItemSpawned(AItemActor* ItemActor)
 {	
-    if (UStaticMeshComponent* Mesh = ItemActor->GetItemMesh())
-    {
-        Mesh->SetCollisionResponseToChannel(TRACE_EQUIPPABLE, ECollisionResponse::ECR_Overlap);
-    }
+    if (!ItemActor) return;
+
+    UStaticMeshComponent* Mesh = ItemActor->GetItemPrimaryMesh();
+    if (!Mesh) return;
+
+    Mesh->SetCollisionResponseToChannel(TRACE_EQUIPPABLE, ECollisionResponse::ECR_Overlap);
 }

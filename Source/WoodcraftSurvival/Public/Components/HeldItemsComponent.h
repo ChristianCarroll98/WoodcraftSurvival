@@ -28,6 +28,13 @@ public:
 
 	// ----- Core API -----
 
+	/** 
+	 * Attempts to pick up the item the player is currently looking at,
+	 * or drop the item in the given hand if already holding something.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Held Item")
+	bool TryPickupOrDrop(EHand Hand);
+
 	/** Attempts to pick up the given item into the specified hand. */
 	UFUNCTION(BlueprintCallable, Category = "Held Item")
 	bool TryPickup(AItemActor* Item, EHand Hand);
@@ -44,9 +51,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Held Item")
 	bool IsHolding(EHand Hand) const;
 
-	/** Returns true if either hand is currently holding a two-handed item. */
+	/** Returns the primary hand that is holding a two-handed item, or EHand::None if neither is. */
 	UFUNCTION(BlueprintPure, Category = "Held Item")
-	bool IsTwoHanded() const;
+	EHand GetIsHoldingTwoHanded() const;
 
 	/** Returns both grip transforms at once. Convenient for driving AnimBP every frame. */
 	UFUNCTION(BlueprintCallable, Category = "Held Item", meta = (DisplayName = "Get Grip Transforms"))
@@ -123,6 +130,9 @@ private:
 
 	// Returns all equippable items currently in range (for the gray highlight)
 	//void GetItemsInPickupRange(TArray<AItemActor*>& OutItems, float Radius = 120.f) const;
+
+	/** Returns true if the item in the given hand is the Unarmed item. */
+	bool GetIsUnarmed(EHand Hand) const;
 
 	// ---------- private class variables ----------
 

@@ -8,5 +8,6 @@ NEXT TIME:
 
 spawn stick item and attach to phys control for test - in progress
 
-
-make default grip transform whatever unarmed neutral should be? or an X to make it obvious idk? also its not tracking relative to player the hands are circling around so fix that too.
+current issues:
+item object collision type not being set to "Item"
+GetLookecAtItem not working (trace channel should be BLOCK not OVERLAP

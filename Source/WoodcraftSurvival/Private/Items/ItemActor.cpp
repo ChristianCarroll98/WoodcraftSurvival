@@ -11,12 +11,9 @@ AItemActor::AItemActor()
 	PrimaryActorTick.bCanEverTick = false;
 
 	// Create the mesh component and make it the root
-	MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComponent"));
-	SetRootComponent(MeshComponent);
-	
-	MeshComponent->SetCollisionProfileName(TEXT("Item"));
-	MeshComponent->SetSimulatePhysics(true);
-	
+	PrimaryMeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PrimaryMeshComponent"));
+	SetRootComponent(PrimaryMeshComponent);
+	PrimaryMeshComponent->SetCollisionProfileName(TEXT("Item"));
 }
 
 UItemInstance* AItemActor::GetItemInstance() const
@@ -26,21 +23,52 @@ UItemInstance* AItemActor::GetItemInstance() const
 
 void AItemActor::InitializeFromInstance(UItemInstance* Instance)
 {
-	if (!Instance || !Instance->Definition) return;
+	if (!Instance || !Instance->ItemDefinition) return;
 
 	ItemInstance = Instance;
 
-	// Load and apply the mesh from the definition
-	if (UStaticMesh* Mesh = Instance->Definition->StaticMesh.LoadSynchronous())
+	// Load and apply the primary mesh from the definition
+	if (UStaticMesh* Mesh = Instance->ItemDefinition->PrimaryMesh.LoadSynchronous())
 	{
-		MeshComponent->SetStaticMesh(Mesh);
+		PrimaryMeshComponent->SetStaticMesh(Mesh);
+	}
+	
+	// Secondary mesh (optional)
+	if (!Instance->ItemDefinition->SecondaryMesh.IsNull())
+	{
+		if (UStaticMesh* SecondaryMesh = Instance->ItemDefinition->SecondaryMesh.LoadSynchronous())
+		{
+			SecondaryMeshComponent = NewObject<UStaticMeshComponent>(this, TEXT("SecondaryMeshComponent"));
+
+			SecondaryMeshComponent->SetStaticMesh(SecondaryMesh);
+			SecondaryMeshComponent->SetRelativeTransform(Instance->ItemDefinition->SecondaryRelativeTransform);
+			SecondaryMeshComponent->SetCollisionProfileName(TEXT("Item"));
+
+			SecondaryMeshComponent->SetupAttachment(PrimaryMeshComponent);
+			SecondaryMeshComponent->RegisterComponent();
+		}
 	}
 
-	for (UItemFragment* Fragment : Instance->Definition->Fragments)
+	SetActorLabel(*(Instance->ItemDefinition->DisplayName.ToString() + "_" + Instance->UniqueId.ToString()));
+
+	for (UItemFragment* Fragment : Instance->ItemDefinition->Fragments)
 	{
 		// Call each fragment's OnItemSpawned function on this item to allow them to initialize the item actor
 		if (Fragment) Fragment->OnItemSpawned(this);
 	}
+}
 
-	// You can add more initialization here later (collision, materials, etc.)
+UStaticMeshComponent* AItemActor::GetItemPrimaryMesh() const
+{
+	return PrimaryMeshComponent;
+}
+
+UStaticMeshComponent* AItemActor::GetItemSecondaryMesh() const
+{
+	return SecondaryMeshComponent;
+}
+
+FTransform AItemActor::GetSecondaryRelativeTransform() const
+{
+	return ItemInstance->ItemDefinition->SecondaryRelativeTransform;
 }

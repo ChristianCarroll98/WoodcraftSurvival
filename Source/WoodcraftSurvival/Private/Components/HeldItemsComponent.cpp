@@ -3,6 +3,8 @@
 #include "Components/HeldItemsComponent.h"
 #include "Items/ItemActor.h"
 #include "Items/ItemFactorySubsystem.h"
+#include "Items/ItemInstance.h"
+#include "Items/Fragments/EquippableFragment.h"
 #include "Core/WoodcraftTypes.h"
 #include <PhysicsControlComponent.h>
 
@@ -31,25 +33,57 @@ void UHeldItemsComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 	PreventItemStuck(EHand::Right);
 }
 
-bool UHeldItemsComponent::TryPickup(AItemActor* Item, EHand Hand)
+bool UHeldItemsComponent::TryPickupOrDrop(EHand Hand)
 {
-	if (!Item || Hand == EHand::None)
+	if (Hand == EHand::None) return false;
+
+	// Target locked at input time
+	AItemActor* LookedAtItem = FindLookedAtItem();
+	const bool bHandIsUnarmed = GetIsUnarmed(Hand);
+
+	if (LookedAtItem)
 	{
-		return false;
+		if (!bHandIsUnarmed) return false; // Occupied + looking at item -> do nothing (swap later)
+		
+		return TryPickup(LookedAtItem, Hand); // Looking at valid item
 	}
 
-	// TODO: Validate that the item has an EquippableFragment
-	// TODO: Handle two-handed logic (clear the other hand if necessary)
-	// TODO: Play pickup montage / wait for AnimNotify before finalizing
+	// Looking at empty space
+	if (!bHandIsUnarmed)
+	{
+		return TryDrop(Hand);
+	}
 
-	if (Hand == EHand::Left) HeldItemLeft = Item;
-	else HeldItemRight = Item;
+	// Empty + Unarmed -> nothing
+	return false;
+}
+
+bool UHeldItemsComponent::TryPickup(AItemActor* Item, EHand Hand)
+{
+	if (!Item || Hand == EHand::None) return false;
+
+	// TODO: explicit EquippableFragment + two-handed rules later.
+
+	AItemActor* PreviousItem = GetHeldItem(Hand);
+
+	// Unarmed rule: simply Destroy the previous Unarmed actor
+	if (PreviousItem && GetIsUnarmed(Hand))
+	{
+		PreviousItem->Destroy();
+	}
+
+	if (Hand == EHand::Left)
+	{
+		HeldItemLeft = Item;
+	}
+	else
+	{
+		HeldItemRight = Item;
+	}
 
 	AttachItemToControl(Item, Hand);
 
-	// TODO: Notify the item that it became held
-	// TODO: Hide mesh if this is Unarmed
-
+	// TODO: NotifyBecameHeld / montage + AnimNotify finalization
 	return true;
 }
 
@@ -58,10 +92,10 @@ bool UHeldItemsComponent::TryDrop(EHand Hand)
 	AItemActor* Item = GetHeldItem(Hand);
 	if (Hand == EHand::None || !Item) return false;
 
-	DetachItemFromControl(Hand);
+	// Never drop Unarmed
+	if (GetIsUnarmed(Hand)) return false;
 
-	// TODO: Notify the item that it was released
-	// TODO: Return the actor to simulated physics
+	DetachItemFromControl(Hand);
 
 	EquipUnarmed(Hand);
 	return true;
@@ -77,16 +111,34 @@ AItemActor* UHeldItemsComponent::GetHeldItem(EHand Hand) const
 bool UHeldItemsComponent::IsHolding(EHand Hand) const
 {
 	AItemActor* Item = GetHeldItem(Hand);
-	if (!Item || !UnarmedDefinition) return false;
+	if (!Item || Item->GetItemInstance()->ItemDefinition == UnarmedDefinition) return false;
 
-	// TODO: Better check once ItemInstance is easily accessible
 	return true;
 }
 
-bool UHeldItemsComponent::IsTwoHanded() const
+EHand UHeldItemsComponent::GetIsHoldingTwoHanded() const
 {
-	// TODO: Check the EquippableFragment on the held item
-	return false;
+	AItemActor* LeftItem = GetHeldItem(EHand::Left);
+	if (LeftItem)
+	{
+		if (const UEquippableFragment* LeftEquippable
+			= LeftItem->GetItemInstance()->FindFragment<UEquippableFragment>())
+		{
+			if (LeftEquippable && LeftEquippable->bTwoHanded) return EHand::Left;
+		}
+	}
+
+	AItemActor* RightItem = GetHeldItem(EHand::Right);
+	if (RightItem)
+	{
+		if (const UEquippableFragment* RightEquippable
+			= RightItem->GetItemInstance()->FindFragment<UEquippableFragment>())
+		{
+			if (RightEquippable && RightEquippable->bTwoHanded) return EHand::Right;
+		}
+	}
+
+	return EHand::None;
 }
 
 FTransform UHeldItemsComponent::GetRelativeTransformBetweenWeaponAndHandBones(EHand Hand) const
@@ -133,7 +185,7 @@ void UHeldItemsComponent::PreventItemStuck(EHand Hand)
 	AItemActor* Item = GetHeldItem(Hand);
 	if (!Item) return;
 
-	UStaticMeshComponent* Mesh = Item->GetItemMesh();
+	UStaticMeshComponent* Mesh = Item->GetItemPrimaryMesh();
 	if (!Mesh) return;
 
 	// Check distance between AnimRef hand bone and grip IK target
@@ -198,19 +250,36 @@ AItemActor* UHeldItemsComponent::FindLookedAtItem(float Radius, float MaxDistanc
 
 	if (GetWorld()->SweepSingleByChannel(Hit, CameraLocation, TraceEnd, FQuat::Identity, TRACE_EQUIPPABLE, Sphere, Params))
 	{
-		return Cast<AItemActor>(Hit.GetActor());
+		AItemActor* Item = Cast<AItemActor>(Hit.GetActor());
+	    FString ItemName = Item->GetItemInstance()->ItemDefinition->DisplayName.ToString();
+	    FString FullString = TEXT("Player sees item: ") + ItemName;
+	    if (GEngine) GEngine->AddOnScreenDebugMessage(0, 5.0f, FColor::Cyan, FullString);
+		return Item;
 	}
+
+	if (GEngine) GEngine->AddOnScreenDebugMessage(0, 5.0f, FColor::Red, TEXT("Player does not see any item"));
+
 	return nullptr;
 }
 
+bool UHeldItemsComponent::GetIsUnarmed(EHand Hand) const
+{
+	if (Hand == EHand::None) return false;
+
+	const AItemActor* Item = GetHeldItem(Hand);
+	if (!Item || !UnarmedDefinition) return false;
+
+	const UItemInstance* Instance = Item->GetItemInstance();
+	return Instance && Instance->ItemDefinition == UnarmedDefinition;
+}
 void UHeldItemsComponent::SetItemStuck(EHand Hand, bool bStuck)
 {
 	if (Hand == EHand::None) return;
 
-	FString HandStr = Hand == EHand::Left ? "Left - " : "Right - ";
-	FString StuckStr = bStuck ? TEXT("SetItemStuck set true") : TEXT("SetItemStuck set false");
-	FString FullString = HandStr + StuckStr;
-	if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 20.0f, FColor::Cyan, FullString);
+	//FString HandStr = Hand == EHand::Left ? "Left - " : "Right - ";
+	//FString StuckStr = bStuck ? TEXT("SetItemStuck set true") : TEXT("SetItemStuck set false");
+	//FString FullString = HandStr + StuckStr;
+	//if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 20.0f, FColor::Cyan, FullString);
 
 	if (Hand == EHand::Left) bLeftItemStuck = bStuck;
 	else bRightItemStuck = bStuck;
@@ -245,8 +314,6 @@ void UHeldItemsComponent::EquipUnarmed(EHand Hand)
 		GetWeaponBoneTransform(Hand) // Spawn at current hand location
 	);
 
-
-
 	if (!UnarmedActor)
 	{
 		if (GEngine)
@@ -274,7 +341,7 @@ void UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand)
 {
 	if (!Item || Hand == EHand::None || !PhysicsControl || !AnimRefMesh) return;
 
-	UStaticMeshComponent* ItemMesh = Item->GetItemMesh();
+	UStaticMeshComponent* ItemMesh = Item->GetItemPrimaryMesh();
 	if (!ItemMesh) return;
 
 	// Destroy any existing control for this hand first
@@ -337,7 +404,7 @@ void UHeldItemsComponent::DetachItemFromControl(EHand Hand)
 
 	if (Item)
 	{
-		UStaticMeshComponent* ItemMesh = Item->GetItemMesh();
+		UStaticMeshComponent* ItemMesh = Item->GetItemPrimaryMesh();
 		if (ItemMesh)
 		{
 			if (Hand == EHand::Left)

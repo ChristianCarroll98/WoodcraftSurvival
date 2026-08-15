@@ -20,7 +20,7 @@ public:
 
 	/** The static definition this instance was created from. */
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Item")
-	TObjectPtr<const UItemDefinition> Definition;
+	TObjectPtr<const UItemDefinition> ItemDefinition;
 
 	/** Globally unique ID for this specific instance (important for saving & networking). */
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Item")
@@ -34,7 +34,7 @@ public:
 	template<typename T>
 	const T* FindFragment() const
 	{
-		return Definition ? Definition->FindFragment<T>() : nullptr;
+		return ItemDefinition ? ItemDefinition->FindFragment<T>() : nullptr;
 	}
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
