@@ -23,4 +23,10 @@ public:
 	/** If true, the item requires both hands. Secondary hand is derived automatically. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Equippable")
 	bool bTwoHanded = false;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Equippable|Animation")
+	TSoftObjectPtr<UAnimSequence> NeutralPose;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Equippable|Animation")
+	TSoftObjectPtr<UAnimSequence> ExtendedPose;
 };

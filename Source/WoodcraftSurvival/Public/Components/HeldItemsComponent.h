@@ -11,6 +11,26 @@ class USkeletalMeshComponent;
 class AItemActor;
 class UItemDefinition;
 class UItemFactorySubsystem;
+class UFPArmsAnimInstance;
+
+/** Temporary data for an in-progress pickup animation on one hand. */
+USTRUCT()
+struct FPendingPickupData
+{
+	GENERATED_BODY()
+
+	/** The item that is currently being picked up. */
+	UPROPERTY()
+	TWeakObjectPtr<AItemActor> TargetItem;
+
+	/** The neutral animation pose to send to the animation blueprint while the pickup is in progress. */
+	UPROPERTY()
+	TSoftObjectPtr<UAnimSequence> NeutralPose;
+
+	/** The extended animation pose to send to the animation blueprint while the pickup is in progress. */
+	UPROPERTY()
+	TSoftObjectPtr<UAnimSequence> ExtendedPose;
+};
 
 /**
  * Manages items held in both hands.
@@ -26,22 +46,29 @@ public:
 
 	UHeldItemsComponent();
 
-	// ----- Core API -----
+	// ---------- Defaults ----------
+
+	/** Default pickup montage for held items. */
+	UPROPERTY(EditDefaultsOnly, Category = "Animation")
+	TObjectPtr<UAnimMontage> DefaultPickupMontage;
+
+	/** Default drop montage for held items. */
+	UPROPERTY(EditDefaultsOnly, Category = "Animation")
+	TObjectPtr<UAnimMontage> DefaultDropMontage;
+	
+	/** The animation instance for the first-person arms mesh. */
+	UPROPERTY(EditDefaultsOnly, Category = "Animation")
+	TObjectPtr<UFPArmsAnimInstance> AnimInstance;
+
+
+	// ---------- Core API ----------
 
 	/** 
 	 * Attempts to pick up the item the player is currently looking at,
 	 * or drop the item in the given hand if already holding something.
 	 */
-	UFUNCTION(BlueprintCallable, Category = "Held Item")
+	UFUNCTION(BlueprintCallable, Category = "Held Item|Pickup/Drop")
 	bool TryPickupOrDrop(EHand Hand);
-
-	/** Attempts to pick up the given item into the specified hand. */
-	UFUNCTION(BlueprintCallable, Category = "Held Item")
-	bool TryPickup(AItemActor* Item, EHand Hand);
-
-	/** Drops the item in the specified hand and equips Unarmed in its place. */
-	UFUNCTION(BlueprintCallable, Category = "Held Item")
-	bool TryDrop(EHand Hand);
 
 	/** Returns the item currently held in the given hand (never null after BeginPlay). */
 	UFUNCTION(BlueprintPure, Category = "Held Item")
@@ -54,6 +81,10 @@ public:
 	/** Returns both grip transforms at once. Convenient for driving AnimBP every frame. */
 	UFUNCTION(BlueprintCallable, Category = "Held Item", meta = (DisplayName = "Get Grip Transforms"))
 	void GetGripTransforms(FTransform& GripTransformLeft, FTransform& GripTransformRight) const;
+
+	/** Completes the pickup animation for the specified hand. */
+	UFUNCTION(BlueprintCallable, Category = "Held Item|Pickup/Drop")
+	void CompletePickup(EHand Hand);
 
 protected:
 
@@ -81,9 +112,32 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Held Item|Physics")
 	TObjectPtr<USkeletalMeshComponent> AnimRefMesh;
 
+	/** Temporary data for an in-progress pickup animation on the left hand. */
+	UPROPERTY()
+	FPendingPickupData PendingPickupLeft;
+
+	/** Temporary data for an in-progress pickup animation on the right hand. */
+	UPROPERTY()
+	FPendingPickupData PendingPickupRight;
+
 private:
 
 	// ---------- private methods ----------
+
+	/** Attempts to pick up the given item into the specified hand. */
+	bool TryPickup(AItemActor* Item, EHand Hand);
+
+	/** Drops the item in the specified hand and equips Unarmed in its place. */
+	bool TryDrop(EHand Hand);
+
+	/** Begins the pickup animation for the given item and hand. */
+	bool BeginPickupAnimation(AItemActor* Item, EHand Hand);
+
+	/** Async loads neutral and extended poses and pushes to AnimInstance when complete */
+	void LoadAndPushPoses(EHand Hand);
+
+	/** Callback for when the soft pointers to the item animations are loaded */
+	void OnPosesLoaded(EHand Hand);
 
 	/** Equips the Unarmed item into the specified hand. */
 	void EquipUnarmed(EHand Hand);
@@ -104,22 +158,22 @@ private:
 	// ---------- const helpers ----------
 
 	/** Returns the name of the weapon bone for the given hand. */
-	FName GetWeaponBoneName(EHand Hand) const;
+	const FName GetWeaponBoneName(EHand Hand) const;
 
 	/** Returns the name of the hand bone for the given hand. */
-	FName GetHandBoneName(EHand Hand) const;
+	const FName GetHandBoneName(EHand Hand) const;
 
 	/** Returns the relative transform between the specified weapon bone and hand bone from the current animation frame. */
-	FTransform GetRelativeTransformBetweenWeaponAndHandBones(EHand Hand) const;
+	const FTransform GetRelativeTransformBetweenWeaponAndHandBones(EHand Hand) const;
 
 	/** Returns the world-space transform for the weapon bone specified for the specified hand. */
-	FTransform GetWeaponBoneTransform(EHand Hand) const;
+	const FTransform GetWeaponBoneTransform(EHand Hand) const;
 
 	/** Returns the world-space IK target transform for the given hand. */
-	FTransform GetGripTransform(EHand Hand) const;
+	const FTransform GetGripTransform(EHand Hand) const;
 
 	/** Returns true if the item in the given hand is currently stuck (too far from the control parent). */
-	bool GetItemStuck(EHand Hand) const;
+	const bool GetItemStuck(EHand Hand) const;
 	
 	/** Returns the item actor that the player is currently looking at, within the specified max distance. */
 	AItemActor* FindLookedAtItem(float Radius = 5.f, float MaxDistance = 250.f) const;
@@ -128,7 +182,11 @@ private:
 	//void GetItemsInPickupRange(TArray<AItemActor*>& OutItems, float Radius = 120.f) const;
 
 	/** Returns true if the item in the given hand is the Unarmed item. */
-	bool GetIsUnarmed(EHand Hand) const;
+	const bool GetIsUnarmed(EHand Hand) const;
+	
+	/** Returns the pending pickup data for the given hand. */
+	const FPendingPickupData& GetPendingPickup(EHand Hand) const;
+
 
 	// ---------- private class variables ----------
 

@@ -6,7 +6,9 @@
 #include "Items/ItemInstance.h"
 #include "Items/Fragments/EquippableFragment.h"
 #include "Core/WoodcraftTypes.h"
+#include "Player/FPArmsAnimInstance.h"
 #include <PhysicsControlComponent.h>
+#include <Engine/AssetManager.h>
 
 UHeldItemsComponent::UHeldItemsComponent()
 {
@@ -45,13 +47,13 @@ bool UHeldItemsComponent::TryPickupOrDrop(EHand Hand)
 	{
 		if (!bHandIsUnarmed) return false; // Occupied + looking at item -> do nothing (swap later)
 		
-		return TryPickup(LookedAtItem, Hand); // Looking at valid item
+		return BeginPickupAnimation(LookedAtItem, Hand); // Looking at valid item
 	}
 
 	// Looking at empty space
 	if (!bHandIsUnarmed)
 	{
-		return TryDrop(Hand);
+		return TryDrop(Hand); // TODO : add drop montage
 	}
 
 	// Empty + Unarmed -> nothing
@@ -101,6 +103,68 @@ bool UHeldItemsComponent::TryDrop(EHand Hand)
 	return true;
 }
 
+bool UHeldItemsComponent::BeginPickupAnimation(AItemActor* Item, EHand Hand)
+{
+	FString HandStr = Hand == EHand::Left ? "Left" : "Right";
+	FString FullString = TEXT("CompletePickup called for hand: ") + HandStr;
+	if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Cyan, FullString);
+
+	if (!Item || !AnimInstance || !DefaultPickupMontage) return false;
+
+	const UEquippableFragment* EquipFrag = Item->GetItemInstance()->FindFragment<UEquippableFragment>();
+	if (!EquipFrag) return false;
+
+	// Store pending data first
+	FPendingPickupData& Pending = (Hand == EHand::Left) ? PendingPickupLeft : PendingPickupRight;
+	Pending.TargetItem = MakeWeakObjectPtr(Item);
+	Pending.NeutralPose = EquipFrag->NeutralPose;
+	Pending.ExtendedPose = EquipFrag->ExtendedPose;
+
+	// 2. Load + push poses (choose one of the two approaches below)
+	LoadAndPushPoses(Hand);
+
+	// 3. Play the montage
+	AnimInstance->Montage_Play(DefaultPickupMontage);
+
+	return true;
+}
+
+void UHeldItemsComponent::LoadAndPushPoses(EHand Hand)
+{
+	const FPendingPickupData& Pending = GetPendingPickup(Hand);
+
+	TArray<FSoftObjectPath> PathsToLoad;
+	if (Pending.NeutralPose.IsPending())  PathsToLoad.Add(Pending.NeutralPose.ToSoftObjectPath());
+	if (Pending.ExtendedPose.IsPending()) PathsToLoad.Add(Pending.ExtendedPose.ToSoftObjectPath());
+
+	if (PathsToLoad.Num() == 0)
+	{
+		// Already loaded or null
+		OnPosesLoaded(Hand);
+		return;
+	}
+	
+	// Load Async
+	FStreamableManager& Streamable = UAssetManager::GetStreamableManager();
+	Streamable.RequestAsyncLoad(
+		PathsToLoad,
+		FStreamableDelegate::CreateUObject(this, &UHeldItemsComponent::OnPosesLoaded, Hand)
+	);
+}
+
+void UHeldItemsComponent::OnPosesLoaded(EHand Hand)
+{
+	const FPendingPickupData& Pending = GetPendingPickup(Hand);
+
+	UAnimSequence* Neutral = Pending.NeutralPose.Get();
+	UAnimSequence* Extended = Pending.ExtendedPose.Get();
+
+	FString FullString = TEXT("Neutral anim sequence loaded and set: ") + Neutral->GetName();
+	if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Cyan, FullString);
+
+	if (AnimInstance) AnimInstance->SetHoldPose(Hand, Neutral, Extended);
+}
+
 AItemActor* UHeldItemsComponent::GetHeldItem(EHand Hand) const
 {
 	if (Hand == EHand::Left) return HeldItemLeft;
@@ -108,7 +172,7 @@ AItemActor* UHeldItemsComponent::GetHeldItem(EHand Hand) const
 	return nullptr;
 }
 
-bool UHeldItemsComponent::GetIsUnarmed(EHand Hand) const
+const bool UHeldItemsComponent::GetIsUnarmed(EHand Hand) const
 {
 	if (Hand == EHand::None) return false;
 
@@ -117,6 +181,17 @@ bool UHeldItemsComponent::GetIsUnarmed(EHand Hand) const
 
 	const UItemInstance* Instance = Item->GetItemInstance();
 	return Instance && Instance->ItemDefinition == UnarmedDefinition;
+}
+
+const FPendingPickupData& UHeldItemsComponent::GetPendingPickup(EHand Hand) const
+{
+	if (Hand == EHand::None)
+	{
+		static FPendingPickupData Empty;
+		return Empty;
+	}
+
+	return (Hand == EHand::Left) ? PendingPickupLeft : PendingPickupRight;
 }
 
 EHand UHeldItemsComponent::GetIsHoldingTwoHanded() const
@@ -144,7 +219,7 @@ EHand UHeldItemsComponent::GetIsHoldingTwoHanded() const
 	return EHand::None;
 }
 
-FTransform UHeldItemsComponent::GetRelativeTransformBetweenWeaponAndHandBones(EHand Hand) const
+const FTransform UHeldItemsComponent::GetRelativeTransformBetweenWeaponAndHandBones(EHand Hand) const
 {
 	const FName WeaponBoneName = GetWeaponBoneName(Hand);
 	const FName HandBoneName = GetHandBoneName(Hand);
@@ -155,7 +230,7 @@ FTransform UHeldItemsComponent::GetRelativeTransformBetweenWeaponAndHandBones(EH
 	return HandTransform.GetRelativeTransform(WeaponBoneTransform);
 }
 
-FTransform UHeldItemsComponent::GetWeaponBoneTransform(EHand Hand) const
+const FTransform UHeldItemsComponent::GetWeaponBoneTransform(EHand Hand) const
 {
 	if (!AnimRefMesh)
 	{
@@ -166,7 +241,7 @@ FTransform UHeldItemsComponent::GetWeaponBoneTransform(EHand Hand) const
 }
 
 
-FTransform UHeldItemsComponent::GetGripTransform(EHand Hand) const
+const FTransform UHeldItemsComponent::GetGripTransform(EHand Hand) const
 {
 	AItemActor* Item = GetHeldItem(Hand);
 	if (!Item || !AnimRefMesh) return FTransform::Identity;
@@ -236,7 +311,7 @@ void UHeldItemsComponent::PreventItemStuck(EHand Hand)
 	}
 }
 
-bool UHeldItemsComponent::GetItemStuck(EHand Hand) const
+const bool UHeldItemsComponent::GetItemStuck(EHand Hand) const
 {
 	if (Hand == EHand::None) return false;
 
@@ -262,7 +337,8 @@ AItemActor* UHeldItemsComponent::FindLookedAtItem(float Radius, float MaxDistanc
 
 	FCollisionShape Sphere = FCollisionShape::MakeSphere(Radius);
 
-	if (GetWorld()->SweepSingleByChannel(Hit, CameraLocation, TraceEnd, FQuat::Identity, TRACE_EQUIPPABLE, Sphere, Params))
+	if (GetWorld()->SweepSingleByChannel(Hit, CameraLocation, TraceEnd, FQuat::Identity,
+			TRACE_EQUIPPABLE, Sphere, Params))
 	{
 		return Cast<AItemActor>(Hit.GetActor());
 	}
@@ -284,14 +360,31 @@ void UHeldItemsComponent::GetGripTransforms(FTransform& GripTransformLeft, FTran
 	GripTransformRight = GetGripTransform(EHand::Right);
 }
 
-FName UHeldItemsComponent::GetWeaponBoneName(EHand Hand) const
+void UHeldItemsComponent::CompletePickup(EHand Hand)
+{
+	FString HandStr = Hand == EHand::Left ? "Left" : "Right";
+	FString FullString = TEXT("CompletePickup called for hand: ") + HandStr;
+	if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Cyan, FullString);
+
+	if (Hand == EHand::None) return;
+
+	// Grab the correct pending data
+	const FPendingPickupData& Pending = GetPendingPickup(Hand);
+
+	AItemActor* ItemToPickup = Pending.TargetItem.Get();
+	if (!ItemToPickup) return;
+
+	TryPickup(ItemToPickup, Hand);
+}
+
+const FName UHeldItemsComponent::GetWeaponBoneName(EHand Hand) const
 {
 	if (Hand == EHand::None) return NAME_None;
 
 	return (Hand == EHand::Left) ? TEXT("WeaponBone_L") : TEXT("WeaponBone_R");
 }
 
-FName UHeldItemsComponent::GetHandBoneName(EHand Hand) const
+const FName UHeldItemsComponent::GetHandBoneName(EHand Hand) const
 {
 	if (Hand == EHand::None) return NAME_None;
 
