@@ -11,7 +11,7 @@ UItemInstance* UItemFactorySubsystem::CreateItemInstanceFromDefinition(UItemDefi
 	if (!Definition) return nullptr;
 
 	UItemInstance* NewInstance = NewObject<UItemInstance>(GetTransientPackage());
-	NewInstance->UniqueId = FGuid::NewGuid();
+	//NewInstance->UniqueId = FGuid::NewGuid();
 	NewInstance->ItemDefinition = Definition;
 
 	for (UItemFragment* Fragment : NewInstance->ItemDefinition->Fragments)
@@ -38,7 +38,20 @@ AItemActor* UItemFactorySubsystem::SpawnItemActorFromInstance(UItemInstance* Ins
 {
 	if (!Instance || !GetWorld()) return nullptr;
 
+	// Create nice name for the object
+	FString BaseName = Instance->ItemDefinition->GetName(); // "DA_IronAxe"
+	BaseName.RemoveFromStart(TEXT("DA_"));                  // → "IronAxe"
+
+	// Auto increments BaseName to get unique name for the actor in the editor
+	FName UniqueRuntimeName = MakeUniqueObjectName(
+		GetWorld(),
+		AItemActor::StaticClass(),
+		FName(*BaseName)
+	);
+
 	FActorSpawnParameters SpawnParams;
+	SpawnParams.Name = UniqueRuntimeName;
+	SpawnParams.NameMode = FActorSpawnParameters::ESpawnActorNameMode::Requested;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
 	AItemActor* NewItem = GetWorld()->SpawnActor<AItemActor>(
@@ -47,6 +60,11 @@ AItemActor* UItemFactorySubsystem::SpawnItemActorFromInstance(UItemInstance* Ins
 		SpawnParams);
 
 	if (!NewItem) return nullptr;
+
+#if WITH_EDITOR
+	// Make the Outliner show the same clean name
+	NewItem->SetActorLabel(UniqueRuntimeName.ToString());
+#endif
 
 	// This is where mesh is set, fragments' OnItemSpawned are called, etc.
 	NewItem->InitializeFromInstance(Instance);

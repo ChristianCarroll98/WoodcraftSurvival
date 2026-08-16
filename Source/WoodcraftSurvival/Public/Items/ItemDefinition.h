@@ -2,7 +2,6 @@
 
 #pragma once
 
-#include "Core/WoodcraftTypes.h"
 #include "Fragments/ItemFragment.h"
 #include "GameplayTagContainer.h"
 #include "ItemDefinition.generated.h"

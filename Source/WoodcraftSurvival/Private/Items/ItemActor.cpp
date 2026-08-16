@@ -43,7 +43,6 @@ void AItemActor::InitializeFromInstance(UItemInstance* Instance)
 	PrimaryMeshComponent->SetLinearDamping(0.05f);
 	PrimaryMeshComponent->SetAngularDamping(0.5f);
 	
-	
 	// Secondary mesh (optional)
 	if (!Instance->ItemDefinition->SecondaryMesh.IsNull())
 	{
@@ -74,9 +73,8 @@ void AItemActor::InitializeFromInstance(UItemInstance* Instance)
 				TEXT("Failed to load secondary mesh for item. Skipping..."));
 		}
 	}
-		PrimaryMeshComponent->RecreatePhysicsState();
 
-	SetActorLabel(*(Instance->ItemDefinition->DisplayName.ToString() + "_" + Instance->UniqueId.ToString()));
+	PrimaryMeshComponent->RecreatePhysicsState();
 
 	for (UItemFragment* Fragment : Instance->ItemDefinition->Fragments)
 	{

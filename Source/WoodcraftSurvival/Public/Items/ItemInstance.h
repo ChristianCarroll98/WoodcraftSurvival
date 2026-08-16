@@ -23,8 +23,8 @@ public:
 	TObjectPtr<const UItemDefinition> ItemDefinition;
 
 	/** Globally unique ID for this specific instance (important for saving & networking). */
-	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Item")
-	FGuid UniqueId;
+	//UPROPERTY(Replicated, BlueprintReadOnly, Category = "Item")
+	//FGuid UniqueId;
 
 	/** Current durability or health of this instance (only meaningful if the definition has a DurabilityFragment or HealthFragment?). */
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = "Item")

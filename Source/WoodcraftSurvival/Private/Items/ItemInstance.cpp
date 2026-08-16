@@ -8,6 +8,6 @@ void UItemInstance::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(UItemInstance, ItemDefinition);
-	DOREPLIFETIME(UItemInstance, UniqueId);
+	//DOREPLIFETIME(UItemInstance, UniqueId);
 	DOREPLIFETIME(UItemInstance, CurrentHealth);
 }
