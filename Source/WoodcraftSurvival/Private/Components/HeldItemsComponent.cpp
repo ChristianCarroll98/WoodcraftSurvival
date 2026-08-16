@@ -108,12 +108,15 @@ AItemActor* UHeldItemsComponent::GetHeldItem(EHand Hand) const
 	return nullptr;
 }
 
-bool UHeldItemsComponent::IsHolding(EHand Hand) const
+bool UHeldItemsComponent::GetIsUnarmed(EHand Hand) const
 {
-	AItemActor* Item = GetHeldItem(Hand);
-	if (!Item || Item->GetItemInstance()->ItemDefinition == UnarmedDefinition) return false;
+	if (Hand == EHand::None) return false;
 
-	return true;
+	const AItemActor* Item = GetHeldItem(Hand);
+	if (!Item || !UnarmedDefinition) return false;
+
+	const UItemInstance* Instance = Item->GetItemInstance();
+	return Instance && Instance->ItemDefinition == UnarmedDefinition;
 }
 
 EHand UHeldItemsComponent::GetIsHoldingTwoHanded() const
@@ -172,7 +175,17 @@ FTransform UHeldItemsComponent::GetGripTransform(EHand Hand) const
 
 	// Apply that relative offset to the current item transform
 	// (item is being driven by Physics Control on the WeaponBone)
-	const FTransform ItemTransform = Item->GetActorTransform();
+	FTransform ItemTransform = Item->GetActorTransform();
+
+	// if left hand, flip the X scale to prevent the player's hand from being mirrored
+	// (we only want the item mesh to be mirrored)
+	if (Hand == EHand::Left)
+	{
+		FVector Scale = ItemTransform.GetScale3D();
+		Scale.X = FMath::Abs(Scale.X);
+		ItemTransform.SetScale3D(Scale);
+	}
+
 	FTransform GripTransform = Relative * ItemTransform;
 
 	return GripTransform;
@@ -190,6 +203,7 @@ void UHeldItemsComponent::PreventItemStuck(EHand Hand)
 
 	// Check distance between AnimRef hand bone and grip IK target
 	const FVector HandBoneLocation = AnimRefMesh->GetSocketLocation(GetHandBoneName(Hand));
+	// Get the grip location from the current cached transform for this hand for consistency with anim BP
 	const FVector GripLocation = GetGripTransform(Hand).GetLocation();
 
 	const float Distance = FVector::Dist(HandBoneLocation, GripLocation);
@@ -203,20 +217,20 @@ void UHeldItemsComponent::PreventItemStuck(EHand Hand)
 	if (Distance > EnterUnsafeDistance && !bItemStuck)
 	{
 		SetItemStuck(Hand, true);
-		//Mesh->SetCollisionResponseToChannel(TRACE_WORLD, ECR_Ignore);
 		Mesh->SetCollisionResponseToChannel(COLLISION_ITEM, ECR_Ignore);
-		//Mesh->SetCollisionResponseToChannel(COLLISION_CREATURE, ECR_Ignore);
 		//Mesh->SetCollisionResponseToChannel(COLLISION_STRUCTURE, ECR_Ignore);
+		//Mesh->SetCollisionResponseToChannel(COLLISION_CREATURE, ECR_Ignore);
+		//Mesh->SetCollisionResponseToChannel(COLLISION_HARVESTABLE, ECR_Ignore);
 		Mesh->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Ignore);
 		Mesh->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Ignore);
 	}
 	else if (Distance < ExitUnsafeDistance && bItemStuck)
 	{
 		SetItemStuck(Hand, false);
-		//Mesh->SetCollisionResponseToChannel(TRACE_WORLD, ECR_Block);
 		Mesh->SetCollisionResponseToChannel(COLLISION_ITEM, ECR_Block);
-		//Mesh->SetCollisionResponseToChannel(COLLISION_CREATURE, ECR_Ignore);
-		//Mesh->SetCollisionResponseToChannel(COLLISION_STRUCTURE, ECR_Ignore);
+		//Mesh->SetCollisionResponseToChannel(COLLISION_STRUCTURE, ECR_Block);
+		//Mesh->SetCollisionResponseToChannel(COLLISION_CREATURE, ECR_Block);
+		//Mesh->SetCollisionResponseToChannel(COLLISION_HARVESTABLE, ECR_Block);
 		Mesh->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
 		Mesh->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
 	}
@@ -250,36 +264,15 @@ AItemActor* UHeldItemsComponent::FindLookedAtItem(float Radius, float MaxDistanc
 
 	if (GetWorld()->SweepSingleByChannel(Hit, CameraLocation, TraceEnd, FQuat::Identity, TRACE_EQUIPPABLE, Sphere, Params))
 	{
-		AItemActor* Item = Cast<AItemActor>(Hit.GetActor());
-	    FString ItemName = Item->GetItemInstance()->ItemDefinition->DisplayName.ToString();
-	    FString FullString = TEXT("Player sees item: ") + ItemName;
-	    if (GEngine) GEngine->AddOnScreenDebugMessage(0, 5.0f, FColor::Cyan, FullString);
-		return Item;
+		return Cast<AItemActor>(Hit.GetActor());
 	}
-
-	if (GEngine) GEngine->AddOnScreenDebugMessage(0, 5.0f, FColor::Red, TEXT("Player does not see any item"));
 
 	return nullptr;
 }
 
-bool UHeldItemsComponent::GetIsUnarmed(EHand Hand) const
-{
-	if (Hand == EHand::None) return false;
-
-	const AItemActor* Item = GetHeldItem(Hand);
-	if (!Item || !UnarmedDefinition) return false;
-
-	const UItemInstance* Instance = Item->GetItemInstance();
-	return Instance && Instance->ItemDefinition == UnarmedDefinition;
-}
 void UHeldItemsComponent::SetItemStuck(EHand Hand, bool bStuck)
 {
 	if (Hand == EHand::None) return;
-
-	//FString HandStr = Hand == EHand::Left ? "Left - " : "Right - ";
-	//FString StuckStr = bStuck ? TEXT("SetItemStuck set true") : TEXT("SetItemStuck set false");
-	//FString FullString = HandStr + StuckStr;
-	//if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 20.0f, FColor::Cyan, FullString);
 
 	if (Hand == EHand::Left) bLeftItemStuck = bStuck;
 	else bRightItemStuck = bStuck;
@@ -313,20 +306,6 @@ void UHeldItemsComponent::EquipUnarmed(EHand Hand)
 		UnarmedDefinition,
 		GetWeaponBoneTransform(Hand) // Spawn at current hand location
 	);
-
-	if (!UnarmedActor)
-	{
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(
-				0,				// Unique key (-1 prevents overwriting, always making a new line)
-				5.0f,			// Duration to display the text in seconds
-				FColor::Cyan,	// Text color
-				TEXT("UnarmedActor reference invalid")	// The text message
-			);
-		}
-		return;
-	}
 
 	// Hide the unarmed actor so it doesn't appear in the world. It will still be used for grip transforms and collision.
 	UnarmedActor->SetActorHiddenInGame(true);

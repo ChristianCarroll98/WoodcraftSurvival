@@ -1,8 +1,10 @@
 **Item Mesh, Physics & Impact Response System**
-*(Woodcraft Survival – 2026-08-15 – Finalized)*
+*(Woodcraft Survival – Updated 2026-08-16 – PhysicsFragment removed)*
 
 This document defines the authoritative approach for item collision, mass, part identification, and impact effects/sounds.  
 Logical materials have been removed; Physical Materials are the single source of truth for both simulation behaviour and impact feedback.
+
+**All AItemActors simulate physics by default.** There is no longer a PhysicsFragment. Simulation setup lives in `AItemActor::InitializeFromInstance`.
 
 ---
 
@@ -15,6 +17,7 @@ Logical materials have been removed; Physical Materials are the single source of
 - Extremely simple authoring for basic items (sticks, bones, rocks). Clear extension path for tools that need a second mesh.
 - Keep runtime code and Definition data minimal. Soft object pointers on Definitions.
 - Max two meshes per item (Primary = handle/base, optional Secondary = head/blade).
+- Every item is physics-simulated by default (no opt-in fragment required).
 
 ---
 
@@ -81,53 +84,76 @@ UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Display", meta = (Edi
 FTransform SecondaryRelativeTransform = FTransform::Identity;
 ```
 
-No material maps. No mass properties.
+No material maps. No mass properties. No PhysicsFragment.
 
-#### 3.2 `UItemPhysicsFragment`
+#### 3.2 Physics Simulation (default behaviour in `AItemActor::InitializeFromInstance`)
 
-Presence of this fragment means the item is a simulated physics object.  
-No properties are required.
+**All items simulate physics by default.** The setup lives directly in `InitializeFromInstance` (no fragment required).
 
-```cpp
-UCLASS(EditInlineNew, DefaultToInstanced)
-class WOODCRAFTSURVIVAL_API UItemPhysicsFragment : public UItemFragment
-{
-	GENERATED_BODY()
-
-public:
-	virtual void OnItemSpawned(AItemActor* ItemActor) override;
-};
-```
-
-**Authoritative `OnItemSpawned` implementation:**
+Authoritative implementation (current):
 
 ```cpp
-void UItemPhysicsFragment::OnItemSpawned(AItemActor* ItemActor)
+void AItemActor::InitializeFromInstance(UItemInstance* Instance)
 {
-	if (!ItemActor) return;
+	if (!Instance || !Instance->ItemDefinition) return;
 
-	UStaticMeshComponent* Primary = ItemActor->GetItemPrimaryMesh();
-	if (!IsValid(Primary) || Primary->GetStaticMesh() == nullptr) return;
+	ItemInstance = Instance;
 
-	Primary->SetSimulatePhysics(true);
-	Primary->SetUseCCD(true);
-	Primary->SetLinearDamping(0.05f);
-	Primary->SetAngularDamping(1.0f);
-	Primary->CanCharacterStepUpOn = ECB_No;
-
-	UStaticMeshComponent* Secondary = ItemActor->GetItemSecondaryMesh();
-	if (IsValid(Secondary) && Secondary->GetStaticMesh() != nullptr)
+	// Load and apply the primary mesh from the definition
+	UStaticMesh* PrimaryMesh = Instance->ItemDefinition->PrimaryMesh.LoadSynchronous();
+	if (!PrimaryMesh)
 	{
-		Secondary->SetSimulatePhysics(true);
-		Secondary->SetUseCCD(true);
-		Secondary->SetLinearDamping(0.05f);
-		Secondary->SetAngularDamping(1.0f);
-		Secondary->CanCharacterStepUpOn = ECB_No;
-		Secondary->WeldTo(Primary);
+		if (GEngine) GEngine->AddOnScreenDebugMessage(0, 5.0f, FColor::Cyan,
+			TEXT("Failed to load primary mesh for item."));
+		return;
 	}
 
-	// Always recreate on the Primary
-	Primary->RecreatePhysicsState();
+	PrimaryMeshComponent->SetStaticMesh(PrimaryMesh);
+	PrimaryMeshComponent->SetSimulatePhysics(true);
+	PrimaryMeshComponent->SetUseCCD(true);
+	PrimaryMeshComponent->CanCharacterStepUpOn = ECB_No;
+	PrimaryMeshComponent->SetLinearDamping(0.05f);
+	PrimaryMeshComponent->SetAngularDamping(0.5f);
+	
+	
+	// Secondary mesh (optional)
+	if (!Instance->ItemDefinition->SecondaryMesh.IsNull())
+	{
+		UStaticMesh* SecondaryMesh = Instance->ItemDefinition->SecondaryMesh.LoadSynchronous();
+		
+		if (SecondaryMesh)
+		{
+			SecondaryMeshComponent = NewObject<UStaticMeshComponent>(this, TEXT("SecondaryMeshComponent"));
+
+			SecondaryMeshComponent->SetStaticMesh(SecondaryMesh);
+			SecondaryMeshComponent->SetRelativeTransform(Instance->ItemDefinition->SecondaryRelativeTransform);
+			SecondaryMeshComponent->SetCollisionProfileName(TEXT("Item"));
+
+			SecondaryMeshComponent->SetupAttachment(PrimaryMeshComponent);
+			SecondaryMeshComponent->RegisterComponent();
+
+			SecondaryMeshComponent->SetSimulatePhysics(true);
+			SecondaryMeshComponent->SetUseCCD(true);
+			SecondaryMeshComponent->WeldTo(PrimaryMeshComponent);
+			SecondaryMeshComponent->CanCharacterStepUpOn = ECB_No;
+			SecondaryMeshComponent->SetLinearDamping(0.05f);
+			SecondaryMeshComponent->SetAngularDamping(0.5f);
+		}
+		else
+		{
+			if (GEngine) GEngine->AddOnScreenDebugMessage(0, 5.0f, FColor::Cyan,
+				TEXT("Failed to load secondary mesh for item. Skipping..."));
+		}
+	}
+		PrimaryMeshComponent->RecreatePhysicsState();
+
+	SetActorLabel(*(Instance->ItemDefinition->DisplayName.ToString() + "_" + Instance->UniqueId.ToString()));
+
+	for (UItemFragment* Fragment : Instance->ItemDefinition->Fragments)
+	{
+		// Call each fragment's OnItemSpawned function on this item to allow them to initialize the item actor
+		if (Fragment) Fragment->OnItemSpawned(this);
+	}
 }
 ```
 
@@ -136,31 +162,9 @@ Notes:
 - Light linear + moderate angular damping stops endless spinning.
 - `CanCharacterStepUpOn = ECB_No` prevents characters from treating the item as a step.
 - Welding + `RecreatePhysicsState` must happen after both components have simulation enabled.
+- Fragments still run after the base physics setup (EquippableFragment can still adjust collision responses, etc.).
 
-#### 3.3 Secondary Mesh Creation (in `AItemActor::InitializeFromInstance`)
-
-```cpp
-// Secondary mesh (optional)
-if (!Instance->ItemDefinition->SecondaryMesh.IsNull())
-{
-	if (UStaticMesh* SecondaryMesh = Instance->ItemDefinition->SecondaryMesh.LoadSynchronous())
-	{
-		SecondaryMeshComponent = NewObject<UStaticMeshComponent>(this, TEXT("SecondaryMeshComponent"));
-
-		SecondaryMeshComponent->SetStaticMesh(SecondaryMesh);
-		SecondaryMeshComponent->SetRelativeTransform(Instance->ItemDefinition->SecondaryRelativeTransform);
-		SecondaryMeshComponent->SetCollisionProfileName(TEXT("Item"));
-
-		SecondaryMeshComponent->SetupAttachment(PrimaryMeshComponent);
-		SecondaryMeshComponent->RegisterComponent();
-	}
-}
-```
-
-Order is important: NewObject → set data → SetupAttachment → RegisterComponent.  
-Do **not** call `WeldTo` or `SetSimulatePhysics` here — leave that to the PhysicsFragment.
-
-#### 3.4 Impact Response System
+#### 3.3 Impact Response System
 
 Impact feedback is driven directly by the Physical Materials involved in the collision.
 
@@ -189,7 +193,7 @@ struct FImpactResponse
 
 Runtime helper keys on the two `UPhysicalMaterial*` from the hit and scales by speed + incidence angle.
 
-#### 3.5 Extracting Part Name (for future damage)
+#### 3.4 Extracting Part Name (for future damage)
 
 ```cpp
 FName PartName = /* extract shape / element name from the hit */;
@@ -214,29 +218,30 @@ FName PartName = /* extract shape / element name from the hit */;
 #### 4.3 Data Asset Setup
 1. DisplayName, PrimaryMesh.
 2. SecondaryMesh + SecondaryRelativeTransform (only if needed).
-3. Add `UItemPhysicsFragment` (presence enables simulation + welding).
-4. Add `UEquippableFragment` if pickable.
-5. Save.
+3. Add `UEquippableFragment` if pickable.
+4. Save.
+
+(No PhysicsFragment is required or desired.)
 
 #### 4.4 Examples
 
 **Stick**
 - PrimaryMesh only. Primitives named `Blunt`. Physical Material = Wood.
-- Has `UItemPhysicsFragment`.
 - Part / damage name = `Blunt`.
+- Physics simulation is automatic.
 
 **Stone Hand Axe**
 - Primary = handle (`Blunt` or `Handle`, Wood PhysMat).
 - Secondary = head (`Head` or `Blunt`, Stone PhysMat) + relative transform.
-- Has `UItemPhysicsFragment` (welds the two bodies).
 - Impacts automatically use the correct Physical Material of the part that was hit.
+- Physics simulation + welding is automatic.
 
 ---
 
 ### 5. Known Issues / Future Work
 
 - Character walking into items can launch them at high velocity. Investigate collision response with Pawn/Character, mass ratios, and possibly a custom collision profile or impulse clamping later.
-- Safety check for items falling through the floor (CCD enabled but need a just-in-case to prevent player item loss)
+- Safety check for items falling through the floor (CCD enabled but need a just-in-case to prevent player item loss).
 - Fully dynamic assembly at craft time.
 - `UItemDamageFragment` that keys off the same primitive names.
 
@@ -247,7 +252,7 @@ FName PartName = /* extract shape / element name from the hit */;
 1. Blender → separate meshes if needed, good origins, export.
 2. Static Mesh(es): named primitives (`Blunt` etc.), correct Physical Material + density, simple collision.
 3. Definition: PrimaryMesh (+ Secondary + relative transform if needed).
-4. Add `UItemPhysicsFragment` + `UEquippableFragment` if required.
+4. Add `UEquippableFragment` if required.
 5. Test: mass feels right, no tunneling (CCD), impacts use correct PhysMat, part name extracts as expected, does not spin forever (damping).
 
-This document is now considered finalized for the current stage of development. Make only targeted manual edits later if needed.
+This document was updated 2026-08-16 to remove `UItemPhysicsFragment`. All items now simulate physics by default inside `AItemActor::InitializeFromInstance`.

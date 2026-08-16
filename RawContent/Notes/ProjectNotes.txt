@@ -3,11 +3,9 @@ Woodcraft Survival Notes
 notes on ORM textures:
 Step 1: Fix the Texture Settings (Crucial)Import your ORM texture into Unreal Engine.Double-click the texture to open its settings.In the right panel, uncheck the box for SRGB.Change the Compression Settings dropdown to Masks (no sRGB).If you skip this, Unreal applies gamma correction to your math channels, making your roughness channel way darker (shinier) than it actually is.
 
-
-NEXT TIME:
-
-spawn stick item and attach to phys control for test - in progress
+print syntax:
+FString FullString = TEXT("Player sees item: ") + ItemName;
+if (GEngine) GEngine->AddOnScreenDebugMessage(0, 5.0f, FColor::Cyan, FullString);
 
 current issues:
-item object collision type not being set to "Item"
-GetLookecAtItem not working (trace channel should be BLOCK not OVERLAP
+need to create animation passthrough setup for item hold poses to player anim BP

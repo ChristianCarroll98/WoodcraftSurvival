@@ -47,10 +47,6 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Held Item")
 	AItemActor* GetHeldItem(EHand Hand) const;
 
-	/** Returns true if the given hand is holding something other than Unarmed. */
-	UFUNCTION(BlueprintPure, Category = "Held Item")
-	bool IsHolding(EHand Hand) const;
-
 	/** Returns the primary hand that is holding a two-handed item, or EHand::None if neither is. */
 	UFUNCTION(BlueprintPure, Category = "Held Item")
 	EHand GetIsHoldingTwoHanded() const;

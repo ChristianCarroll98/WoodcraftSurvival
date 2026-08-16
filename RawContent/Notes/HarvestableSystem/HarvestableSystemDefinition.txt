@@ -1,0 +1,179 @@
+**Harvestable System Definition**
+*(Initial design – 2026-08-15)*
+
+### 1. High-Level Goals
+
+- Provide a data-driven system for large world resources that the player damages or processes over time (trees, ore veins, clay deposits, large rocks, stumps, etc.).
+- Keep clear separation from the Item system: Harvestables exist primarily to be interacted with in the world and eventually *produce* Items.
+- Mirror the successful patterns already locked for Items and Creatures (Definition → Instance → Actor + Fragments) for consistency.
+- Support multi-stage destruction and transformation (standing tree → fallen log Item + stump, ore vein → ore chunks, etc.).
+- Remain efficient for high-density placement during dynamic world generation.
+- Allow future extension to crops / farming where it makes sense.
+
+### 2. Core Architecture
+
+**UHarvestableDefinition** (Primary Data Asset)
+- Pure type data for a harvestable resource.
+- Contains an array of `UHarvestableFragment*` (EditInlineNew, Instanced).
+- Examples: DA_OakTree, DA_PineTree, DA_CopperVein, DA_ClayDeposit, DA_Stump_Generic, etc.
+
+**UHarvestableFragment** (abstract base)
+- Lightweight, primarily pure data (EditDefaultsOnly).
+- Two virtuals mirroring the Item system:
+
+```cpp
+/** Called once when a UHarvestableInstance is first created. */
+virtual void OnInstanceCreated(UHarvestableInstance* Instance) {}
+
+/** Called every time an AHarvestableActor is spawned/initialized. */
+virtual void OnHarvestableSpawned(AHarvestableActor* Actor) {}
+```
+
+**UHarvestableInstance** (UObject, outer = TransientPackage or owned by subsystem)
+- Long-lived runtime state for a specific harvestable (current health, stage, quality, regrowth timer, etc.).
+- Created **lazily** (see section 4).
+- Destroyed only when the resource is fully harvested / removed.
+
+**AHarvestableActor** (single base class, like AItemActor and ACreatureActor)
+- The world representation.
+- Holds a reference to its Definition (always) and to its Instance (when one exists).
+- Handles collision, visual representation, damage reception, and stage transitions.
+- May be destroyed and later recreated from an Instance if needed (streaming, save/load).
+
+**UHarvestableFactorySubsystem** (UWorldSubsystem) – or methods living on a broader Environment/Resource subsystem
+Public API sketch:
+```cpp
+UHarvestableInstance* CreateInstanceFromDefinition(UHarvestableDefinition* Definition);
+AHarvestableActor*    SpawnActorFromDefinition(UHarvestableDefinition* Definition, const FTransform& Transform);
+AHarvestableActor*    SpawnActorFromInstance(UHarvestableInstance* Instance, const FTransform& Transform);
+void                  PromoteToInstance(AHarvestableActor* Actor); // creates Instance on first meaningful interaction
+```
+
+### 3. Relationship to the Item System
+
+Harvestables are **not** Items.
+
+- When a harvestable is fully (or partially) processed it **produces** one or more Items by calling into `UItemFactorySubsystem`.
+- Example transitions:
+  - Standing tree trunk dies → spawn DA_Log Item(s) + spawn Stump Harvestable.
+  - Log (now an Item) is further chopped → spawn Wood Chunk Items.
+  - Ore vein depleted → spawn Ore Chunk Items.
+  - Stump destroyed → spawn 2–3 Wood Chunk / Wood Scrap Items.
+
+This keeps the Item system as the single authority for anything that can be picked up, held, stored, or used in crafting.
+
+All real Items continue to simulate physics by default. Harvestables may use more complex collision / falling behaviour while they are still Harvestables.
+
+### 4. Lazy Instance Creation (Important Optimization)
+
+Most trees and simple deposits placed by world generation have no unique state at spawn time.
+
+Rule:
+- World generation (or foliage systems) may spawn a pure `AHarvestableActor` that only stores a soft/hard reference to its `UHarvestableDefinition`.
+- No `UHarvestableInstance` is created yet.
+- On the first meaningful interaction (first damage that changes state, or any event that needs persistence), the Actor calls `PromoteToInstance()`.
+- From that point the Instance owns the runtime data and the Actor simply references it.
+
+This keeps memory and UObject count low for dense forests while still giving full Instance power the moment it is needed (partially chopped trees, quality variation, save games, etc.).
+
+### 5. Damage & Interaction
+
+Both `AItemActor` and `AHarvestableActor` should implement a shared interface (name TBD – `IDamageable`, `IHarvestable`, or similar).
+
+The interface provides a common entry point for tools:
+
+```cpp
+UINTERFACE()
+class UDamageable : public UInterface
+{
+	GENERATED_BODY()
+};
+
+class IDamageable
+{
+	GENERATED_BODY()
+public:
+	virtual void ApplyDamage(const FDamageInfo& DamageInfo) = 0;
+	// FDamageInfo would carry amount, damage type / tags, instigator, hit location, tool, etc.
+};
+```
+
+Tool impact logic then works uniformly against anything that implements the interface. Exact shape of `FDamageInfo` and damage calculation is still open (see Open Questions).
+
+### 6. Example: Tree Lifecycle
+
+**Standing Tree** (`AHarvestableActor` + Tree Definition)
+- Full collision that pushes the player and other Items.
+- Fragments can include: Fallable, Branchable, YieldTable, Health, ToolRequirement (axe tags), etc.
+- Branch hits can spawn Stick / Branch Items and remove visual parts without killing the whole tree.
+- When trunk health reaches zero:
+  1. Play fall sequence (physics or animation + physics).
+  2. Destroy / hide the standing tree Actor.
+  3. Spawn one or more `DA_Log` Items via ItemFactory.
+  4. Spawn an `AStumpActor` (simple Harvestable).
+
+**Fallen Log**
+- Now a normal Item (`UItemInstance` + `AItemActor`).
+- Further processing (removing remaining branches, chopping into wood chunks) happens entirely inside the Item system.
+- Matches the vision note: “Logs must have branches removed before they can be picked up (two hands) or used.”
+
+**Stump**
+- Lightweight Harvestable.
+- On destruction spawns 2–3 Wood Chunk / Wood Scrap Items and removes itself.
+
+### 7. Crops & Farming (Future Extension)
+
+Crops are a natural candidate for the Harvestable system, with some differences.
+
+Possible approach:
+- A crop plant is a Harvestable while growing (tracks growth stage, water, health, etc.).
+- A fragment (e.g. `UPickableWhenMatureFragment` or `UCropFragment`) can mark the plant as directly pickable once it reaches a mature stage.
+- On pick: the Harvestable is destroyed (or reset for regrowing plants) and the corresponding Item(s) are spawned via ItemFactory (or the plant itself converts into an Item if that feels better).
+- Perennial plants or plants that leave a stump/root can stay as Harvestables after harvest.
+
+This keeps growth logic, seasonal effects, and soil interaction inside the Harvestable/Environment side while still producing normal Items the player can carry and store.
+
+**Open for further discussion:**
+- Exact growth model (time-based, stage-based, soil quality influence).
+- Whether mature crops should become Items in-place or stay Harvestables that simply allow a “pick” interaction.
+- How planting works (hoe ground → place seed Item → convert to young Harvestable, or direct placement of a young plant Actor).
+- Multi-harvest plants (berries, etc.) vs single-harvest.
+
+### 8. Fragments – Initial Ideas
+
+These are starting points only; exact set will evolve:
+
+- `UHealthFragment` – MaxHealth, current health lives on Instance.
+- `UYieldFragment` – what Items to spawn and in what quantities / chances when destroyed or on stage change.
+- `UFallableFragment` – fall behaviour, direction bias, physics settings for the falling phase.
+- `UBranchableFragment` / `UPartDamageFragment` – support for damaging individual parts (branches) independently.
+- `UToolRequirementFragment` – gameplay tags or damage types this harvestable responds to.
+- `UMultiStageFragment` – ordered list of stages with different meshes / health / yields.
+- `URegrowFragment` – for stumps or plants that can return over time.
+- Future crop-specific: `UGrowthFragment`, `USeasonalFragment`, `UPickableWhenMatureFragment`.
+
+### 9. World Generation & Performance Notes
+
+- Dense static resources (trees, small rocks) should prefer Hierarchical Instanced Static Meshes or Foliage where possible.
+- Interaction can be handled by a lightweight manager that, on hit, either:
+  - Spawns a full `AHarvestableActor` at that location and transfers state, or
+  - Directly applies damage logic and spawns Items without a persistent Actor for trivial cases.
+- Only resources that need ongoing unique state (partially damaged, high-value veins, player-planted crops) become full Actors + Instances.
+
+Exact streaming / density strategy is still open.
+
+### 10. Open Questions / Needs Further Discussion
+
+1. Exact name and shape of the shared damage interface (`IDamageable` vs `IHarvestable` vs something else) and the `FDamageInfo` struct.
+2. How much state should live on the Definition vs the Instance (especially for simple one-shot resources).
+3. Whether the Factory should be a dedicated `UHarvestableFactorySubsystem` or methods on a broader `UEnvironmentSubsystem` / `UResourceSubsystem`.
+4. Branch / part damage: component-based, hit-zone based, or purely mesh-section based?
+5. Falling trees: pure physics, animation + physics, or rooted physics constraint during the fall?
+6. Crops integration details (see section 7).
+7. Save / load strategy for partially harvested resources and lazy Instances.
+8. Whether very large “Items” that start as Harvestables (fallen trees) need special two-handed or “process in place” rules inside the Item system.
+
+---
+
+This document captures the initial solid direction as of 2026-08-15.  
+It deliberately stays aligned with the Item and Creature architectures while adding the lazy-Instance and “produces Items” rules that make Harvestables practical for a large dynamic world.

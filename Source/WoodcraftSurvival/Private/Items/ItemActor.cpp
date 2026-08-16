@@ -28,15 +28,28 @@ void AItemActor::InitializeFromInstance(UItemInstance* Instance)
 	ItemInstance = Instance;
 
 	// Load and apply the primary mesh from the definition
-	if (UStaticMesh* Mesh = Instance->ItemDefinition->PrimaryMesh.LoadSynchronous())
+	UStaticMesh* PrimaryMesh = Instance->ItemDefinition->PrimaryMesh.LoadSynchronous();
+	if (!PrimaryMesh)
 	{
-		PrimaryMeshComponent->SetStaticMesh(Mesh);
+		if (GEngine) GEngine->AddOnScreenDebugMessage(0, 5.0f, FColor::Cyan,
+			TEXT("Failed to load primary mesh for item."));
+		return;
 	}
+
+	PrimaryMeshComponent->SetStaticMesh(PrimaryMesh);
+	PrimaryMeshComponent->SetSimulatePhysics(true);
+	PrimaryMeshComponent->SetUseCCD(true);
+	PrimaryMeshComponent->CanCharacterStepUpOn = ECB_No;
+	PrimaryMeshComponent->SetLinearDamping(0.05f);
+	PrimaryMeshComponent->SetAngularDamping(0.5f);
+	
 	
 	// Secondary mesh (optional)
 	if (!Instance->ItemDefinition->SecondaryMesh.IsNull())
 	{
-		if (UStaticMesh* SecondaryMesh = Instance->ItemDefinition->SecondaryMesh.LoadSynchronous())
+		UStaticMesh* SecondaryMesh = Instance->ItemDefinition->SecondaryMesh.LoadSynchronous();
+		
+		if (SecondaryMesh)
 		{
 			SecondaryMeshComponent = NewObject<UStaticMeshComponent>(this, TEXT("SecondaryMeshComponent"));
 
@@ -46,8 +59,22 @@ void AItemActor::InitializeFromInstance(UItemInstance* Instance)
 
 			SecondaryMeshComponent->SetupAttachment(PrimaryMeshComponent);
 			SecondaryMeshComponent->RegisterComponent();
+
+			SecondaryMeshComponent->SetSimulatePhysics(true);
+			SecondaryMeshComponent->SetUseCCD(true);
+			SecondaryMeshComponent->CanCharacterStepUpOn = ECB_No;
+			SecondaryMeshComponent->SetLinearDamping(0.05f);
+			SecondaryMeshComponent->SetAngularDamping(0.5f);
+
+			SecondaryMeshComponent->WeldTo(PrimaryMeshComponent);
+		}
+		else
+		{
+			if (GEngine) GEngine->AddOnScreenDebugMessage(0, 5.0f, FColor::Cyan,
+				TEXT("Failed to load secondary mesh for item. Skipping..."));
 		}
 	}
+		PrimaryMeshComponent->RecreatePhysicsState();
 
 	SetActorLabel(*(Instance->ItemDefinition->DisplayName.ToString() + "_" + Instance->UniqueId.ToString()));
 

@@ -1,5 +1,5 @@
 **Full Description of the Intended Item System**  
-*(Updated 2026-08-14 – ItemFactorySubsystem, fragment split, Unarmed, pickup design)*
+*(Updated 2026-08-15 – Pickup/Drop implemented, collision hybrid approach, GetIsUnarmed)*
 
 ### 1. High-Level Goals
 - Fully data-driven item definitions using Primary Data Assets + Fragments.
@@ -46,9 +46,9 @@ Never stacked. Only destroyed when the item is consumed/broken.
 
 **AItemActor**  
 The actual actor in the world.  
-- Owns a static mesh component.  
+- Owns a Primary Static Mesh Component (+ optional Secondary).  
 - Holds a reference to its `UItemInstance`.  
-- `InitializeFromInstance()` sets the mesh and calls `OnItemSpawned` on every fragment.  
+- `InitializeFromInstance()` sets the mesh(es) and calls `OnItemSpawned` on every fragment.  
 - May be destroyed and later recreated from the same Instance (storage, etc.).  
 - For normal ground ↔ hand cycles the actor is kept alive.
 
@@ -77,20 +77,31 @@ enum class EHand : uint8
 };
 ```
 
-### 3. Equippable System & Collision
+### 3. Equippable System & Collision (Finalized 2026-08-15)
 
 **UEquippableFragment**  
 Currently minimal (`bTwoHanded`).  
-In `OnItemSpawned` it configures the actor to respond to the Equippable trace channel.
+In `OnItemSpawned` it applies the specialized equippable response (see below).
 
-**Collision Channels (locked approach)**  
-- Every item uses Object Type = `Item`.  
-- Equippable items additionally set:
-  ```cpp
-  Mesh->SetCollisionResponseToChannel(TRACE_EQUIPPABLE, ECR_Overlap); // TRACE_EQUIPPABLE is macro for corresponding ECC_GameTraceChannel
-  ```
-- Pickup uses a **Trace Channel** called `Equippable` so the sphere sweep only hits valid equippable items.
-- This keeps the ITEM object channel free for other interactions while giving clean targeting for pickup.
+**Collision Approach (hybrid – locked)**  
+- Base collision settings come from the **“Item” Collision Profile** (Project Settings → Collision → Presets):
+  - Object Type = `Item`
+  - Collision Enabled = QueryAndPhysics (or as desired)
+  - Common responses (WorldStatic, WorldDynamic, Pawn, etc.)
+- EquippableFragment then overrides only the specialized channel **after** the profile is applied:
+
+```cpp
+// Correct order – profile first, then specialized response
+PrimaryMeshComponent->SetCollisionProfileName(TEXT("Item"));
+PrimaryMeshComponent->SetCollisionResponseToChannel(TRACE_EQUIPPABLE, ECR_Block);
+
+// Identical for SecondaryMeshComponent if present
+```
+
+- `TRACE_EQUIPPABLE` **must** be `ECR_Block` (not Overlap).  
+  `SweepSingleByChannel` only generates hits against Block responses.
+- This keeps the bulk of collision data in one editable profile while letting the Equippable fragment own its single responsibility.
+- Both Primary and Secondary meshes receive the same treatment.
 
 **Hand Ownership**  
 - One primary hand owns the item.  
@@ -143,35 +154,41 @@ Left-hand IK works without extra transform mirroring.
 - Dynamic grip transform calculation every frame.
 - Left-hand mesh mirroring.
 - `PreventItemStuck` safety.
-- Will also own the targeted-item query and (for now) highlight driving logic.
+- Owns the targeted-item query (`FindLookedAtItem`) and will drive highlight logic.
 - Provides clean Blueprint API.
 
-**Pickup / Drop API (design locked, implementation pending)**
+**Pickup / Drop API (implemented 2026-08-15)**
 
 ```cpp
 // Low-level
 bool TryPickup(AItemActor* Item, EHand Hand);
 bool TryDrop(EHand Hand);
 
-// Q-mode entry point (LMB/RMB while holding Q)
-void TryPickupOrDrop(EHand Hand);
+// Q-mode entry point
+bool TryPickupOrDrop(EHand Hand);
+
+// Helper
+bool GetIsUnarmed(EHand Hand) const;
 ```
 
-**TryPickupOrDrop decision tree (basic version)**
+**TryPickupOrDrop decision tree (basic version – live)**
 - Looking at valid item + hand is Unarmed → Pickup
 - Looking at valid item + hand occupied → Do nothing (swap later)
 - Looking at empty space + hand occupied → Drop
 - Looking at empty space + hand Unarmed → Do nothing
 
-**Pickup feel decisions**
-- Target is locked at the moment of input confirmation (turning mid-animation does not change the target).
-- Small sphere sweep (≈8 cm radius, ~150–180 cm distance) on `TRACE_EQUIPPABLE` from camera.
-- Prefer letting existing Physics Control + IK grip target “suck” the item into pose. No forced teleport for normal world items.
-- Hard teleport / snap is reserved mainly for re-equipping Unarmed.
-- 12-frame reach montage + AnimNotify (or end of anim detect, TBD) near the end for finalization.
-- Pickup range is intentionally longer than real arm reach (fun > strict realism). No crouching required for normal ground items.
+**Implementation notes**
+- Target is locked at the moment of input confirmation.
+- `FindLookedAtItem` uses a small sphere sweep (default ≈8 cm radius, 250 cm distance) on `TRACE_EQUIPPABLE` from the camera.
+- Ignores owner + both currently held items.
+- Prefer letting Physics Control + IK “suck” the item into pose. No forced teleport for normal world items.
+- Hard teleport / snap reserved mainly for re-equipping Unarmed.
+- 12-frame reach montage + AnimNotify finalization still pending (current path finalizes immediately for testing).
 
-Note: The component is currently large. This is accepted while the hold/pickup systems are in active development. Public API stays small; helpers stay private.
+**Unarmed handling inside pickup/drop**
+- `GetIsUnarmed(EHand)` compares the held item’s Definition against the stored `UnarmedDefinition`.
+- On pickup of a real item: previous Unarmed actor is simply `Destroy()`ed.
+- On drop: `EquipUnarmed(Hand)` is called immediately after detach.
 
 ### 7. Player Structure
 
@@ -179,6 +196,12 @@ Note: The component is currently large. This is accepted while the hold/pickup s
 - WoodcraftPlayer Blueprint subclasses it.
 - C++ owns state and rules; Blueprint owns presentation (animation, Control Rig, Physics Control tuning).
 - `UHeldItemsComponent` caches `TObjectPtr<UItemFactorySubsystem> ItemFactory` set in `BeginPlay`.
+
+**Input (current interim approach)**
+- Enhanced Input actions are currently wired in the Player Blueprint.
+- Q + LMB / Q + RMB combos fire `TryPickupOrDrop`.
+- A separate `PickUpMode` bool Input Action toggles outline/highlight visibility.
+- Plan: move binding + Q-mode / PickUpMode state into C++ on `AWoodcraftCharacter` once the core feel is solid.
 
 ### 8. Unarmed Handling (Locked)
 
@@ -190,7 +213,7 @@ Note: The component is currently large. This is accepted while the hold/pickup s
 - Dropping an item immediately re-equips Unarmed in that hand.
 - Eliminates null-hand special cases.
 
-### 9. Current Status (2026-08-14)
+### 9. Current Status (2026-08-15)
 
 **Working / Implemented**
 - `UItemFactorySubsystem` (World Subsystem) with the three creation methods
@@ -201,16 +224,19 @@ Note: The component is currently large. This is accepted while the hold/pickup s
 - Left-hand mesh mirroring (scale X = -1 on mesh only)
 - `PreventItemStuck` (response-based, HandBone↔Grip distance, hysteresis)
 - Basic hold feel
-- Unarmed approach decided (Definition only, spawn/destroy actor)
+- Unarmed approach (Definition only, spawn/destroy actor)
+- **Basic TryPickup / TryDrop / TryPickupOrDrop + GetIsUnarmed** (sphere sweep on TRACE_EQUIPPABLE)
+- Hybrid collision setup (Item profile + EquippableFragment sets TRACE_EQUIPPABLE = Block)
+- Pickup and drop fully functional end-to-end (including left-hand mirroring)
 
 **In progress / Next**
-1. Basic `TryPickup` / `TryDrop` + `TryPickupOrDrop` (sphere sweep on EQUIPPABLE) so left-hand mirroring can be fully tested end-to-end.
-2. Q-mode input (hold Q → LMB/RMB).
-3. Pickup montage + AnimNotify timing.
-4. Dual item highlight (nearby gray + targeted stronger).
+1. Animation hooks between `UHeldItemsComponent` and AnimBP (hold poses / item-specific anims based on held items).
+2. 12-frame reach montage + AnimNotify finalization (replace immediate attach).
+3. Dual item highlight (nearby gray + targeted stronger) driven by PickUpMode / FindLookedAtItem.
+4. Move input binding + Q-mode / PickUpMode state into C++.
 5. Basic Extend (neutral vs extended anim soft refs).
 6. Later: swinging, inventory/storage (Actor destroy/recreate from Instance), two-handed rules, damage, mass-based Physics Control strength, etc.
 
 ---
 
-This document reflects the design state after the ItemFactorySubsystem conversion, fragment responsibility split, Unarmed simplification, Instance longevity rules, and pickup interaction decisions of 2026-08-14.
+This document reflects the design state as of 2026-08-15 after successful implementation of the basic pickup/drop loop, finalization of the hybrid collision approach, and addition of `GetIsUnarmed`.

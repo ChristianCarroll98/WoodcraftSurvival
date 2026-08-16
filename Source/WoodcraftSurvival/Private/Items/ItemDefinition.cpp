@@ -1,7 +1,6 @@
 // Copyright (c) 2026 Christian Carroll. All Rights Reserved.
 
 #include "Items/ItemDefinition.h"
-#include "Items/Fragments/PhysicsFragment.h"
 
 UItemDefinition::UItemDefinition()
 {
