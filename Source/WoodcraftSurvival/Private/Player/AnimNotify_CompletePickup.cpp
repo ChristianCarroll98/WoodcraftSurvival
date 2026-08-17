@@ -8,18 +8,30 @@ void UAnimNotify_CompletePickup::Notify(USkeletalMeshComponent* MeshComp, UAnimS
 {
     Super::Notify(MeshComp, Animation, EventReference);
 
-    FString HandStr = Hand == EHand::Left ? "Left" : "Right";
-    FString FullString = TEXT("UAnimNotify_CompletePickup::Notify called for hand: ") + HandStr;
-    if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Cyan, FullString);
-
-    if (!MeshComp) return;
+    if (!MeshComp)
+    {
+        if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Cyan,
+            TEXT("MeshComp Invalid in CompletePickup Notify for hand: ") + UEnum::GetValueAsString(Hand));
+        return;
+    }
 
     // Get the Actor owning the skeletal mesh (your Player Character)
     AActor* Owner = MeshComp->GetOwner();
-    if (!Owner) return;
+    if (!Owner)
+    {
+        if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Cyan,
+            TEXT("Owner Actor Invalid in CompletePickup Notify for hand: ") + UEnum::GetValueAsString(Hand));
+        return;
+    }
 
     UHeldItemsComponent* HeldItemsComponent = Owner->FindComponentByClass<UHeldItemsComponent>();
-    if (!HeldItemsComponent) return;
+    if (!HeldItemsComponent)
+    {
+        if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Cyan,
+            TEXT("Could not get HeldItemsComponent in CompletePickup Notify for hand: ")
+            + UEnum::GetValueAsString(Hand));
+        return;
+    }
     
     HeldItemsComponent->CompletePickup(Hand);
 }

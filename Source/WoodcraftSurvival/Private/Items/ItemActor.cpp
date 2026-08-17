@@ -31,8 +31,8 @@ void AItemActor::InitializeFromInstance(UItemInstance* Instance)
 	UStaticMesh* PrimaryMesh = Instance->ItemDefinition->PrimaryMesh.LoadSynchronous();
 	if (!PrimaryMesh)
 	{
-		if (GEngine) GEngine->AddOnScreenDebugMessage(0, 5.0f, FColor::Cyan,
-			TEXT("Failed to load primary mesh for item."));
+		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Cyan,
+			TEXT("Failed to load primary mesh for item: ") + GetName());
 		return;
 	}
 
@@ -69,8 +69,8 @@ void AItemActor::InitializeFromInstance(UItemInstance* Instance)
 		}
 		else
 		{
-			if (GEngine) GEngine->AddOnScreenDebugMessage(0, 5.0f, FColor::Cyan,
-				TEXT("Failed to load secondary mesh for item. Skipping..."));
+			if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Cyan,
+				TEXT("Failed to load secondary mesh for item. Skipping... item: ") + GetName());
 		}
 	}
 
