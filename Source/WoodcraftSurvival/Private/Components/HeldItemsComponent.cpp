@@ -64,29 +64,15 @@ bool UHeldItemsComponent::TryPickup(AItemActor* Item, EHand Hand)
 {
 	if (!Item || Hand == EHand::None) return false;
 
-	// TODO: explicit EquippableFragment + two-handed rules later.
+	// TODO: Two handed item handling
 
+	// Get current held item
 	AItemActor* PreviousItem = GetHeldItem(Hand);
 
-	// Unarmed rule: simply Destroy the previous Unarmed actor
-	if (PreviousItem && GetIsUnarmed(Hand))
-	{
-		PreviousItem->Destroy();
-	}
+	// If player has Unarmed item, destroy it before attaching new item
+	if (PreviousItem && GetIsUnarmed(Hand)) PreviousItem->Destroy();
 
-	if (Hand == EHand::Left)
-	{
-		HeldItemLeft = Item;
-	}
-	else
-	{
-		HeldItemRight = Item;
-	}
-
-	AttachItemToControl(Item, Hand);
-
-	// TODO: NotifyBecameHeld / montage + AnimNotify finalization
-	return true;
+	return AttachItemToControl(Item, Hand);
 }
 
 bool UHeldItemsComponent::TryDrop(EHand Hand)
@@ -109,7 +95,7 @@ bool UHeldItemsComponent::BeginPickupAnimation(AItemActor* Item, EHand Hand)
 	FString FullString = TEXT("CompletePickup called for hand: ") + HandStr;
 	if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Cyan, FullString);
 
-	if (!Item || !AnimInstance || !DefaultPickupMontage) return false;
+	if (!Item || Hand == EHand::None) return false;
 
 	const UEquippableFragment* EquipFrag = Item->GetItemInstance()->FindFragment<UEquippableFragment>();
 	if (!EquipFrag) return false;
@@ -124,9 +110,7 @@ bool UHeldItemsComponent::BeginPickupAnimation(AItemActor* Item, EHand Hand)
 	LoadAndPushPoses(Hand);
 
 	// 3. Play the montage
-	AnimInstance->Montage_Play(DefaultPickupMontage);
-
-	return true;
+	return PlayPickupMontage(Hand);
 }
 
 void UHeldItemsComponent::LoadAndPushPoses(EHand Hand)
@@ -239,7 +223,6 @@ const FTransform UHeldItemsComponent::GetWeaponBoneTransform(EHand Hand) const
 	const FName WeaponBoneName = GetWeaponBoneName(Hand);
 	return AnimRefMesh->GetSocketTransform(WeaponBoneName, RTS_World);
 }
-
 
 const FTransform UHeldItemsComponent::GetGripTransform(EHand Hand) const
 {
@@ -354,6 +337,26 @@ void UHeldItemsComponent::SetItemStuck(EHand Hand, bool bStuck)
 	else bRightItemStuck = bStuck;
 }
 
+bool UHeldItemsComponent::PlayPickupMontage(EHand Hand) const
+{
+	if (Hand == EHand::None || !AnimInstance) return false;
+	TObjectPtr<UAnimMontage> PickupMontageToPlay = (Hand == EHand::Left) ?
+			DefaultPickupMontageLeft : DefaultPickupMontageRight;
+	if (!PickupMontageToPlay) return false;
+	AnimInstance->Montage_Play(PickupMontageToPlay);
+	return true;
+}
+
+bool UHeldItemsComponent::PlayDropMontage(EHand Hand) const
+{
+	if (Hand == EHand::None || !AnimInstance) return false;
+	TObjectPtr<UAnimMontage> DropMontageToPlay = (Hand == EHand::Left) ?
+		DefaultDropMontageLeft : DefaultDropMontageRight;
+	if (!DropMontageToPlay) return false;
+	AnimInstance->Montage_Play(DropMontageToPlay);
+	return true;
+}
+
 void UHeldItemsComponent::GetGripTransforms(FTransform& GripTransformLeft, FTransform& GripTransformRight) const
 {
 	GripTransformLeft = GetGripTransform(EHand::Left);
@@ -395,26 +398,27 @@ void UHeldItemsComponent::EquipUnarmed(EHand Hand)
 {
 	if (!UnarmedDefinition || Hand == EHand::None) return;
 
+	// Create new UnarmedActor from definition at current hand transform
 	AItemActor* UnarmedActor = ItemFactory->SpawnItemActorFromDefinition(
 		UnarmedDefinition,
-		GetWeaponBoneTransform(Hand) // Spawn at current hand location
+		GetWeaponBoneTransform(Hand)
 	);
 
-	// Hide the unarmed actor so it doesn't appear in the world. It will still be used for grip transforms and collision.
+	// Visually hide unarmed actor
 	UnarmedActor->SetActorHiddenInGame(true);
 
-	if (Hand == EHand::Left) HeldItemLeft = UnarmedActor;
-	else HeldItemRight = UnarmedActor;
-
-	AttachItemToControl(UnarmedActor, Hand);
+	if (AttachItemToControl(UnarmedActor, Hand) && AnimInstance)
+	{
+		AnimInstance->SetHoldPose(Hand, UnarmedNeutralPose, UnarmedExtendedPose);
+	}
 }
 
-void UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand)
+bool UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand)
 {
-	if (!Item || Hand == EHand::None || !PhysicsControl || !AnimRefMesh) return;
+	if (!Item || Hand == EHand::None || !PhysicsControl || !AnimRefMesh) return false;
 
 	UStaticMeshComponent* ItemMesh = Item->GetItemPrimaryMesh();
-	if (!ItemMesh) return;
+	if (!ItemMesh) return false;
 
 	// Destroy any existing control for this hand first
 	DetachItemFromControl(Hand);
@@ -454,8 +458,17 @@ void UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand)
 		"WSPC_"
 	);
 
-	if (Hand == EHand::Left) ActiveControlLeft = NewControlName;
-	else ActiveControlRight = NewControlName;
+	if (Hand == EHand::Left)
+	{
+		HeldItemLeft = Item;
+		ActiveControlLeft = NewControlName;
+	}
+	else if (Hand == EHand::Right)
+	{
+		HeldItemRight = Item;
+		ActiveControlRight = NewControlName;
+	}
+	return true;
 }
 
 void UHeldItemsComponent::DetachItemFromControl(EHand Hand)

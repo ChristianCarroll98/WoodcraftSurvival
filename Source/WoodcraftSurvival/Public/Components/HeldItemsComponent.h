@@ -48,17 +48,33 @@ public:
 
 	// ---------- Defaults ----------
 
-	/** Default pickup montage for held items. */
-	UPROPERTY(EditDefaultsOnly, Category = "Animation")
-	TObjectPtr<UAnimMontage> DefaultPickupMontage;
-
-	/** Default drop montage for held items. */
-	UPROPERTY(EditDefaultsOnly, Category = "Animation")
-	TObjectPtr<UAnimMontage> DefaultDropMontage;
-	
 	/** The animation instance for the first-person arms mesh. */
 	UPROPERTY(EditDefaultsOnly, Category = "Animation")
 	TObjectPtr<UFPArmsAnimInstance> AnimInstance;
+
+	/** Default pickup montage for left hand */
+	UPROPERTY(EditDefaultsOnly, Category = "Animation|Pickup")
+	TObjectPtr<UAnimMontage> DefaultPickupMontageLeft;
+
+	/** Default pickup montage for right hand */
+	UPROPERTY(EditDefaultsOnly, Category = "Animation|Pickup")
+	TObjectPtr<UAnimMontage> DefaultPickupMontageRight;
+
+	/** Default drop montage for left hand */
+	UPROPERTY(EditDefaultsOnly, Category = "Animation|Drop")
+	TObjectPtr<UAnimMontage> DefaultDropMontageLeft;
+
+	/** Default drop montage for right hand */
+	UPROPERTY(EditDefaultsOnly, Category = "Animation|Drop")
+	TObjectPtr<UAnimMontage> DefaultDropMontageRight;
+
+	/** Unarmed Neutral pose */
+	UPROPERTY(EditDefaultsOnly, Category = "Animation|Unarmed")
+	TObjectPtr<UAnimSequence> UnarmedNeutralPose;
+
+	/** Unarmed Extended pose */
+	UPROPERTY(EditDefaultsOnly, Category = "Animation|Unarmed")
+	TObjectPtr<UAnimSequence> UnarmedExtendedPose;
 
 
 	// ---------- Core API ----------
@@ -139,11 +155,11 @@ private:
 	/** Callback for when the soft pointers to the item animations are loaded */
 	void OnPosesLoaded(EHand Hand);
 
-	/** Equips the Unarmed item into the specified hand. */
+	/** Spawns an Unarmed item and equips to the specified hand. */
 	void EquipUnarmed(EHand Hand);
 
 	/** Creates a Physics Control that holds the item in the given hand. */
-	void AttachItemToControl(AItemActor* Item, EHand Hand);
+	bool AttachItemToControl(AItemActor* Item, EHand Hand);
 
 	/** Destroys / disables the Physics Control for the given hand. */
 	void DetachItemFromControl(EHand Hand);
@@ -186,6 +202,12 @@ private:
 	
 	/** Returns the pending pickup data for the given hand. */
 	const FPendingPickupData& GetPendingPickup(EHand Hand) const;
+
+	/** Plays pickup montage for the specified hand */
+	bool PlayPickupMontage(EHand Hand) const;
+
+	/** Plays drop montage for the specified hand */
+	bool PlayDropMontage(EHand Hand) const;
 
 
 	// ---------- private class variables ----------
