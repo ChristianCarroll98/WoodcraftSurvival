@@ -1,5 +1,5 @@
 **Harvestable System Definition**
-*(Initial design – 2026-08-15)*
+*(Updated 2026-08-16 – crops/farming direction locked)*
 
 ### 1. High-Level Goals
 
@@ -8,14 +8,14 @@
 - Mirror the successful patterns already locked for Items and Creatures (Definition → Instance → Actor + Fragments) for consistency.
 - Support multi-stage destruction and transformation (standing tree → fallen log Item + stump, ore vein → ore chunks, etc.).
 - Remain efficient for high-density placement during dynamic world generation.
-- Allow future extension to crops / farming where it makes sense.
+- Support crops / farming as a first-class extension of the same architecture.
 
 ### 2. Core Architecture
 
 **UHarvestableDefinition** (Primary Data Asset)
 - Pure type data for a harvestable resource.
 - Contains an array of `UHarvestableFragment*` (EditInlineNew, Instanced).
-- Examples: DA_OakTree, DA_PineTree, DA_CopperVein, DA_ClayDeposit, DA_Stump_Generic, etc.
+- Examples: DA_OakTree, DA_PineTree, DA_CopperVein, DA_ClayDeposit, DA_Stump_Generic, DA_Carrot, DA_BerryBush, etc.
 
 **UHarvestableFragment** (abstract base)
 - Lightweight, primarily pure data (EditDefaultsOnly).
@@ -30,14 +30,15 @@ virtual void OnHarvestableSpawned(AHarvestableActor* Actor) {}
 ```
 
 **UHarvestableInstance** (UObject, outer = TransientPackage or owned by subsystem)
-- Long-lived runtime state for a specific harvestable (current health, stage, quality, regrowth timer, etc.).
-- Created **lazily** (see section 4).
+- Long-lived runtime state for a specific harvestable (current health, stage, quality, regrowth timer, growth progress, water, etc.).
+- Created **lazily** for world-generated resources (see section 4).
+- Player-planted crops always create an Instance immediately.
 - Destroyed only when the resource is fully harvested / removed.
 
 **AHarvestableActor** (single base class, like AItemActor and ACreatureActor)
 - The world representation.
 - Holds a reference to its Definition (always) and to its Instance (when one exists).
-- Handles collision, visual representation, damage reception, and stage transitions.
+- Handles collision, visual representation, damage reception, stage transitions, and growth visuals.
 - May be destroyed and later recreated from an Instance if needed (streaming, save/load).
 
 **UHarvestableFactorySubsystem** (UWorldSubsystem) – or methods living on a broader Environment/Resource subsystem
@@ -59,6 +60,7 @@ Harvestables are **not** Items.
   - Log (now an Item) is further chopped → spawn Wood Chunk Items.
   - Ore vein depleted → spawn Ore Chunk Items.
   - Stump destroyed → spawn 2–3 Wood Chunk / Wood Scrap Items.
+  - Mature crop harvested → spawn produce / seed / cutting Items.
 
 This keeps the Item system as the single authority for anything that can be picked up, held, stored, or used in crafting.
 
@@ -75,6 +77,8 @@ Rule:
 - From that point the Instance owns the runtime data and the Actor simply references it.
 
 This keeps memory and UObject count low for dense forests while still giving full Instance power the moment it is needed (partially chopped trees, quality variation, save games, etc.).
+
+Player-planted crops always start with an Instance because they carry unique growth state from the moment they are placed.
 
 ### 5. Damage & Interaction
 
@@ -121,23 +125,104 @@ Tool impact logic then works uniformly against anything that implements the inte
 - Lightweight Harvestable.
 - On destruction spawns 2–3 Wood Chunk / Wood Scrap Items and removes itself.
 
-### 7. Crops & Farming (Future Extension)
+### 7. Crops & Farming (Locked Direction – 2026-08-16)
 
-Crops are a natural candidate for the Harvestable system, with some differences.
+Crops are a first-class use of the Harvestable system.
 
-Possible approach:
-- A crop plant is a Harvestable while growing (tracks growth stage, water, health, etc.).
-- A fragment (e.g. `UPickableWhenMatureFragment` or `UCropFragment`) can mark the plant as directly pickable once it reaches a mature stage.
-- On pick: the Harvestable is destroyed (or reset for regrowing plants) and the corresponding Item(s) are spawned via ItemFactory (or the plant itself converts into an Item if that feels better).
-- Perennial plants or plants that leave a stump/root can stay as Harvestables after harvest.
+#### 7.1 Core Rules
 
-This keeps growth logic, seasonal effects, and soil interaction inside the Harvestable/Environment side while still producing normal Items the player can carry and store.
+- A growing plant is an `AHarvestableActor` + `UHarvestableInstance` for as long as it exists in the world.
+- On harvest it produces normal Items via `UItemFactorySubsystem` (produce, seeds, cuttings, fiber, etc.).
+- Wild plants use the normal lazy-Instance path.
+- Player-planted plants always create the Instance immediately (they have unique growth state from day zero).
+- Multi-harvest plants (berry bushes, etc.) stay as Harvestables after picking and can regrow fruit.
+- Single-harvest / root crops are destroyed (or left as a spent root/stump) after harvest.
 
-**Open for further discussion:**
-- Exact growth model (time-based, stage-based, soil quality influence).
-- Whether mature crops should become Items in-place or stay Harvestables that simply allow a “pick” interaction.
-- How planting works (hoe ground → place seed Item → convert to young Harvestable, or direct placement of a young plant Actor).
-- Multi-harvest plants (berries, etc.) vs single-harvest.
+#### 7.2 Seeds & Cuttings (Items)
+
+**Seeds**
+- Normal stackable Items, Size S.
+- Visual: small pile mesh.
+- Fully compatible with containers (put in / take out like any other resource).
+- Some seeds will later be edible / cookable (e.g. sunflower seeds).
+- Planting consumes one “use” from the pile (or one item if pure stacking is preferred later). When uses reach zero the Item is destroyed.
+- Other future uses (seed oil, crafting, etc.) remain open.
+
+**Cuttings**
+- Larger Items (Size SM or M depending on species).
+- Custom mesh per crop type.
+- Planting a cutting skips the earliest stages and starts the plant at **Sprout** or early **Growing** with a larger starting scale and higher initial health.
+
+#### 7.3 Planting (MVP)
+
+- Direct planting on the ground is supported.
+- No tilling or terrain modification for the first version.
+- Each crop authors a `MinPlantDistance` (cm). On plant attempt a simple overlap check rejects placement if another crop is too close.
+  - Dense small crops (carrot, radish-type): ~12–18 cm
+  - Medium: ~20–30 cm
+  - Larger / bushy: ~40–70 cm
+- Alignment / hex or rectangle snap can be added later and can reuse the structure blueprint placement system.
+- Planter boxes / raised beds will be Structures (preferred). They will provide strong soil quality, protection, and density bonuses later.
+- Planting flow (high level): hold seed/cutting → look at valid ground → activation → short placement → consume use/Item → spawn young `AHarvestableActor` already owning an Instance.
+
+#### 7.4 Growth Stages
+
+Default ordered stages (per-crop overrides allowed):
+
+1. **Sprout** – tiny visible plant, appears immediately on successful plant
+2. **Seedling**
+3. **Growing** (vegetative)
+4. **Flowering** (optional)
+5. **Fruiting** and/or **Seeding**
+
+- No fully invisible germinating phase. A tiny sprout appears right away for clear player feedback.
+- During Sprout and early Growing, relative scale (and optionally material parameters) is driven by progress inside the stage for smooth visual growth.
+- Hard mesh swaps occur at major stage boundaries when geometry needs to change.
+- Early-stage meshes (tiny sprout / seedling) can be shared across many crop species.
+- Fruiting vs Seeding is crop-specific:
+  - Some plants have a clear Fruiting stage (high produce, low seed) that later transitions into a Seeding stage (produce drops, seed yield rises).
+  - Others combine them into one mature stage whose yield table shifts with further progress or season.
+
+#### 7.5 Growth Model
+
+Stage-based with continuous progress inside each stage.
+
+Each stage has a base `DurationInGameDays`. Progress advances as:
+
+```
+Progress += (DeltaDays / StageDuration) * SeasonMult * SoilMult * WaterMult * HealthMult;
+```
+
+When Progress ≥ 1.0 the plant advances stage, resets Progress, and updates mesh / collision / yields.
+
+**Timing anchor**
+- Real-world carrot ~60–80 days → in-game target **~15–20 days** under normal conditions (≈ 6–8 real hours at 24-min days).
+- Perfect conditions can reduce total time by roughly ¼–⅓.
+- Poor conditions slow growth significantly or halt it (multipliers approach zero).
+
+Soil quality for MVP is sampled once from the biome / microbiome at plant location and stored on the Instance. No ongoing voxel soil simulation.
+
+Water level and consumption exist as future extension points; they are not required for the first playable crops.
+
+Different crops simply author different stage durations and different sensitivity to the multipliers.
+
+#### 7.6 Harvest & Yield
+
+- Yield tables live per stage (or on a dedicated yield fragment).
+- Harvest interaction (hand or tool) when the current stage allows it:
+  - Spawns the appropriate Items via ItemFactory.
+  - Either destroys the plant, leaves a spent root/stump, or resets it to a post-harvest stage (multi-harvest).
+- Taking cuttings is a separate or modified interaction on suitable stages of certain species.
+- Destructive dig for root crops yields the tubers (+ possible replantable pieces) and removes the plant.
+
+#### 7.7 Still Open / Future
+
+- Exact planting input binding and montage.
+- Precise default stage durations and multiplier curves (will be tuned once a test crop exists).
+- Watering mechanics and tools.
+- Fertilizer / soil improvement beyond the initial biome sample.
+- Visual authoring budget and shared early-stage meshes.
+- How aggressively seasons gate certain crops.
 
 ### 8. Fragments – Initial Ideas
 
@@ -148,9 +233,15 @@ These are starting points only; exact set will evolve:
 - `UFallableFragment` – fall behaviour, direction bias, physics settings for the falling phase.
 - `UBranchableFragment` / `UPartDamageFragment` – support for damaging individual parts (branches) independently.
 - `UToolRequirementFragment` – gameplay tags or damage types this harvestable responds to.
-- `UMultiStageFragment` – ordered list of stages with different meshes / health / yields.
+- `UMultiStageFragment` – ordered list of stages with different meshes / health / yields (used by both trees and crops).
 - `URegrowFragment` – for stumps or plants that can return over time.
-- Future crop-specific: `UGrowthFragment`, `USeasonalFragment`, `UPickableWhenMatureFragment`.
+- Crop-oriented:
+  - `UGrowthFragment` – stage list, base durations, MinPlantDistance, starting stage for seeds vs cuttings.
+  - `USeasonalFragment` – preferred seasons / temperature / humidity windows + multipliers.
+  - `USoilPreferenceFragment` – preferred biome tags and soil quality response.
+  - `UWaterFragment` – consumption rate, drought thresholds (future).
+  - `UPropagationFragment` – which stages allow seeds or cuttings and the resulting Item definitions.
+  - `UMultiHarvestFragment` – for plants that can be picked repeatedly.
 
 ### 9. World Generation & Performance Notes
 
@@ -169,11 +260,11 @@ Exact streaming / density strategy is still open.
 3. Whether the Factory should be a dedicated `UHarvestableFactorySubsystem` or methods on a broader `UEnvironmentSubsystem` / `UResourceSubsystem`.
 4. Branch / part damage: component-based, hit-zone based, or purely mesh-section based?
 5. Falling trees: pure physics, animation + physics, or rooted physics constraint during the fall?
-6. Crops integration details (see section 7).
-7. Save / load strategy for partially harvested resources and lazy Instances.
-8. Whether very large “Items” that start as Harvestables (fallen trees) need special two-handed or “process in place” rules inside the Item system.
+6. Save / load strategy for partially harvested resources and lazy Instances.
+7. Whether very large “Items” that start as Harvestables (fallen trees) need special two-handed or “process in place” rules inside the Item system.
+8. Crop-specific tuning (exact durations, multiplier curves, watering) once a test crop is in place.
 
 ---
 
-This document captures the initial solid direction as of 2026-08-15.  
-It deliberately stays aligned with the Item and Creature architectures while adding the lazy-Instance and “produces Items” rules that make Harvestables practical for a large dynamic world.
+This document captures the solid direction as of 2026-08-16.  
+Crops/farming is now a locked extension of the Harvestable architecture. Core rules for seeds, cuttings, stages, planting MVP, and growth model are defined; remaining details will be tuned with a concrete test crop.

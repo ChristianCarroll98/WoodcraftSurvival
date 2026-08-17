@@ -190,12 +190,18 @@ The player places a small fire blueprint with build menu button. The player can 
 
 CROP GROWTH:
 
-Many crop seeds or cuttings can be propogated. Wild plants can be found in various states at different times of the year. If a plant is in seeding stage harvesting it provides a lot of seeds for that plant type. (How should seed items be implemented? as piles? particulates? individual seeds too small).
-Planting: TBD either hoe raw ground, or build planter boxes.. I am leaning towards hoeing ground but dont plan to implement a voxel system so need a way to plant on slanted ground maybe? or just allow planting wherever and hoed ground is just better soil.
-Soil: different biomes/microbiomes have different soil qualities and some plants prefer some over others. I may add fertilizers and stuff to the crafting system.. not sure.
-Plants grow at an accellerated rate as desribed earlier, 1 in game day (24 mins) = 4 real life days. May decrease real life crop growth time.
-Crops: Grains, root vegitables, berry bushes, Fruits, other vegitables... Will research what might be able to be found in the wild.
-Harvesting: Either picking individually for some, I may add a scythe for cutting griains, idk, TBD.
+Many crop seeds or cuttings can be propagated. Wild plants appear in various stages depending on season/time of year; seeding-stage plants yield many seeds.
+
+Detailed design lives in Notes/HarvestableSystem/HarvestableSystemDefinition.txt (section 7, locked 2026-08-16).
+
+Summary of locked direction:
+- Crops are Harvestables (Definition → Instance → Actor + fragments).
+- Seeds = normal Size S pile Items (container-compatible, planting consumes uses; some later edible).
+- Cuttings = larger Items that start the plant at an advanced stage + larger scale.
+- MVP planting = direct on ground + per-crop MinPlantDistance check. No tilling/voxels yet. Planter boxes later as Structures. Grid/hex snap can reuse structure blueprints later.
+- Immediate tiny Sprout on plant (no invisible phase). Stages: Sprout → Seedling → Growing → optional Flowering → Fruiting and/or Seeding. Smooth scale-up in early stages; mesh swaps at major boundaries.
+- Growth = stage durations + continuous progress × environmental multipliers (season, soil sampled at plant time, water, health). Target ~15–20 in-game days for a carrot-like plant under normal conditions.
+- Multi-harvest vs single-harvest supported. Yields are stage-specific (produce vs seed can shift).
 
 
 CREATURES:
