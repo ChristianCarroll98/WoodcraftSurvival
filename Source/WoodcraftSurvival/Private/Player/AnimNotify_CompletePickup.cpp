@@ -8,6 +8,10 @@ void UAnimNotify_CompletePickup::Notify(USkeletalMeshComponent* MeshComp, UAnimS
 {
     Super::Notify(MeshComp, Animation, EventReference);
 
+    FString HandStr = Hand == EHand::Left ? "Left" : "Right";
+    FString FullString = TEXT("UAnimNotify_CompletePickup::Notify called for hand: ") + HandStr;
+    if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Cyan, FullString);
+
     if (!MeshComp) return;
 
     // Get the Actor owning the skeletal mesh (your Player Character)

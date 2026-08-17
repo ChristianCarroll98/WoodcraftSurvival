@@ -5,6 +5,11 @@
 
 #include "WoodcraftTypes.generated.h"
 
+// ---------- Const Global Vars ----------
+
+const FString GErrorPrefix = TEXT("ERROR: ");
+
+
 // ---------- Enums ----------
 
 /** Enum representing the player's two hands. */

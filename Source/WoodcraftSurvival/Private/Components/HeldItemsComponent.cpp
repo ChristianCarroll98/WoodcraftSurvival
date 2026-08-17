@@ -21,6 +21,8 @@ void UHeldItemsComponent::BeginPlay()
 
 	ItemFactory = GetWorld()->GetSubsystem<UItemFactorySubsystem>();
 
+	AnimInstance = Cast<UFPArmsAnimInstance>(AnimRefMesh->GetAnimInstance());
+
 	// Both hands start with Unarmed
 	EquipUnarmed(EHand::Left);
 	EquipUnarmed(EHand::Right);
@@ -35,9 +37,13 @@ void UHeldItemsComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 	PreventItemStuck(EHand::Right);
 }
 
-bool UHeldItemsComponent::TryPickupOrDrop(EHand Hand)
+bool UHeldItemsComponent::TryPickupOrDrop(EHand Hand, FString& OutResult)
 {
-	if (Hand == EHand::None) return false;
+	if (Hand == EHand::None)
+	{
+		OutResult += TEXT("Hand == None");
+		return false;
+	}
 
 	// Target locked at input time
 	AItemActor* LookedAtItem = FindLookedAtItem();
@@ -47,22 +53,36 @@ bool UHeldItemsComponent::TryPickupOrDrop(EHand Hand)
 	{
 		if (!bHandIsUnarmed) return false; // Occupied + looking at item -> do nothing (swap later)
 		
-		return BeginPickupAnimation(LookedAtItem, Hand); // Looking at valid item
+		bool bSuccess = BeginPickupAnimation(LookedAtItem, Hand, OutResult);
+		if (!bSuccess) OutResult = TEXT("BeginPickupAnimation: ") + OutResult;
+		return bSuccess;
 	}
 
 	// Looking at empty space
 	if (!bHandIsUnarmed)
 	{
-		return TryDrop(Hand); // TODO : add drop montage
+		// TODO : add drop montage
+		bool bSuccess = TryDrop(Hand, OutResult);
+		if (!bSuccess) OutResult = TEXT("TryDrop: ") + OutResult;
+		return bSuccess;
 	}
 
 	// Empty + Unarmed -> nothing
 	return false;
 }
 
-bool UHeldItemsComponent::TryPickup(AItemActor* Item, EHand Hand)
+bool UHeldItemsComponent::TryPickup(AItemActor* Item, EHand Hand, FString& OutResult)
 {
-	if (!Item || Hand == EHand::None) return false;
+	if (!Item)
+	{
+		OutResult += TEXT("Item invalid");
+		return false;
+	}
+	else if (Hand == EHand::None)
+	{
+		OutResult += TEXT("Hand == None");
+		return false;
+	}
 
 	// TODO: Two handed item handling
 
@@ -72,13 +92,25 @@ bool UHeldItemsComponent::TryPickup(AItemActor* Item, EHand Hand)
 	// If player has Unarmed item, destroy it before attaching new item
 	if (PreviousItem && GetIsUnarmed(Hand)) PreviousItem->Destroy();
 
-	return AttachItemToControl(Item, Hand);
+	bool bSuccess = AttachItemToControl(Item, Hand, OutResult);
+	if (!bSuccess) OutResult = TEXT("AttachItemToControl: ") + OutResult;
+	return bSuccess;
 }
 
-bool UHeldItemsComponent::TryDrop(EHand Hand)
+bool UHeldItemsComponent::TryDrop(EHand Hand, FString& OutResult)
 {
 	AItemActor* Item = GetHeldItem(Hand);
-	if (Hand == EHand::None || !Item) return false;
+
+	if (!Item)
+	{
+		OutResult += TEXT("Could not get held item for hand: ") + UEnum::GetValueAsString(Hand);
+		return false;
+	}
+	else if (Hand == EHand::None)
+	{
+		OutResult += TEXT("Hand == None");
+		return false;
+	}
 
 	// Never drop Unarmed
 	if (GetIsUnarmed(Hand)) return false;
@@ -89,16 +121,25 @@ bool UHeldItemsComponent::TryDrop(EHand Hand)
 	return true;
 }
 
-bool UHeldItemsComponent::BeginPickupAnimation(AItemActor* Item, EHand Hand)
+bool UHeldItemsComponent::BeginPickupAnimation(AItemActor* Item, EHand Hand, FString& OutResult)
 {
-	FString HandStr = Hand == EHand::Left ? "Left" : "Right";
-	FString FullString = TEXT("CompletePickup called for hand: ") + HandStr;
-	if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Cyan, FullString);
-
-	if (!Item || Hand == EHand::None) return false;
-
+	if (!Item)
+	{
+		OutResult += TEXT("Item Invalid");
+		return false;
+	}
+	else if (Hand == EHand::None)
+	{
+		OutResult += TEXT("Hand == None");
+		return false;
+	}
+	
 	const UEquippableFragment* EquipFrag = Item->GetItemInstance()->FindFragment<UEquippableFragment>();
-	if (!EquipFrag) return false;
+	if (!EquipFrag)
+	{
+		OutResult += TEXT("Could not find ItemEquippableFragment for Item: " + Item->GetName());
+		return false;
+	}
 
 	// Store pending data first
 	FPendingPickupData& Pending = (Hand == EHand::Left) ? PendingPickupLeft : PendingPickupRight;
@@ -106,11 +147,12 @@ bool UHeldItemsComponent::BeginPickupAnimation(AItemActor* Item, EHand Hand)
 	Pending.NeutralPose = EquipFrag->NeutralPose;
 	Pending.ExtendedPose = EquipFrag->ExtendedPose;
 
-	// 2. Load + push poses (choose one of the two approaches below)
+	bool bSuccess = PlayPickupMontage(Hand, OutResult);
+	if (!bSuccess) OutResult = TEXT("PlayPickupMontage: ") + OutResult;
+
 	LoadAndPushPoses(Hand);
 
-	// 3. Play the montage
-	return PlayPickupMontage(Hand);
+	return bSuccess;
 }
 
 void UHeldItemsComponent::LoadAndPushPoses(EHand Hand)
@@ -143,10 +185,13 @@ void UHeldItemsComponent::OnPosesLoaded(EHand Hand)
 	UAnimSequence* Neutral = Pending.NeutralPose.Get();
 	UAnimSequence* Extended = Pending.ExtendedPose.Get();
 
-	FString FullString = TEXT("Neutral anim sequence loaded and set: ") + Neutral->GetName();
-	if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Cyan, FullString);
-
-	if (AnimInstance) AnimInstance->SetHoldPose(Hand, Neutral, Extended);
+	if (!AnimInstance)
+	{
+		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Cyan,
+				TEXT("OnPosesLoaded: AnimInstance invalid"));
+		return;
+	}
+	AnimInstance->SetHoldPose(Hand, Neutral, Extended);
 }
 
 AItemActor* UHeldItemsComponent::GetHeldItem(EHand Hand) const
@@ -337,37 +382,69 @@ void UHeldItemsComponent::SetItemStuck(EHand Hand, bool bStuck)
 	else bRightItemStuck = bStuck;
 }
 
-bool UHeldItemsComponent::PlayPickupMontage(EHand Hand) const
+bool UHeldItemsComponent::PlayPickupMontage(EHand Hand, FString& OutResult) const
 {
-	if (Hand == EHand::None || !AnimInstance) return false;
+	if (!AnimInstance)
+	{
+		OutResult += TEXT("AnimInstance Invalid");
+		return false;
+	}
+	else if (Hand == EHand::None)
+	{
+		OutResult += TEXT("Hand == None");
+		return false;
+	}
+
 	TObjectPtr<UAnimMontage> PickupMontageToPlay = (Hand == EHand::Left) ?
 			DefaultPickupMontageLeft : DefaultPickupMontageRight;
-	if (!PickupMontageToPlay) return false;
+
+	if (!PickupMontageToPlay)
+	{
+		OutResult += TEXT("PickupMontageToPlay Invalid");
+		return false;
+	}
+
 	AnimInstance->Montage_Play(PickupMontageToPlay);
 	return true;
 }
 
-bool UHeldItemsComponent::PlayDropMontage(EHand Hand) const
+bool UHeldItemsComponent::PlayDropMontage(EHand Hand, FString& OutResult) const
 {
-	if (Hand == EHand::None || !AnimInstance) return false;
+	if (!AnimInstance)
+	{
+		OutResult += TEXT("AnimInstance Invalid");
+		return false;
+	}
+	else if (Hand == EHand::None)
+	{
+		OutResult += TEXT("Hand == None");
+		return false;
+	}
+
 	TObjectPtr<UAnimMontage> DropMontageToPlay = (Hand == EHand::Left) ?
-		DefaultDropMontageLeft : DefaultDropMontageRight;
-	if (!DropMontageToPlay) return false;
+			DefaultDropMontageLeft : DefaultDropMontageRight;
+
+	if (!DropMontageToPlay)
+	{
+		OutResult += TEXT("DropMontageToPlay Invalid");
+		return false;
+	}
+
 	AnimInstance->Montage_Play(DropMontageToPlay);
 	return true;
 }
 
-void UHeldItemsComponent::GetGripTransforms(FTransform& GripTransformLeft, FTransform& GripTransformRight) const
+void UHeldItemsComponent::GetGripTransforms(FTransform& OutGripTransformLeft, FTransform& OutGripTransformRight) const
 {
-	GripTransformLeft = GetGripTransform(EHand::Left);
-	GripTransformRight = GetGripTransform(EHand::Right);
+	OutGripTransformLeft = GetGripTransform(EHand::Left);
+	OutGripTransformRight = GetGripTransform(EHand::Right);
 }
 
 void UHeldItemsComponent::CompletePickup(EHand Hand)
 {
 	FString HandStr = Hand == EHand::Left ? "Left" : "Right";
 	FString FullString = TEXT("CompletePickup called for hand: ") + HandStr;
-	if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Cyan, FullString);
+	if (GEngine) 
 
 	if (Hand == EHand::None) return;
 
@@ -377,7 +454,11 @@ void UHeldItemsComponent::CompletePickup(EHand Hand)
 	AItemActor* ItemToPickup = Pending.TargetItem.Get();
 	if (!ItemToPickup) return;
 
-	TryPickup(ItemToPickup, Hand);
+	FString OutResult;
+	bool bSuccess = TryPickup(ItemToPickup, Hand, OutResult);
+	if (!bSuccess) GEngine->AddOnScreenDebugMessage(-1, 20.0f, FColor::Cyan, GErrorPrefix + OutResult);
+	return;
+	
 }
 
 const FName UHeldItemsComponent::GetWeaponBoneName(EHand Hand) const
@@ -407,18 +488,52 @@ void UHeldItemsComponent::EquipUnarmed(EHand Hand)
 	// Visually hide unarmed actor
 	UnarmedActor->SetActorHiddenInGame(true);
 
-	if (AttachItemToControl(UnarmedActor, Hand) && AnimInstance)
+	FString OutResult;
+	bool bSuccess = AttachItemToControl(UnarmedActor, Hand, OutResult);
+	if (!bSuccess)
 	{
-		AnimInstance->SetHoldPose(Hand, UnarmedNeutralPose, UnarmedExtendedPose);
+		GEngine->AddOnScreenDebugMessage(-1, 20.0f, FColor::Cyan, GErrorPrefix + OutResult);
+		return;
 	}
+	
+	if (!AnimInstance)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 20.0f, FColor::Cyan,
+				GErrorPrefix + TEXT("EquipUnarmed: AnimInstance invalid"));
+		return;
+	}
+	AnimInstance->SetHoldPose(Hand, UnarmedNeutralPose, UnarmedExtendedPose);
 }
 
-bool UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand)
+bool UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand, FString& OutResult)
 {
-	if (!Item || Hand == EHand::None || !PhysicsControl || !AnimRefMesh) return false;
+	if (!Item)
+	{
+		OutResult += TEXT("Item Invalid");
+		return false;
+	}
+	else if (Hand == EHand::None)
+	{
+		OutResult += TEXT("Hand == None");
+		return false;
+	}
+	else if (!PhysicsControl)
+	{
+		OutResult += TEXT("PhysicsControl Invalid");
+		return false;
+	}
+	else if (!AnimRefMesh)
+	{
+		OutResult += TEXT("AnimRefMesh Invalid");
+		return false;
+	}
 
 	UStaticMeshComponent* ItemMesh = Item->GetItemPrimaryMesh();
-	if (!ItemMesh) return false;
+	if (!ItemMesh)
+	{
+		OutResult += TEXT("ItemMesh Invalid");
+		return false;
+	}
 
 	// Destroy any existing control for this hand first
 	DetachItemFromControl(Hand);

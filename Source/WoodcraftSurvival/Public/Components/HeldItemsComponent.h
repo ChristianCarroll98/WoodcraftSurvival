@@ -84,7 +84,7 @@ public:
 	 * or drop the item in the given hand if already holding something.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Held Item|Pickup/Drop")
-	bool TryPickupOrDrop(EHand Hand);
+	bool TryPickupOrDrop(EHand Hand, FString& OutResult);
 
 	/** Returns the item currently held in the given hand (never null after BeginPlay). */
 	UFUNCTION(BlueprintPure, Category = "Held Item")
@@ -141,25 +141,22 @@ private:
 	// ---------- private methods ----------
 
 	/** Attempts to pick up the given item into the specified hand. */
-	bool TryPickup(AItemActor* Item, EHand Hand);
+	bool TryPickup(AItemActor* Item, EHand Hand, FString& OutResult);
 
 	/** Drops the item in the specified hand and equips Unarmed in its place. */
-	bool TryDrop(EHand Hand);
+	bool TryDrop(EHand Hand, FString& OutResult);
 
 	/** Begins the pickup animation for the given item and hand. */
-	bool BeginPickupAnimation(AItemActor* Item, EHand Hand);
+	bool BeginPickupAnimation(AItemActor* Item, EHand Hand, FString& OutResult);
 
 	/** Async loads neutral and extended poses and pushes to AnimInstance when complete */
 	void LoadAndPushPoses(EHand Hand);
-
-	/** Callback for when the soft pointers to the item animations are loaded */
-	void OnPosesLoaded(EHand Hand);
 
 	/** Spawns an Unarmed item and equips to the specified hand. */
 	void EquipUnarmed(EHand Hand);
 
 	/** Creates a Physics Control that holds the item in the given hand. */
-	bool AttachItemToControl(AItemActor* Item, EHand Hand);
+	bool AttachItemToControl(AItemActor* Item, EHand Hand, FString& OutResult);
 
 	/** Destroys / disables the Physics Control for the given hand. */
 	void DetachItemFromControl(EHand Hand);
@@ -169,6 +166,12 @@ private:
 
 	/** Sets the stuck status for the item in the given hand. */
 	void SetItemStuck(EHand Hand, bool bStuck);
+
+
+	// ---------- Callbacks ----------
+
+	/** Callback for when the soft pointers to the item animations are loaded */
+	void OnPosesLoaded(EHand Hand);
 
 
 	// ---------- const helpers ----------
@@ -204,10 +207,10 @@ private:
 	const FPendingPickupData& GetPendingPickup(EHand Hand) const;
 
 	/** Plays pickup montage for the specified hand */
-	bool PlayPickupMontage(EHand Hand) const;
+	bool PlayPickupMontage(EHand Hand, FString& OutResult) const;
 
 	/** Plays drop montage for the specified hand */
-	bool PlayDropMontage(EHand Hand) const;
+	bool PlayDropMontage(EHand Hand, FString& OutResult) const;
 
 
 	// ---------- private class variables ----------
