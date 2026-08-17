@@ -1,0 +1,175 @@
+**Item Animation Pipeline – Held Items & FP Arms**
+*(Woodcraft Survival – 2026-08-15 – Locked)*
+
+Authoritative description of how item-driven hold poses and temporary montages (pickup, drop, future swings) are handled between `UHeldItemsComponent`, the C++ AnimInstance, and the FPArms AnimBP.
+
+Replaces earlier experimental approaches (per-arm sub-AnimBPs, large animation structs, Player-BP-owned montage references).
+
+---
+
+### 1. Goals
+
+- Data-driven hold poses that come from the item itself.
+- Gameplay authority stays in `UHeldItemsComponent`; animation presentation stays in the AnimBP.
+- Independent left/right arms with no cross-contamination.
+- Temporary actions (pickup, drop, later swings) use slots only.
+- Works cleanly with the existing Physics Control + Control Rig setup.
+- No heavy per-arm state machines for basic holding.
+- Safe concurrent / overlapping pickups on both hands.
+
+---
+
+### 2. Data Ownership
+
+| Data                          | Location                          | Type                          | Notes |
+|-------------------------------|-----------------------------------|-------------------------------|-------|
+| HoldPose                      | `UEquippableFragment`             | `TSoftObjectPtr<UAnimSequence>` | Item-specific. Usually a short/static 1–2 frame pose. |
+| Default Pickup Montage        | `UHeldItemsComponent`             | `TObjectPtr<UAnimMontage>`    | Single shared asset (right-arm authored). Hard ref. |
+| Default Drop Montage          | `UHeldItemsComponent`             | `TObjectPtr<UAnimMontage>`    | Same pattern. Hard ref. |
+| Current runtime HoldPoses     | `UFPArmsAnimInstance`             | `TObjectPtr<UAnimSequence>`   | Hard references after load. |
+
+HoldPose lives on the EquippableFragment because it is part of how the item is held.  
+The generic 12-frame reach lives on the component as a hard reference because it is fixed and shared by all one-handed items.
+
+Unarmed also carries an EquippableFragment with its own HoldPose (neutral fists / rest pose).
+
+An individual item may later supply an optional EquipMontage override on its fragment; the component will check for it and fall back to the default if none exists.
+
+---
+
+### 3. Runtime Classes
+
+**UFPArmsAnimInstance** (C++ parent of the FPArms AnimBP)
+
+```cpp
+UCLASS()
+class WOODCRAFTSURVIVAL_API UFPArmsAnimInstance : public UAnimInstance
+{
+	GENERATED_BODY()
+
+public:
+	UPROPERTY(BlueprintReadWrite, Category = "Held Items")
+	TObjectPtr<UAnimSequence> HoldPose_Left;
+
+	UPROPERTY(BlueprintReadWrite, Category = "Held Items")
+	TObjectPtr<UAnimSequence> HoldPose_Right;
+
+	UFUNCTION(BlueprintCallable, Category = "Held Items")
+	void SetHoldPose(EHand Hand, UAnimSequence* NewPose);
+
+	UFUNCTION(BlueprintCallable, Category = "Held Items")
+	void PlayMontageInSlot(UAnimMontage* Montage, EHand Hand);
+};
+```
+
+**UHeldItemsComponent** animation responsibilities:
+- Owns the shared DefaultPickupMontage and DefaultDropMontage (hard refs).
+- Pushes new HoldPoses into the AnimInstance whenever an item actually changes in a hand.
+- Starts the pickup/drop montage into the correct arm slot.
+- Stores **per-hand** pending pickup data (so left and right can overlap safely).
+- Exposes `FinalizePickup(EHand Hand)`.
+
+Access pattern:
+```cpp
+UFPArmsAnimInstance* ArmsAnim = Cast<UFPArmsAnimInstance>(AnimRefMesh->GetAnimInstance());
+```
+
+The component is the single authority for what is in each hand and therefore pushes pose data and montage play commands. The AnimBP does not pull from the component.
+
+---
+
+### 4. AnimGraph Structure (AnimRef mesh)
+
+Single AnimBP on the **FPArmsMeshAnimRef** (invisible truth source).
+
+Graph order:
+```
+HoldPose_Left / HoldPose_Right Sequence Players
+        ↓
+   LeftArm / RightArm Slots   (temporary montages only)
+        ↓
+   Mirror node (Mirror Data Table)
+        ↓
+   Blend Mask combine
+        ↓
+   Output Pose → Visible mesh + Control Rig
+```
+
+- Base layer always plays the current HoldPose_L / HoldPose_R.
+- LeftArm / RightArm slots are used only for short override montages.
+- Both slots play the **same** right-arm-authored montage asset. The Mirror node that sits after the slots automatically produces correct left-side motion via the Mirror Data Table. No separate mirrored montage assets are required.
+
+The visible mesh (FPArmsMeshVisible) continues to copy the pose from AnimRef and then runs Control Rig for final IK grip adjustment. Grip target locations may still be pulled from `UHeldItemsComponent` on the visible side if convenient.
+
+---
+
+### 5. Pickup / Equip Flow (One-Handed)
+
+1. **Input** (`TryPickupOrDrop` confirms a valid pickup)
+   - Store the target item in the **per-hand** pending slot for that hand (`PendingItem[Hand]`).
+   - Begin loading the target item’s `HoldPose` from its EquippableFragment.
+
+2. **Play montage**
+   - Play the single shared DefaultPickupMontage into the correct arm slot (LeftArm or RightArm) via `PlayMontageInSlot` / `Montage_Play`.
+   - The post-slot Mirror node handles left-side correctness.
+
+3. **During the montage**
+   - As soon as the HoldPose finishes loading, push it with `SetHoldPose(Hand, LoadedPose)`.
+   - The correct pose is therefore already waiting in the base layer when the montage ends.
+   - (Pushing on load is simpler than binding MontageEnded just for the pose; the timing difference is only a frame or two.)
+
+4. **AnimNotify** (placed ~frame 9–10 of the 12-frame montage)
+   - `UAnimNotify_FinalizePickup` carries an `EHand` property (set when the notify is placed, or inferred from the playing slot).
+   - Calls `HeldItemsComponent->FinalizePickup(Hand)`.
+   - FinalizePickup for that hand:
+     - Destroys the current Unarmed actor (if present).
+     - Takes ownership of the existing world `AItemActor`.
+     - Creates / configures the Physics Control that drives the item from the AnimRef WeaponBone.
+     - Applies left-hand mesh scale flip if needed.
+     - Clears that hand’s pending data.
+
+5. **Montage ends**
+   - Slot weight returns to 0.
+   - Base graph is already playing the new HoldPose → clean settle.
+
+Because pending data is stored per hand, left and right pickups can overlap or fire in quick succession without one overwriting the other.
+
+Notify is placed a couple of frames before the end so the item begins being driven by Physics Control while the hand is still finishing the grasp.
+
+---
+
+### 6. Drop Flow (same pattern)
+
+1. Play the shared DefaultDropMontage into the correct arm slot.
+2. AnimNotify near the end performs the actual detach + `EquipUnarmed(Hand)`.
+3. Push Unarmed’s HoldPose (as soon as loaded or on the notify) so it is ready when the montage finishes.
+
+Exact blend timings remain open for tuning by the user on the montage assets.
+
+---
+
+### 7. Open Points
+
+- Exact frame for the FinalizePickup notify (currently ~9–10 of 12). Needs feel testing.
+- Drop montage length and feel relative to pickup.
+- Future Extended pose (neutral vs extended).
+- Two-handed support.
+- Optional item-specific EquipMontage override.
+- Future polish: temporarily override the Control Rig IK target to the world item being reached for during the pickup montage (so the hand homes toward the real object instead of the current held/Unarmed grip). Requires a short-lived “reach target override” that is cleared on FinalizePickup or MontageEnded. Not required for the first working version.
+
+---
+
+### 8. Implementation Checklist
+
+1. Add `HoldPose` soft reference to `UEquippableFragment`.
+2. Create `UFPArmsAnimInstance` and reparent the FPArms AnimBP.
+3. Add hard-ref `DefaultPickupMontage` and `DefaultDropMontage` to `UHeldItemsComponent`.
+4. Convert the existing 12-frame sequence into a single Montage (right-arm authored). Play it into either LeftArm or RightArm slot; the post-slot Mirror node handles the rest.
+5. Create `UAnimNotify_FinalizePickup` with `EHand` property.
+6. Implement per-hand pending storage + `FinalizePickup(EHand)` on the component (ownership + Physics Control, not skeletal-mesh attachment).
+7. Wire `SetHoldPose` calls after item changes and as soon as each HoldPose loads.
+8. Test full loop, including overlapping left + right pickups: look at item → press pickup → reach montage → notify finalizes → hold pose settles.
+
+---
+
+*Locked 2026-08-15. Updated same day with mirror-after-slot clarification, hard montage refs, per-hand pending data, Physics Control wording, and HoldPose push-on-load preference. Update when open points are resolved or when two-handed / swing support is designed.*

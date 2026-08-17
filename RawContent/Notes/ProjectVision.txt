@@ -1,0 +1,224 @@
+Project Vision Document for my UE5.8 crafting/survival/exploration game Woodcraft Survival
+
+Main feature header list. Items defined below marked with the same all caps identifier:
+FILE STRUCTURE:   File structure design
+PLAYER:           Player input, animations, Physics-based item holding/swinging system using Physics Control Component, player survival considerations like food, water, temperature, illness, status effects, health, stamina, etc.
+UI:               Minimal UI, no large grids, items stackable into storage structures and when player holds stackables.
+ITEM SYSTEM:      C++ based item system including resources, weapons/tools, containers, clothing?
+CRAFTING SYSTEM:  process for crafting items and clothing, minigames, tactile feedback
+STRUCTURE SYSTEM: Buildable structures including crafting, cooking, storage, shelter and decorative structures
+FOOD SYSTEM:      Dynamic food system with buffs and debuffs
+FIRE SYSTEM:      How starting fires and adding wood works
+CROP GROWTH:      Many crop seeds or cuttings can be propogated
+CREATURES:        Many creatures both classic and unique fantasy, as well as ambient small life. Dynamic interactive creature AI, creatures interact with one another and the player, "simulated world" feel.
+ENVIRONMENT:      90 day years, 24 minute days, realistic weather systems (rain, snow, wind?) four seasons depending on biome affect temperature/humidity which affects player, creature, crops
+
+
+FILE STRUCTURE:
+
+The goal is a relatively flat file structure with logical groupings to make navigation easy and intuitive. There is a RawContent top level folder in my repository that stores a WoodcraftSurvival.blend blender file as well as raw pre-import .fbx files for meshes, animations, and also .png files for textures, and .txt notes. The WoodcraftSurvival.blend file has the player mesh and armature, as well as the static meshes for all items. Will discuss items more in detail in item system section. In Content, here is my file system structure with basic desciptions and files or folders ending in /:
+Content/
+-WoodcraftSurvival/
+--Core/
+---PhysMaterials/
+---Game modes
+--Data/
+---Enums/
+---other basic shared data type folders
+--Effects/
+---item pickup outline material other shared materials or effects
+--Environment/
+---Levels/
+----World/
+-----map and LOD instancing (may change folder layout for a flatter file structure here later)
+--Items/
+---Shared/ shared assets for resources like materials and such
+---Resources/
+----Stick/ specific resource item folders
+-----animations, materials, data asset, mesh, textures for stick
+---Weapons/
+----Hatchets/ item type organization subfolder. May add similar organization for resources later.
+-----Shared/ shared assets for all hatchets
+------CopperHatchet/ similar structure to Stick/ with only weapon specific assets
+---Containers/ similar to Resources/ with container item specifics.
+--Player/
+---Animation/ anims, control rig, anim BPs, Mirror data table
+---Input/ input mapping contexts
+----Actions/ input actions
+---Mesh/ skin material, physics asset, skeletal mesh and skeleton assets.
+---player BP
+--Structures/ similar to items but for structure types
+--UI/ ui related textures and widget blueprints
+
+
+PLAYER:
+
+Input: various controls will be configurable in settings with accessibility options (sticky activation, and others)
+ - Q: activates Pickup/Drop mode. While holding Q, a player will pickup an equippable item they are looking at. The item is equipped to either the right hand for RMB or left hand for LMB (RMB-LMB flip toggleable in settings). If the player already holds an item in the corresponding hand, it will stack if its the same item type and stackable, otherwise the player will drop the item(s) held in that hand. more in item system section.
+ - LMB/RMB without Q: "activates" the held item causing it to enter an active state depending on the item. Weapons swing, containers enter take/put mode overriding the opposite hand's action, resources either do nothing or slightly extend for an examine action, or function as a makeshift weapon (swing a stick).
+ - R: Cancel action (ex: Cancel shooting arrow, just releasing button with drawn bow would shoot)
+ - Also basic controls: Sprint, Crouch, Inventory, and Jump.
+ - E/F/other common keys: TBD, should be useful, but pickup is handled via extend + Q. I am sure as I add functionality I will find a good use for intuitive control. 
+ - possibly LEFTALT to lock view direction?
+Animations: mostly static poses with some short animations for pickup/drop and breathing animation. Most movement is caused by physics connection and dynamic movement. Each item should have a neutral and an extended pose. Also animations for crafting minigames, maybe others. Dual FPArms skeletal mesh components, one FPArmsAnimRef that is hidden and has zero IK/procedural and acts as the source of truth for what animation should be played and where the bones should be, and a second visible FPArms mesh that just copies the pose from AnimRef and applies IK to snap the hand to a gripSocket on the held item.
+Physics based item holding: Items are connected to the WeaponBone for the corresponding hand via a Physics Control Component, tuned to feel controlable but react to player movement. The nice part of this is that the items would then also interact with trees/rocks, ground, other items, and creatures and bounce off/push them realistically. This allows for a REPO game style combat where the player attacks by swishing their screen around to smack things with the held tool. LEFTALT could allow the player to swing left and right while keeping an eye on the target maybe, to be seen when i implement these systems.
+Hand ambivaence: The player should be able to hold items in either hand and the items will have identical functionality regardless. The default "handedness" will be right handed for any action that automatically sets an animation for both hands, but can be toggled in settings. For example, the player can hold a shield in left or right hand and it will block when holding the corresponding mouse button. The player could even hold two shields one in each hand if they wanted, although their actions may clash. The physics control would take care of it hopefully.
+Survival considerations:
+- Health - The player must manage their health, health when 0 player dies. Certain foods and items can restore health or cause a healing over time effect.
+- Stamina - Stamina allows player to perform fast actions such as running or swinging items. The stamina will be a dynamic system where it fills constantly at a rate defined by the player's current state. Heavier items cause faster stamina drain when running or swinging. Certain buffs/debuffs can affect stamina regeneration. When stamina runs out, the player enters an out of breath state and the stamina regen is paused for a moment. 
+- Temperature: If the player is too hot or too cold, they will gain a negative status effect. If the player is way too hot or way too cold they gain a worse status effect.
+- Food and water: the player must eat calories to stay satiated. Hunger state may reduce stamina regen and possibly slow movement. Starvation causes further debuffs and may begin damaging the player's health.
+- status effects: The player may gain certain states like wet, hot, cold, food illness, well-fed, etc. These states may apply buffs or debuffs, or damage type weaknesses or resistances depending on the status effect.
+
+
+UI:
+
+The goal is minimal UI. Its necessary sometimes, I plan to add optional item name display and there will be an item highlight system in pickup/drop mode. The UI theme will be generally slightly transparent white, rounded edges and corners. For bars, ends will be rounded with fading colored outlines for feedback from stamina/crafting etc. Red flashing outline when stamina runs out. Green flash on crafting bar when it completes?
+For containers, if extended a small container UI will show up in the middle/bottom of the screen above the stamina/crafting progress bar location. The left side has a scrollable list of item types with count x item icon, fading/shrinking above and below but showing two items past the selected. The right side has the icon representing the container item (bowl, pot, or bag) with a line that fills up the icon, more opaque below the line depending on fill level. more on containers in item system section.
+I plan to include a survival guidebook that opens like a simple worn notebook that the player can flip through that explains each crafting recipe, with options to have all unlocked at the beginning or fill in as the resources become known to the player. Maybe also tabs for bestiary, and advancement web with links to each crafting step or related bestiary entry. The next step will be greyed out but selectable if the relevant entry is unlocked, further advancement steps will be blacked out. possibly also setting for this. advancement page shos web like graph with icons for each achievement at nodes, connected by lines. Starting from basics at bottom/left going to final achievements to the right. Hovering these icons provides a basic description. Clicking them brings the player to the corresponding page in the survival guide which details how to complete the advancement. The survival guide can be accessed and leafed through separately as well.
+Obvously need main menu, settings menu, etc. Not sure how to design these yet. For the main menu I might like to have a small simulated or recorded background that shows some creatures occasionally, interacting with the environment or each other. Maybe random backgrounds one for each biome or maybe show depending on where the player last logged out?
+Outline system: pale green/yellow/red outlines show on close enough items while in pickup/drop mode or if held container is extended, indicates whether a pickup or transfer is valid.
+
+
+ITEM SYSTEM:
+
+C++ based item system using Data Assets with C++ data fragments for item definiton, and ItemFactory for actually spawning the items in game.
+ItemInstance holds current item data, for storing and retaining data such as durability and such.
+When designing items, I include the a SOCKET_PrimaryGrip empty in blender which is imported as a socket, but only for right handed. Items are suffiently symmetrical such that mirroring the socket should be enough for left hand attachement.
+- Resources: loose resources like sticks, rocks, small stones, fibrous plant material (harvested from fibrous plants), etc. Static harvestables including boulders, trees, ore veins, clay deposits etc that break into or produce resources that can be collected. Resources can be used as crafting ingredients and some as makeshift weapons or throwables.
+- Weapons/Tools: basic tools, sharp edge allows chopping, cutting meat, slash damage. Tools are crafted from head and handle parts. more on crafting in crafting system section. Many tool types and tech levels (1: stone and bone, 2: clay, flint, and leather, 3: basic copper metalworking, 4: advanced iron tools). All tools should be usable as weapons with lower base damage. Specific weapon items have increased damage against creatures. Some tools/items will be blunt (stick, club, etc) where it can be swung and do full blunt damage in any direction. Some are one side bladed like axes. While swinging the player will try to align the blade, but the swing system should respect realistic arm twist limitations. Two sided bladed like a sword will align to the closest side when swinging. I plan to implement one handed shield items also which have a bock action, raising in front of player to block attacks. Some weapons will be two handed. These items will have two different actions, one for each hand. Usually swing and block, but spear can stab/swing and throw for secondary. Bows/slingshots will have a "throw" which is shooting, and secondary weak block.
+- Item Containers: containers are items that can store other items. The UI is as described above. Items have a size enum, S, SM, M, ML, L for storables. For example a bowl can store a bunch of S items but only a few SM items. A large pot can store a few L items but not much more. When the player is extending a container item, the other hand's extend action is overridden. On clicking with the other hand, the player will take the selected item or store one item depending if they are holding an item or not. Holding click for one second will take/store max. I will implement some way to add items from one container to another, and add items to containers on the ground as well. Some containers can hold liquids or particulates like sand or ash. These items cannot be removed from the container once added, but can be transferred to other valid containers. Once mixed, they cannot be separated. Solid items can still be added or removed. Items should be able to be dumped out on the ground with particulates and liquids dissapearing with some particle effects, maybe by holding R, the rest of the items should just spawn and drop to the ground. Containers are of significant importance to the cooking system, described below. 
+- Clothing: TBD, need some way to equip clothing, may need an additional UI element for this. May add items such as belt which would allow storing additional tools or weapons on your person, make packs wearable, etc. Need to be able to equip and unequip bags, weapons and clothing as needed. May also want to add something to be able to equip two handed/long items to back. Bows should be able to be slung over the player's shoulder also. Belt loops and sheathes can be crafted to hold compatible items. Improvised cordage belt can hold one on each side, leather belt can hold two on either side. These can be cycled through, maybe using number buttons 1 cycles left hand, 2 cycles right hand, 3 cycles back storage slot into empty hand if possible, maybe automatically storing or swapping held item if possible. backpacks, bows can be stored on back. Other long handled tools can be stored on back with craftable weapon harness. Some items cannot be stored in some storage containers. Any particulate resource such as ash, wood shavings, or sand cant be stored in weaved baskets or bags, and only in solid storages like bowls or pots.
+- More detail can be found in the ItemSystemDefinition.txt file.
+
+
+CRAFTING SYSTEM:
+
+The player will craft items using resources gathered from the world. If the player extends both hands and each are holding items that make a valid recipe, a crafting animation or minigame will activate (or prompt to activate, E?), which locks the players view and stops movement, allowing the mouse to control the player's arm for a crafting minigame.
+Some crafts will need a specific workstation such as a workbench, leatherworking bench, woodworking station, forge, or anvil. These stations will have one slot the player can drop an item onto to enable 3 item type crafts, although not all workstation crafts will require three items.
+Some crafts require multiple items of the same type, and so can use more than two or three items total but still less than three types. 
+Some craftable items must be crafted in stages, which prevents more than three item types being required for a craft.
+Some crafts require tools, tools must be held for these crafts, while other items may be in either hand or on the workstation slot. 
+Examples of minigames:
+- grinding two stones together to form sharpened stone (stone axe head), hand/ground craft.
+- Flint knapping minigame - player holds hammer, holds flint opposite hand, at workbench, small circles appear over flint indicating how hard to slam hammer down to make progress toward craft. Similar for forging metal crafts, with tongs holding hot metal item.
+- Twist cordage minigame, circle mouse left and right repeating. Same minigame action may be used for simple combination crafts like tying a stone axe head to a stick with cordage.
+Tags: Some resources or tools will be used for identical uses, so I'll implement gameplay tags to check if a held item has corresponding tags if it can be one of multiple items. Otherwise I'll check the item name. Some crafting recipe examples: Meat on a stick - any medium meat + stick, can be held extended over fire to cook. Copper sword - Long copper blade + short handle. Pot of lye - pot + water + ash, for preparing unprocessed hides for fleshing. Water can be collected by extending bowl or pot into a water source. wood shavings - Stick + any knife. Also produced from other crafts involving shaping wood. Bone armor plate - 2 Large Bones, 4 bone pieces, 2 cordage. Bone chest armor - 2 bone plates, 2 cordage.
+Progression: the player will work their way up through the tiers of items. Most crafted tool components have a tier, handles, heads, and binding/string. There are short and long handles. Short and long blades, small and large axe heads, and others. Combining these creates tools or weapons. For example, Tier 1 short handle is a basic stick. Tier 2 is a carved handle from wood chunk (firewood piece). Tier 3 requires a cordage wrap grip. Tier 4 requires further processing (TBD, sealant or iron pins, idk yet). Heads require at least same tier - 1 handles. head tiers affect head durability and damage/effectiveness. Handle tiers affect handle durability. Heads and handles can break separately and can be recombined with repaired or replaced parts. For tools that are bound with cordage this destroys the cordage. Basic progression ramp: The player starts by crafting a sharpened stone from two stones. The player uses it to cut a tree. The player clears branches and chops tree into logs. use logs to craft basic workbench. Collect yucca leaves or bulrush stems, craft plant fibers, twist fibers to cordage. use workbench to craft stone axe (cordage, stick, sharpened stone). Use stone axe to chop logs into wood chunks. Craft wooden mallet (wood chunk, cordage, stick). Use wooden mallet for flint knapping. Craft flint knife (flint blade, cordage, short handle). Use flint blade to process animal carcass to retrieve tendons and unprocessed hide. (animals can be harvested for meat and bones with any sharp tool but requires knife for hide and tendons). Dry tendons, smash with blunt tool into fibers, twist into sinew cordage (Tier 2 cordage). Process hide (soak with ash+water in fired clay pot (2 clay), place on stretching frame and do de-fleshing minigame (scrape with knife). Soak defleshed hide in tanning solution (water+wood shavings boiled), staking post minigame results in processed hide (leather). Craft bellows with leather. Also can dry de-fleshed hide for rawhide as an ingredient for leather armor. Bellows used at crude bloomery furnace with charcoal and ore to smelt copper. Copper worked at forge + crude stone anvil (large stone, carried with two hands). Combine two copper ingots for copper billet. Copper billet craft to copper anvil. Stone anvil breaks, copper anvil lasts indefinitely for copper crafts. forge Copper pickaxe head, combine with T1 short handle (basic carved handle). Harvest iron ore with copper pickaxe. Smelt iron ore into iron bloom. Work bloom into ingot (craft at forge/anvil). Now repeat process to make iron anvil and now can make all iron tools. Crude bloomery furnace and charcoal pits break, later can make brick mold from wood plank with copper adze at woodworking station, can make brick charcoal pit and brick bloomery furnace which do not break. Each tier has armor sets, bone armor (2 bone plates (large bones, bone pieces, cordage)), leather armor (rawhide, leather, sinew cordage), copper plate armor, and iron plate armor. Each provides more protection than the last, enabling the player to face tougher enemies to retrieve better crafting materials. Crafting/progression notes: Crafting selection method: When player holds both activation buttons and crafting is initiated, a selector will appear beneath the progress bar. A/D cycles through available recipes, showing adjacent recipes smaller and more transparent. For most crafts, the crafting can be cancelled by releasing LMB or RMB. For flint knapping and forging, the recipe may be changed until the progress reaches 50%, then it is locked in. For forging, the piece must be reheated if it grows too cold. If the player hits items too hard, a vertical bar will fill towards a broken item icon on the right of screen. If bar fills, craft fails, returns flint shards (arrowhead material) or 1-2 metal scrap (can be melted down to try again).
+
+
+STRUCTURE SYSTEM:
+
+The player can build structures, foundations, walls, roof, Storage containers, workstations, campfires, etc by entering build mode while holding a hammer (B maybe). The player places blueprints (ghost versions of structures) which need to be built by adding resources one by one, sometimes in a specific order. The required resources are shown at bottom of screen in a light white text UI when looking at an unfinished blueprint. Will need to design item dependency indication. Structures can possibly be damaged and repaired later?
+Types of structures:
+- crafting structures: workbench, leatherworking bench, woodworking station, forge, or anvil, maybe more (mortal and pestle?)
+- cooking structure: campfires, drying rack when built over campfire, advanced include brick oven, cooking grate, etc.
+- Storage structures: specific structures to store resources in bulk. for example a stick storage can be built and can stack many sticks using an instanced static mesh component to show visibly, storing the item instance objects as data. Items can be stored and retrieved from these similar to held containers while holding Q and looking directly at a storage structure (this functionality needs to be confirmed later)
+- Shelter structures: this includes all walls, roofs, etc. Comes in tiers, must be built peice by peice or in stages. advanced brick walls require mortar between layers, and I may add a way to paint walls later. Structures might degrade if not covered by a roof similar to valhiem, but if I add this I would make it very forgiving to where you'd have to leave it out a long time before degradation.
+- decorative structures: tables, chairs, windows, etc. May add light functionality later like being able to place items nicely on tables or shelves with a placement system that uses the building ghost path?
+- may also add farming structures like planter boxes.. or may just allow tilled soil directly on the ground or both not sure yet.
+
+
+FOOD SYSTEM:
+
+Dynamic food system with buffs and debuffs:
+- Containers start in "General Mode" (can hold small items of appropriate size classes).
+- Adding any food ingredient to an empty container locks it into "Food Mode"
+- In Food Mode it only accepts further food ingredients.
+- Non-food items already present block food from being added.
+- Plate containers only ever accept food ingredients.
+- Emptying a Food Mode container returns it to General Mode.
+Food Formats:
+- Raw Single
+- Cooked Single (e.g. meat on a stick)
+- Raw Mixed Dish (edible only if no raw meat is present)
+- Cooked Mixed Dish
+- Preserved (pickled, dried, etc.)
+Edibility rules:
+- Raw meat is edible but clearly marked dangerous (small skull and crossbones UI element maybe? - high chance of sickness).
+- Any dish containing raw meat is unsafe until the meat is cooked.
+- Some ingredients have different effects raw vs cooked.
+Eating:
+- Activate a food container + Hold E? = eat/drink 1 portion.
+- Works for bowls, pots, plates, finished dishes, and valid raw plant mixtures.
+- Solids can also be retrieved and eaten from the hand as normal.
+- Vegetables/fruit can be eaten raw from the hand until clay containers exist.
+Cooking & Transformation:
+- Non-wooden bowls and plates and pots can be heated by placing on a fire or grate, thus cooking the ingredients/mixtures inside them.
+- Successful cooking of only edible ingredients turns the container into a "Food Container" with stats derived from ingredients.
+- Equipment progression: Clay (bowl, plate, jar, simple baking dish) → Copper (pan, pot) → Iron (improved versions).
+Skewer / Small Animal crafting Flow:
+- Live small animal + knife = kill.
+- Dead small animal + knife = butcher → small unprepared animal skin + small cleaned carcass.
+- small cleaned carcass + knife = several small meat peices.
+- small cleaned carcass + stick (ground craft) = “X on a Stick”.
+- Only medium whole meat cuts or small cleaned carcasses go on skewers.
+Fermentation / Brewing: 
+- Passive process in non-heated containers.
+- Honey+water transforms into Mead; Fruit+water transforms into Wine; Honey + Fruit + water transforms into Flavored Mead.
+- Procedural naming based on ingredients.
+- From-scratch fermentation batches have a failure chance; adding starter (one portion with ladle or pour out from bowl) from a previous successful batch (or adding more raw ingredients to depleted batch, if not already turning to vinegar) guarantees success
+- Further fermentation can produce vinegar (still named for what produced it?).
+- Time scaled to the 24-minute day cycle (roughly 1 in-game day ≈ 4 real-world process days as a starting point).
+Spoilage and Preservation:
+- Items have spoilage tiers (Very Fast to Very Slow).
+- Cooked food lasts longer than raw.
+- While a large pot is kept hot, spoilage is reset
+- container + vinegar + valid ingredient = pickling (long shelf life, reduced original effect + vinegar bonus).
+- Drying/smoking for meat and some plants.
+- Rotten food can be used as trap bait (optional mild “bad smell” effect).
+Living Pot / Adding Ingredients Over Time:
+- Explicit `CurrentPortions` counter (source of truth for how many portions remain).
+- On eat: decrement portions, reduce all ingredients proportionally, delete any ingredient below a small threshold (~0.05–0.1).
+- Eating does not recalculate name or effects.
+- Adding a new ingredient immediately recalculates name + effects.
+- After sufficient cooking time since the last ingredient addition, a second recalculation occurs.
+- This allows a continuously maintained pot to evolve over time.
+Effects & Satisfaction:
+- Ingredients provide base effects (Warmth, strength?, Stamina buff, etc.).
+- Raw consumption = weak version or different effect for some plant items.
+- Being a prominent ingredient in a prepared dish applies a "Satisfaction Multiplier" (stronger/longer effect).
+- Multiple different special effects in one dish dilute each other, encouraging focused recipes.
+- Vinegar and certain preserved ingredients can act as enhancers, as well as various seasonings and spices that can be looted or crafted.
+- Procedural dish names are generated from ingredients.
+
+
+FIRE SYSTEM:
+
+The player places a small fire blueprint with build menu button. The player can craft a bow drill and using that and a wood chunk can start the small fire after sticks and wood shavings are added. A small fire can be upgraded to a regular fire with firewood (wood chunks). A fire can be upgraded to a bonfire with logs. Each lasts significantly longer than the last and burns down in stages, and can be stoked unless fully burned out which takes some time. When fully burned out they leave ash and some charcoal. A bonfire nearly burned out, stoked with firewood, turns into a normal fire. A cooking rack can be built above a normal fire for cooking or a small fire for smoking. Other notes: Logs must have branches removed before they can be picked up (two hands) or used. All branches can be removed first or can remove per log depending on where the player hits the tree mesh. Logs can be chopped into wood chunks. structure Drying racks can turn smoked meat into jerky, defleshed hide into rawhide, tendons into dried tendons, etc.
+
+
+CROP GROWTH:
+
+Many crop seeds or cuttings can be propagated. Wild plants appear in various stages depending on season/time of year; seeding-stage plants yield many seeds.
+
+Detailed design lives in Notes/HarvestableSystem/HarvestableSystemDefinition.txt (section 7, locked 2026-08-16).
+
+Summary of locked direction:
+- Crops are Harvestables (Definition → Instance → Actor + fragments).
+- Seeds = normal Size S pile Items (container-compatible, planting consumes uses; some later edible).
+- Cuttings = larger Items that start the plant at an advanced stage + larger scale.
+- MVP planting = direct on ground + per-crop MinPlantDistance check. No tilling/voxels yet. Planter boxes later as Structures. Grid/hex snap can reuse structure blueprints later.
+- Immediate tiny Sprout on plant (no invisible phase). Stages: Sprout → Seedling → Growing → optional Flowering → Fruiting and/or Seeding. Smooth scale-up in early stages; mesh swaps at major boundaries.
+- Growth = stage durations + continuous progress × environmental multipliers (season, soil sampled at plant time, water, health). Target ~15–20 in-game days for a carrot-like plant under normal conditions.
+- Multi-harvest vs single-harvest supported. Yields are stage-specific (produce vs seed can shift).
+
+
+CREATURES:
+
+Categories:
+- Ambient/tiny animals: tiny frogs, bugs, etc that jump or fly away when the player approaches. Maybe fireflies but i may implement those as just effects. I know there is a method of implementing these small animals in a more efficient manner than full actors.
+- Small game: rabbits, birds, lizards, etc. Small creatures that produce small carcasses when killed and harvested. Rabbits can be captured and/or domesticated over time for a more reliable food source. Maybe some small creatures that could attack the player like giant bugs and such.
+- Medium animals: some predators, some prey. Deer, wolves, and a few fantasy creatures such as the dual igniting liquid spitting Salamander that likes to hang around oil/tar pools near Tar Toads.
+- Large animals: Mostly predators, bears, an opportunistic slow predator Tar Toad that spits globs of tar/oil from pools in desert areas to slow prey, and the Desert Wyvern as described in the DesertWyvern.txt document, an offshoot from the monitor lizard family that evolved flight.
+Behavior and AI:
+- large document defined in CreatureAIDesignSummary.txt.
+- Summary: The creature AI system is designed to create a living, reactive world where animals feel like distinct individuals within their species rather than generic enemies. Combat and encounters are intentionally multidimensional—risky and potentially lethal, yet usually avoidable through observation, preparation, stealth, or non-lethal interaction—so that engaging becomes a deliberate, high-reward choice rather than the default. Creatures assess the player and each other through a combination of personality, current state, size, and role, leading to believable decisions: a bold hungry wolf may commit to a fight that a cautious one would abandon, packs form and dissolve dynamically, and larger threats like the wyvern shift tactics based on injury and confidence. The overall intention is to reward player attention and agency while keeping every creature readable, species-true, and performance-friendly, producing emergent moments that feel grounded and memorable instead of scripted or one-dimensional.
+
+
+ENVIRONMENT:
+
+Time scale: As described previously, 90 day years, 24 minute days
+Weather: realistic weather systems (rain, snow, windstorms, heatwave) affect player status effects, wet, cold, hot, etc. Also affect crop growth and health, and some animal behaviors may change depending on the weather and conditions dynamically.
+Seasons: Affect common weather patterns, also affect temperature and humidity, some crops do better during some seasons but I could just implement this via weather patterns and temperature affecting the crops since thats really how it is irl.
+Biomes and microbiomes: Different areas have different base temperatures, are affected by weather differently, and have unique flora and fauna as well as physical environment features including rock structures, tree types and density, water (lakes, rivers), mountains, etc. Ideally I can generate what biome an area is based on those features such as water proximity and elevation, and nearby mountains and such, but I could do it reverse depending on how UE5.8 works. Some areas like caves, nearby rivers or lakes, or other specific small areas could have microbiome climates with special creatures or plant resources. Not sure how best to implement caves and could wait on that a while.
