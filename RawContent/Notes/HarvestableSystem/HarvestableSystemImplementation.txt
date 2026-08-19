@@ -34,7 +34,7 @@ Two virtuals that exactly mirror the Item system:
 ```cpp
 /** Called only once when a new UHarvestableInstance is first created.
  *  Use for default runtime values (CurrentHealth = MaxHealth, growth progress = 0, etc.). */
-virtual void OnInstanceCreated(UHarvestableInstance* Instance) {}
+virtual void OnHarvestableInstanceCreated(UHarvestableInstance* Instance) {}
 
 /** Called every time an AHarvestableActor is spawned / initialized.
  *  Use only for actor-side setup (collision responses, mesh, components).
@@ -70,7 +70,7 @@ AHarvestableActor*    SpawnActorFromInstance(UHarvestableInstance* Instance, con
 void                  PromoteToInstance(AHarvestableActor* Actor); // creates Instance on first meaningful interaction
 ```
 
-- `CreateInstanceFromDefinition` creates the Instance and calls `Fragment->OnInstanceCreated` on all fragments.
+- `CreateInstanceFromDefinition` creates the Instance and calls `Fragment->OnHarvestableInstanceCreated` on all fragments.
 - `SpawnActorFromInstance` spawns the Actor and calls `Actor->InitializeFromInstance`.
 - `SpawnActorFromDefinition` is the convenience / world-gen path (no Instance yet).
 - `PromoteToInstance` is called by the Actor the first time state must be persisted (first damage that matters, etc.).
@@ -143,7 +143,7 @@ Exact calculation of final damage (tool effectiveness, material hardness, etc.) 
 
 **UHealthHarvestableFragment**
 - `MaxHealth` (EditDefaultsOnly on the fragment)
-- OnInstanceCreated: sets `Instance->CurrentHealth = MaxHealth`
+- OnHarvestableInstanceCreated: sets `Instance->CurrentHealth = MaxHealth`
 - Provides a simple way for the Actor / damage path to read MaxHealth
 
 **Yield / Death logic**

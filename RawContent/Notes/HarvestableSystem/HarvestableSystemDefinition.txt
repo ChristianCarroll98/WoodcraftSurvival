@@ -23,7 +23,7 @@
 
 ```cpp
 /** Called once when a UHarvestableInstance is first created. */
-virtual void OnInstanceCreated(UHarvestableInstance* Instance) {}
+virtual void OnHarvestableInstanceCreated(UHarvestableInstance* Instance) {}
 
 /** Called every time an AHarvestableActor is spawned/initialized. */
 virtual void OnHarvestableSpawned(AHarvestableActor* Actor) {}
