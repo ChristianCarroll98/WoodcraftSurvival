@@ -1,12 +1,22 @@
 Woodcraft Survival Notes
 
-notes on ORM textures:
-Step 1: Fix the Texture Settings (Crucial)Import your ORM texture into Unreal Engine.Double-click the texture to open its settings.In the right panel, uncheck the box for SRGB.Change the Compression Settings dropdown to Masks (no sRGB).If you skip this, Unreal applies gamma correction to your math channels, making your roughness channel way darker (shinier) than it actually is.
+ORM Texture note:
+In Unreal Engine 5.8, ORM textures must have sRGB disabled and compression set to "Masks" to ensure Occlusion, Roughness, and Metalness channels are treated as linear math data rather than color, preventing visual distortions [1]. For C++ projects, this is achieved by setting SRGB = false and CompressionSettings = TC_Masks on the UTexture2D object to avoid improper gamma correction on packed data [1]. You can read more about texture optimization in Unreal Engine's official documentation. [1, 2, 3] 
+[1] [https://github.com](https://github.com/EmbarrassingMoment/RGBPackingTool)
+[2] [https://www.youtube.com](https://www.youtube.com/watch?v=9GgZRO4Uxso)
+[3] [https://dev.epicgames.com](https://dev.epicgames.com/community/learning/knowledge-base/a3vO/unreal-engine-why-is-my-texture-streaming-pool-giving-me-a-warning)
+
 
 print syntax:
-FString FullString = TEXT("Player sees item: ") + ItemName;
-if (GEngine) GEngine->AddOnScreenDebugMessage(0, 5.0f, FColor::Cyan, FullString);
+if (GEngine) GEngine->AddOnScreenDebugMessage
+(
+	0, // unique comment ID, replaces print line with same ID, -1 means always new print line
+	5.0f, // duration
+	FColor::Cyan, // color
+	TEXT("comment string") // comment FString. Can concatenate or add variables and format as long as its an FString.
+);
 
-current issues:
+current issues/working task list:
 
-Fix picking up items and passing animations from picked up items to the anim BP.
+- Create basic tree mesh (can be placeholder, just needs collision primitive for damage system)
+- implement foundation for HarvestableSystem before futher item testing can continue

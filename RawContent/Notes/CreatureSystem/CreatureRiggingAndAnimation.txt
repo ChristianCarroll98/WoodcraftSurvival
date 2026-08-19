@@ -1,0 +1,253 @@
+**Creature Rigging & Animation Workflow**  
+*Woodcraft Survival – UE 5.8 / Blender 5.2*  
+*Tracking document for skeleton, rigging, shape keys, and animation process across all creatures*  
+*(Created 2026-08-19 – living document)*
+
+This document is the central reference for how creatures are rigged and prepared for animation.  
+It covers general process, recommended baselines, facial/expression systems, and records specific decisions made for individual species (starting with the foundation wolf).
+
+It sits alongside:
+- `CreatureAISystemDefinition.txt`
+- `CreatureMaterialsAndAppearance.txt`
+
+---
+
+### 1. Goals
+
+- Clean, maintainable skeletons suitable for a solo developer.
+- Good deformation for locomotion, combat, and expression without excessive bone counts.
+- Consistent hierarchy and naming so new creatures can reuse animation patterns and AnimBP logic where possible.
+- Support both realistic movement needs and the project’s stylized (edge-shaded, flat color, polygonal) art direction.
+- Shape keys + bones used pragmatically — prefer the cheapest solution that still reads clearly.
+- Easy export path to Unreal Engine 5.8 (clean deform bones, morph targets, consistent orientation).
+
+---
+
+### 2. General Rigging Process
+
+#### 2.1 High-Level Steps (Blender)
+
+1. Place **Root** bone first (centered in pelvic mass for quadrupeds).
+2. Build spine chain forward from Root.
+3. Add neck + head.
+4. Add tail (parented to Root or last relevant spine bone).
+5. Build hind legs (direct from Root).
+6. Build front legs (from Chest via Shoulder/Scapula bones).
+7. Add facial bones (Jaw, Ears).
+8. Create shape keys for expressions that bones cannot handle cleanly.
+9. Weight paint / test deformation in Pose Mode.
+10. Clean hierarchy, name consistently, apply transforms, export.
+
+#### 2.2 Core Hierarchy Philosophy
+
+- **Root** = center of pelvic mass (not surface, not high at the tail root). Slightly lower and centered for better volume and hip rotation feel.
+- Hind legs attach directly to Root (pelvis is rigid in real life).
+- Front legs attach to **Chest** via dedicated **Shoulder (Scapula)** bones (shoulder blade is mobile).
+- Keep deformation bones close to the center of the volume they influence.
+- Prefer slightly bent rest poses at major joints (knee, hock, elbow) for better IK and deformation later.
+
+#### 2.3 Bone Orientation & Roll (Critical)
+
+- Always enable **Axes** display while working.
+- Test every major joint in Pose Mode by rotating on local X — the limb must fold in the anatomically correct direction.
+- Thigh (hind): head at hip socket, tail at knee. Local X should bend the knee **forward**.
+- Consistent roll down each leg chain is more important than any single “correct” axis direction, as long as left and right match.
+- Avoid 180° flips that cause reverse bending.
+
+#### 2.4 Front vs Hind Legs
+
+| Leg Type   | Attachment Point          | Intermediate Bone?     | Notes                                      |
+|------------|---------------------------|------------------------|--------------------------------------------|
+| Hind       | Root (pelvis)             | No                     | Direct Thigh.L / Thigh.R                   |
+| Front      | Chest                     | Yes – Shoulder/Scapula | Shoulder bone → UpperArm                   |
+
+Shoulder bone: short, head near top of shoulder/withers, angled down the scapula direction.
+
+#### 2.5 Toes / Digits
+
+- Low-poly / stylized creatures: **1 bone per foot** is sufficient.
+- Higher detail only if specific toe-spread or grasping animations are required.
+
+---
+
+### 3. Recommended Baseline Bone Counts
+
+These are starting points. Stylized / edge-shaded creatures can lean lower; more realistic or highly expressive creatures can go slightly higher.
+
+| Section          | Recommended          | Notes                                              |
+|------------------|----------------------|----------------------------------------------------|
+| Spine (torso)    | Root + 2 + Chest     | 2 mid-spine bones preferred for flex               |
+| Neck             | 3 + Head             | Good look-around range without excess              |
+| Tail             | 6–7                  | 6 is acceptable for stylized; 7 is smoother        |
+| Hind leg         | Thigh → Shin → Foot → Toe (1) | Direct from Root                          |
+| Front leg        | Shoulder → UpperArm → Forearm → Foot → Toe (1) | From Chest                |
+| Ears             | Base + Tip (per ear) | 3 bones only if extra mid control is needed        |
+| Jaw              | 1                    | Lower jaw only                                     |
+
+**Tail note:** For intentionally polygonal / edge-shaded creatures, start with 6 and only add more if deformation feels too segmented.
+
+---
+
+### 4. Facial & Expression System
+
+#### 4.1 Bones (parented to Head)
+
+- **Jaw** — one lower jaw bone. Head near hinge point, tail toward chin/front of muzzle.
+- **Ears** — EarBase.L/R + EarTip.L/R (parented to Head). Sufficient for pinning, rotating, and basic expression.
+
+#### 4.2 Shape Keys (Morph Targets)
+
+Preferred for deformations that bones handle poorly (lips, detailed eye changes, etc.).
+
+**Current standard set:**
+
+| Shape Key       | Purpose                                      | Notes / Values                          |
+|-----------------|----------------------------------------------|-----------------------------------------|
+| Snarl           | Raise upper lips, expose teeth + front gums  | Basis = lips covering teeth slightly   |
+| Eyes            | Multi-purpose eye state                      | 0.0 = closed, ~0.7 = normal, 1.0 = wide |
+
+- Snarl can optionally be driven by Jaw bone rotation (Driver) so it intensifies as the mouth opens aggressively.
+- Eyes shape key is driven dynamically in-game. Combine with material work (see below).
+
+**Topology rule:** Shape keys cannot change topology. You may move vertices freely (including collapsing an eye quad visually) but you cannot merge/combine vertices.
+
+#### 4.3 Material Interaction (Eyes)
+
+- Eyes use a Dynamic Material Instance.
+- Emissive is enabled at night / in darkness (eyeshine).
+- When the Eyes shape key reaches **0.0** (fully closed), turn the emissive off (or to zero intensity).
+- Result: the glowing eye shape itself appears to blink closed.
+
+This combination (geometry collapse + emissive shut-off) is the preferred blink solution for stylized creatures.
+
+#### 4.4 Optional / Future Shape Keys
+
+- Separate left/right Snarl variants — low priority.
+- Dedicated MouthOpen / Roar morph that works with the jaw bone — nice-to-have for wide opens.
+- Additional eye or brow morphs — only if the face feels too static after AI behaviors are in.
+
+---
+
+### 5. Species-Specific Decisions
+
+Detailed locked decisions for individual creatures now live in the `Creatures/` subfolder:
+
+- **Wolf** (foundation) → `Creatures/Wolf.txt`  
+  Contains skeleton counts, root placement, shape keys, behavior patterns, and animation priority notes for the wolf.
+
+- **Desert Wyvern** → `Creatures/DesertWyvern.txt`
+
+When a new creature is added, create a corresponding file under `Creatures/` and keep only general process and shared baselines in this document.
+
+---
+
+### 6. Full Animation Vision – Wolf (End Product)
+
+This is the complete set we ultimately want for a living, readable wolf.  
+Many entries are explicitly **polish-stage** and should not block the foundation AI / locomotion work.
+
+#### 6.1 Core Locomotion (Foundation – do first)
+- Idle (standing, weight shift, breathing)
+- Walk
+- Trot (primary travel gait)
+- Run / canter or strong trot (one fast gait is enough at first)
+- Turn-in-place / tight turns (or strong directional variants that work with movement)
+
+#### 6.2 Combat & Threat (Foundation + early expansion)
+- Alert / focus
+- Growl / intimidate / threat display
+- Bite / lunge (one solid montage minimum)
+- Optional later: multiple attack variants, circle, dodge / sidestep, defensive snap
+- Hit reaction / flinch
+- Death (or clean transition into ragdoll)
+
+#### 6.3 Ecological & Rest (High value, add soon after core)
+- Sit (+ sit → stand)
+- Lie down / rest (+ get-up)
+- Howl (standing; sitting/lying variants later)
+- Sniff (ground and/or air)
+- Look around / head sweeps (can blend with dynamic Look-At)
+
+#### 6.4 Flavor / “Alive” Idles (Polish – make nearby wolves feel alive)
+- Scratch (ear, neck, side)
+- Shake (wet / after combat / general)
+- Stretch / yawn
+- Panting (see §6.6)
+- Ear twitches, tail swishes, subtle weight shifts (additive or light procedural)
+- Eat / chew / drink (when interacting with food or water)
+- Mark / scrape (low priority)
+
+#### 6.5 Social / Future Systems
+- Play bow and related play animations (useful once pack or taming exists)
+- Submission / passive postures
+- Greeting / investigative mutual sniff
+- **Taming / befriending related** (explicitly future):
+  - Cautious approach / soft body language
+  - Accepting touch or food
+  - Following at heel / relaxed companion idle
+  - Happy / affiliative expressions
+  These can be added when the taming system is designed; the underlying facial and posture systems should already support them.
+
+#### 6.6 Panting, Tongue, and Small Living Details
+
+Wolves pant to cool themselves (rapid shallow breathing + tongue). They can also show tongue in play, submission, or relaxed states. For a stylized but alive creature this is high-value feedback, especially when the player is close.
+
+**Recommended implementation approach (fits existing facial system):**
+- **Jaw bone** already present – use it for mouth opening during pant / howl / attack.
+- Add a simple **Tongue** bone (or a short chain) parented under the jaw, **or** a Tongue shape key / morph target.
+- Panting = looping or semi-looping animation (or additive layer) that opens the jaw slightly and moves the tongue, combined with a faster breathing cycle on the chest/spine.
+- Drive intensity from runtime state (high temperature, recent exertion, low stamina-equivalent, or certain emotional states).
+- When Eyes shape key goes to 0 (blink), keep tongue/pant logic independent so the face still reads correctly.
+
+This keeps the existing Snarl + Eyes shape-key approach intact while adding the “lolling tongue / pant” readability that makes a nearby wolf feel alive.
+
+Other cheap living details that pair well:
+- Occasional ear flicks (animation or simple procedural)
+- Tail base sway / curl driven lightly by state (alert vs relaxed vs aggressive)
+- Subtle head micro-movements when in Idle or Investigate
+
+#### 6.7 Priority Summary for Implementation
+
+| Stage              | Focus                                      | Goal                                      |
+|--------------------|--------------------------------------------|-------------------------------------------|
+| Foundation         | §6.1 + core of §6.2 + sit/lie/howl         | AI loop testable and readable             |
+| Early expansion    | Sniff, look-around, better combat variants | Stronger ecological + combat feel         |
+| Polish             | Full flavor set + panting/tongue + additives | Nearby creatures feel truly alive         |
+| Future systems     | Taming / pack social set                   | Support befriending and richer social AI  |
+
+---
+
+### 7. Open Items / Needs Further Discussion
+
+Mark these for future decisions or testing:
+
+- [ ] Exact rest-pose bend amounts at knee / hock / elbow (how much pre-bend is ideal for this mesh).
+- [ ] Final bone naming convention (to be standardized across all creatures).
+- [ ] Whether to use Blender Rigify wolf meta-rig as starting point or fully manual for maximum control.
+- [ ] Control rig / IK setup approach in Blender vs handling more in Unreal Control Rig / AnimBP.
+- [ ] How aggressively to drive Snarl from Jaw rotation vs keeping it fully independent.
+- [ ] Whether a simple MouthOpen shape key is needed in addition to the jaw bone for wide roars / pants.
+- [ ] Tongue implementation choice: bone vs shape key (or both) for panting / lolling.
+- [ ] LOD skeleton reduction strategy (which bones can be removed at distance).
+- [ ] Export settings checklist specific to UE 5.8 (axis conversion, morph target naming, etc.).
+- [ ] Foot IK approach and when to introduce it (after basic locomotion is solid).
+- [ ] Exact AnimBP structure (Blend Spaces, layered locomotion, montage slots, Look-At, additive panting).
+
+---
+
+### 8. Future Creature Workflow Checklist
+
+When adding a new creature:
+
+1. Decide size class and locomotion type (quad, biped, flyer, etc.).
+2. Apply baseline bone counts from Section 3, adjusting for style and anatomy.
+3. Follow hierarchy rules in Section 2.
+4. Add facial bones + shape keys only as needed (reuse the Eyes multi-value pattern where possible).
+5. Record species-specific decisions in a new subsection under Section 5 (or a dedicated species file if complex).
+6. Decide which subset of the animation vision (locomotion / combat / ecological / flavor) is required for that creature’s first playable version.
+7. Test major deformation poses before heavy weight painting.
+8. Update this document with any new general lessons learned.
+
+---
+
+*End of document – update as decisions are locked or new creatures are added.*

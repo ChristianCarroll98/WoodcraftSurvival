@@ -1,5 +1,5 @@
 **Full Description of the Intended Item System**  
-*(Updated 2026-08-15 – Pickup/Drop implemented, collision hybrid approach, GetIsUnarmed)*
+*(Updated 2026-08-19 – Fragment naming convention locked to <Capability>ItemFragment; previous content from 2026-08-15 still authoritative)*
 
 ### 1. High-Level Goals
 - Fully data-driven item definitions using Primary Data Assets + Fragments.
@@ -79,16 +79,21 @@ enum class EHand : uint8
 
 ### 3. Equippable System & Collision (Finalized 2026-08-15)
 
-**UEquippableFragment**  
+**UEquippableItemFragment**  
 Currently minimal (`bTwoHanded`).  
 In `OnItemSpawned` it applies the specialized equippable response (see below).
+
+**Naming convention (locked 2026-08-19)**  
+Concrete Item fragments use the form `<Capability>ItemFragment` (e.g. `UEquippableItemFragment`, `UDurabilityItemFragment`).  
+The abstract base remains `UItemFragment`.  
+This keeps Item and Harvestable fragment families clearly distinct.
 
 **Collision Approach (hybrid – locked)**  
 - Base collision settings come from the **“Item” Collision Profile** (Project Settings → Collision → Presets):
   - Object Type = `Item`
   - Collision Enabled = QueryAndPhysics (or as desired)
   - Common responses (WorldStatic, WorldDynamic, Pawn, etc.)
-- EquippableFragment then overrides only the specialized channel **after** the profile is applied:
+- EquippableItemFragment then overrides only the specialized channel **after** the profile is applied:
 
 ```cpp
 // Correct order – profile first, then specialized response
@@ -100,7 +105,7 @@ PrimaryMeshComponent->SetCollisionResponseToChannel(TRACE_EQUIPPABLE, ECR_Block)
 
 - `TRACE_EQUIPPABLE` **must** be `ECR_Block` (not Overlap).  
   `SweepSingleByChannel` only generates hits against Block responses.
-- This keeps the bulk of collision data in one editable profile while letting the Equippable fragment own its single responsibility.
+- This keeps the bulk of collision data in one editable profile while letting the EquippableItemFragment own its single responsibility.
 - Both Primary and Secondary meshes receive the same treatment.
 
 **Hand Ownership**  
@@ -226,7 +231,7 @@ bool GetIsUnarmed(EHand Hand) const;
 - Basic hold feel
 - Unarmed approach (Definition only, spawn/destroy actor)
 - **Basic TryPickup / TryDrop / TryPickupOrDrop + GetIsUnarmed** (sphere sweep on TRACE_EQUIPPABLE)
-- Hybrid collision setup (Item profile + EquippableFragment sets TRACE_EQUIPPABLE = Block)
+- Hybrid collision setup (Item profile + EquippableItemFragment sets TRACE_EQUIPPABLE = Block)
 - Pickup and drop fully functional end-to-end (including left-hand mirroring)
 
 **In progress / Next**

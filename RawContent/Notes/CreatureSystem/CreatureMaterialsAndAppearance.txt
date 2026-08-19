@@ -1,0 +1,136 @@
+**Creature Materials & Appearance System**  
+*Woodcraft Survival – UE 5.8 / Blender 5.2*  
+*Design locked as of 2026-08-19 (core direction). Details to be refined during implementation.*
+
+### Goals
+- Readable, flat-shaded creatures with hard value breaks (back vs underside, membrane vs body).
+- Per-individual color variation without unique materials per creature.
+- Support for multiple material slots (required for double-sided wyvern wings, independent eyes, etc.).
+- Clean separation between appearance configuration (Definition / Fragments) and runtime driving (Actor / State Tree / Context).
+- Highly shareable across species via data only.
+- Minimal runtime cost.
+
+### Core Data Structures
+
+**FCreatureColorRange** (reusable)
+```cpp
+USTRUCT(BlueprintType)
+struct FCreatureColorRange
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditDefaultsOnly, Category = "Color")
+    FLinearColor CenterColor = FLinearColor::White;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Color", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float HueVariation = 0.05f;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Color", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float SaturationVariation = 0.1f;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Color", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float ValueVariation = 0.08f;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Color")
+    float Weight = 1.0f;
+};
+```
+- One entry with all variation = 0 → fixed color (clean and versatile).
+- Weighted random selection + HSV variation around CenterColor produces natural individual differences.
+
+**ECreatureMaterialRole**
+```cpp
+UENUM(BlueprintType)
+enum class ECreatureMaterialRole : uint8
+{
+    Body,
+    Eyes,
+    Membrane,   // wyvern wings etc. (Two-Sided material)
+    Blood,      // optional dedicated overlay or just a parameter target
+    // expand only when needed
+};
+```
+
+**FCreatureMaterialSlotConfig**
+```cpp
+USTRUCT(BlueprintType)
+struct FCreatureMaterialSlotConfig
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditDefaultsOnly)
+    FName SlotName;                     // matches material slot on the skeletal mesh
+
+    UPROPERTY(EditDefaultsOnly)
+    TArray<FCreatureColorRange> ColorRanges;
+
+    UPROPERTY(EditDefaultsOnly)
+    TSoftObjectPtr<UMaterialInterface> BaseMaterial;  // optional override
+
+    UPROPERTY(EditDefaultsOnly)
+    TArray<ECreatureMaterialRole> Roles;
+};
+```
+
+On `UCreatureDefinition` (or a dedicated Appearance fragment):
+```cpp
+UPROPERTY(EditDefaultsOnly, Category = "Appearance")
+TArray<FCreatureMaterialSlotConfig> MaterialSlots;
+```
+
+### Runtime Side (UCreatureInstance / ACreatureActor)
+
+- `TMap<ECreatureMaterialRole, UMaterialInstanceDynamic*> MaterialsByRole;`
+- Thin helpers only:
+  - `SetScalarOnRole(ECreatureMaterialRole Role, FName Param, float Value)`
+  - `SetVectorOnRole(ECreatureMaterialRole Role, FName Param, FLinearColor Value)`
+
+These helpers stay dumb. They never contain gameplay logic.
+
+### Material Creation Flow (Spawn / OnInstanceCreated)
+
+1. For each `FCreatureMaterialSlotConfig`:
+   - Resolve the material slot on the mesh.
+   - If ColorRanges is not empty → weighted pick + apply HSV variation → final tint color.
+   - Create Dynamic Material Instance (from BaseMaterial if provided, otherwise from the mesh’s existing material).
+   - Apply the tint (and any other initial parameters).
+   - Register the DMI under every Role listed in the config.
+
+### Driving Visual Effects (Separation of Concerns)
+
+| Effect              | Driver                                      | Notes |
+|---------------------|---------------------------------------------|-------|
+| Blinking            | Simple free-running timer on Actor / shared component | Independent of AI state. Sleep state forces closed + disables timer. |
+| Eyeshine (Tapetum)  | World darkness / moon-phase value           | Multiplied by intensity and written to Eyes role. |
+| Blood amount        | Combat / damage / status code               | Calls SetScalarOnRole |
+| Special glows, pulsing, aggression effects | State Tree tasks or Creature Context updates | Keeps behavior shareable via Linked assets |
+| Secondary zones (underside, membranes) | Material masks + automatic lightening / multiply | Preferred for MVP over full independent ranges |
+
+**Fragments** only configure (OnInstanceCreated). They never tick or drive parameters at runtime.
+
+### Blender / Asset Side Notes
+
+- Prefer single material + masks for most creatures (EyeMask channel for independent eye tint + emissive).
+- Use additional material slots when necessary (especially Two-Sided wing membranes).
+- BaseColor texture stays relatively flat / value-focused. Color variation is applied at runtime via tint.
+- Fine details (nostrils, ear holes, eye shape) are painted, not modeled.
+
+### Open Points / Needs Further Discussion
+
+- Exact material parameter names (`EyeClosed`, `EyeshineStrength`, `BloodAmount`, `BloodColor`, etc.).
+- Whether blood is a parameter on the Body material or a dedicated Blood role/material.
+- How strongly (or if) nearby biome should bias the Weight of color ranges at spawn.
+- Concrete blink rate ranges and how Sleep state interacts with the timer.
+- Whether underside / membrane lightening is a fixed material multiply or driven by a SecondaryColorRange later.
+- Future performance path: Custom Primitive Data instead of (or in addition to) Dynamic Material Instances when creature counts are high.
+- How AnimInstance should optionally react to EyeClosed (eyelid bones / morphs) if topology supports it later.
+
+### Implementation Priority
+
+1. Data structures + MaterialSlots on Definition.
+2. Spawn-time DMI creation + MaterialsByRole map + helpers.
+3. Basic Body + Eyes tinting.
+4. Blink timer + Eyeshine.
+5. State Tree driven effects (blood, special states) as needed.
+
+This document is the authoritative reference for the creature appearance / materials system until updated.

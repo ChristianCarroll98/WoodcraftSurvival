@@ -1,5 +1,5 @@
 **Item Mesh, Physics & Impact Response System**
-*(Woodcraft Survival – Updated 2026-08-16 – PhysicsFragment removed)*
+*(Woodcraft Survival – Updated 2026-08-16 – PhysicsFragment removed; EquippableFragment → EquippableItemFragment 2026-08-19)*
 
 This document defines the authoritative approach for item collision, mass, part identification, and impact effects/sounds.  
 Logical materials have been removed; Physical Materials are the single source of truth for both simulation behaviour and impact feedback.
@@ -162,7 +162,7 @@ Notes:
 - Light linear + moderate angular damping stops endless spinning.
 - `CanCharacterStepUpOn = ECB_No` prevents characters from treating the item as a step.
 - Welding + `RecreatePhysicsState` must happen after both components have simulation enabled.
-- Fragments still run after the base physics setup (EquippableFragment can still adjust collision responses, etc.).
+- Fragments still run after the base physics setup (EquippableItemFragment can still adjust collision responses, etc.).
 
 #### 3.3 Impact Response System
 
@@ -218,7 +218,7 @@ FName PartName = /* extract shape / element name from the hit */;
 #### 4.3 Data Asset Setup
 1. DisplayName, PrimaryMesh.
 2. SecondaryMesh + SecondaryRelativeTransform (only if needed).
-3. Add `UEquippableFragment` if pickable.
+3. Add `UEquippableItemFragment` if pickable.
 4. Save.
 
 (No PhysicsFragment is required or desired.)
@@ -252,7 +252,7 @@ FName PartName = /* extract shape / element name from the hit */;
 1. Blender → separate meshes if needed, good origins, export.
 2. Static Mesh(es): named primitives (`Blunt` etc.), correct Physical Material + density, simple collision.
 3. Definition: PrimaryMesh (+ Secondary + relative transform if needed).
-4. Add `UEquippableFragment` if required.
+4. Add `UEquippableItemFragment` if required.
 5. Test: mass feels right, no tunneling (CCD), impacts use correct PhysMat, part name extracts as expected, does not spin forever (damping).
 
 This document was updated 2026-08-16 to remove `UItemPhysicsFragment`. All items now simulate physics by default inside `AItemActor::InitializeFromInstance`.

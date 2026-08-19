@@ -1,0 +1,345 @@
+**Creature AI System Definition**  
+*Woodcraft Survival – UE 5.8*  
+*(Central reference – compiled 2026-08-19)*
+
+This document is the single source of truth for the creature AI architecture.  
+It consolidates the original AI design summary with all subsequent design decisions (Instance lifetime, evaluation, public state, short-term memory, oscillation prevention, etc.).  
+It is intended to sit alongside the item and harvestable system definition documents.
+
+---
+
+### 1. High-Level Goals
+
+- Multidimensional interactions (not simple “attack on sight”).
+- Combat is risky, avoidable, and high-reward. Strong player agency (fight, avoid, prepare, exploit environment).
+- Readable, telegraphed creature behavior.
+- Highly extendable and maintainable for a solo developer with limited AI experience.
+- Performance-conscious from day one (distance bands + long-lived Instance / temporary Actor).
+- Data-driven: new creatures after the foundation wolf should be mostly Definition + mesh/animations + 0–2 unique Linked Assets or Tasks.
+- Prefer composition and data over deep inheritance.
+
+The **wolf** is the foundation creature that proves every shared system. Pack-specific logic is explicitly deferred until basic solo behaviors are solid.
+
+---
+
+### 2. Core Architecture
+
+| Piece                        | Role                                                                 | Lifetime / Ownership                          |
+|-----------------------------|----------------------------------------------------------------------|-----------------------------------------------|
+| `UCreatureDefinition`       | Static species data (Primary Data Asset)                             | Asset                                         |
+| `UCreatureInstance`         | Long-lived runtime data (analogue of `UItemInstance`)                | Created by Factory/Subsystem; lives under Actor when near, under Subsystem when far |
+| `ACreatureActor`            | Temporary physical body (single base class)                          | Created/destroyed according to distance band  |
+| Creature Subsystem + Factory| Spawn, promote, despawn, ownership of far Instances, spatial queries | World Subsystem                               |
+| State Trees + Linked Assets | Decision structure                                                   | Assets; driven by C++ Tasks/Conditions        |
+| AI Perception Component     | Built-in sight (hearing later)                                       | On the Actor                                  |
+
+**Key lifetime rule** (mirrors items):  
+`UCreatureInstance` is long-lived.  
+`ACreatureActor` is disposable and can be destroyed when far from the player. The Instance is kept alive under the Subsystem and can later be handed to a newly promoted Actor.
+
+Death is a separate path that cleans up or transitions the Instance (corpse / loot).
+
+---
+
+### 3. UCreatureDefinition (Primary Data Asset)
+
+Pure static data for a species. Never holds runtime state.
+
+Typical contents:
+- Species identity & tags (Size Class, Ecological Role, Faction/Group tags)
+- Default permanent disposition *ranges* (Aggression, Bravery, Food Drive, Curiosity, Pack Loyalty, …)
+- Base stats (Max Health, move speeds, preferred ranges, sense hints, etc.)
+- Soft references: Skeletal Mesh, Skeleton, AnimBP / Linked Anim Graph, Physics Asset
+- Soft reference to the top-level State Tree for this species
+- Optional `TArray<UCreatureFragment*>`
+- Loot / harvest table
+- Distance-band thresholds / spawn rules
+- (Later) abstract-action → montage mapping, memory bias multipliers, etc.
+
+---
+
+### 4. UCreatureInstance (UObject)
+
+The central runtime brain. Direct analogue of `UItemInstance`.
+
+**Owned by**:
+- The `ACreatureActor` while near the player
+- The Creature Subsystem when the Actor has been removed due to distance
+
+**Core data**:
+- Pointer to its `UCreatureDefinition`
+- Unique runtime ID (uint32/uint64) – useful for memory keys and future save games
+- Health / HealthPct
+- Permanent dispositions (rolled once on spawn from Definition ranges)
+- Temporary modifiers (Hunger, Injury, Fatigue, combat stress, …) + logic to produce *effective* values
+- Primary Focus (`TWeakObjectPtr<AActor>` + cached `FCreatureEvaluationResult`)
+- Awareness list (small, decaying)
+- Short-term memory array (`TArray<FCreatureMemoryEntry>`)
+- DistanceBand (Near / Medium / Far)
+- LookTarget + LookWeight
+- Group fields (GroupSize, CurrentLeader, …) – present but unused until pack work
+- Flags (JustHowled, FlightDisabled, …)
+
+**Key methods**:
+- `EvaluateTarget(AActor* Target)` / `EvaluateOther(const UCreatureInstance* Other)`
+- `GetPublicState()` – cheap read-only view of current outward demeanor and activity
+- Helpers for effective disposition values, memory management, etc.
+
+---
+
+### 5. Perception & Awareness
+
+**Perception**  
+Use Unreal’s built-in **AI Perception Component**.  
+Start with Sight only. Keep configuration simple for the wolf. Hearing can be added later.
+
+Perception events feed the Instance:
+- Newly sensed actors are added or refreshed in the Awareness list.
+- Lost actors start a decay timer.
+
+**Awareness Model**
+- **Primary Focus** – Almost always one main actor the creature is actively dealing with. Drives most State Tree decisions and the strongest Look-At.
+- **Awareness List** – Small (target 4–8 entries), short-lived working memory of recently perceived actors. Each entry holds the actor, last evaluation, timestamp, and simple category flags (Threat, Ally, Prey, Neutral, …). Entries decay and are pruned.
+
+No heavy long-term individual recognition in the foundation system.
+
+---
+
+### 6. Public State (Hybrid Broadcast)
+
+Every creature (and the player) exposes a cheap, read-only public state that others can observe when they can perceive the actor:
+
+- Current activity flags (IsAttacking, IsFleeing, IsInvestigating, IsHowling, IsIntimidating, IsSubmitting, …)
+- A simple demeanor / intent category if useful (Neutral, Alert, Aggressive, Submissive, …)
+- Optionally a general outward hostility scalar
+
+This is the “broadcast” half of the hybrid design.  
+`EvaluateTarget` still performs the relative calculations (size, role, own modifiers, memory biases). The public state simply makes the target’s current observable behavior easy and explicit to read.
+
+The player is treated as another animal and must expose the same public-state interface (or equivalent data) so the evaluation path stays uniform.
+
+---
+
+### 7. Target Evaluation System
+
+Central responsibility of `UCreatureInstance`:
+
+```cpp
+FCreatureEvaluationResult EvaluateTarget(AActor* Target) const;
+// and/or
+FCreatureEvaluationResult EvaluateOther(const UCreatureInstance* Other) const;
+```
+
+**FCreatureEvaluationResult** typically contains:
+- Relative Size Class comparison
+- Ecological Role relationship (Prey / Neutral / Predator / Apex / Player)
+- PerceivedThreat (how dangerous this target feels *to me*)
+- PerceivedAggression (how aggressive the target currently appears)
+- Activity / state flags from the target’s public state
+- Distance / DistanceBand
+- Whether the target is currently focusing on me
+- Any memory-derived biases (see §8)
+
+**Decision examples**:
+- High effective Aggression + Low PerceivedThreat → more likely to approach / attack
+- High effective Aggression + High PerceivedThreat → keep distance, circle, or flee
+- Low Health + High Threat → strong flee bias
+- “Target is already attacking me” → can force an immediate reaction branch
+
+Evaluation is the single place that combines:
+- What the target is currently showing (public state)
+- Relative factors (size, role, own Bravery/Injury/etc.)
+- Short-term memory about this specific actor
+
+---
+
+### 8. Short-Term Memory System
+
+Prevents oscillation (e.g. mutual intimidation flip-flopping) and gives creatures a lightweight sense of recent history.
+
+**Storage**: Simple capped `TArray<FCreatureMemoryEntry>` on the Instance (target max 6–10 entries). Linear search is fine at this scale.
+
+```cpp
+UENUM(BlueprintType)
+enum class ECreatureMemoryType : uint8
+{
+    AttackedMe,
+    IAttacked,
+    DominanceChallenge,
+    SubmittedToMe,
+    ISubmitted,
+    FledFromMe,
+    IFled
+    // Extend later only as needed
+};
+
+USTRUCT(BlueprintType)
+struct FCreatureMemoryEntry
+{
+    GENERATED_BODY()
+
+    TWeakObjectPtr<AActor> Target;
+    uint32 TargetInstanceID = 0;          // stable handle
+    ECreatureMemoryType Type = ECreatureMemoryType::AttackedMe;
+    float ExpirationTime = 0.f;           // world time
+};
+```
+
+**Usage inside EvaluateTarget**:
+1. Prune expired entries.
+2. If an entry exists for the current evaluation target, apply a simple bias according to its Type (multipliers or additive modifiers on PerceivedThreat / PerceivedAggression, or set flags such as “already resolved”).
+3. Rising severity updates immediately; significant drops are naturally damped by the presence of a recent Submitted / Fled memory.
+
+Memories are written from clear events (damage taken, successful intimidation that caused submission, flee start, etc.), not every frame.  
+When adding a memory about an actor, refresh an existing matching entry or replace the oldest if at capacity.
+
+Durations are short (typically 4–20 s for the wolf foundation). Later these can be driven from the Definition.
+
+This system is deliberately general: it serves combat, social resolution, hunting follow-ups, etc., and is not limited to dominance contests.
+
+---
+
+### 9. Dispositions & Temporary Modifiers
+
+**Permanent Dispositions** (personality)  
+Rolled once on spawn from ranges on the Definition.  
+Core set (species can enable/disable and set ranges):
+- Aggression
+- Bravery
+- Food Drive
+- Curiosity
+- Pack Loyalty (present but unused until pack work)
+
+Ranges stay relatively narrow so species identity remains dominant.
+
+**Temporary Modifiers**  
+Hunger, Injury, Fatigue, recent combat stress, etc.  
+Applied as multipliers or additives when producing the *effective* values that evaluation and the State Tree read.
+
+---
+
+### 10. State Trees & Decision Making
+
+**Authoring**
+- Tree structure and Linked Assets are visual assets created in the editor.
+- Custom Tasks and Conditions / Evaluators are written in C++.
+
+**Structure**
+- Top-level State Tree stays shallow. Its job is mainly selecting the high-level mode (Ecological/Idle, Investigate, Combat, Flee, Rest, …).
+- Real work lives in reusable **Linked State Tree assets**:
+  - Investigate
+  - MoveToPreferredRange
+  - MeleeAttack
+  - Flee / Disengage
+  - Howl (basic)
+  - etc.
+- New creatures mostly choose which modules to use and add at most a couple of unique ones.
+
+**Data flow**
+The State Tree Component receives the `UCreatureInstance` as its external data source.  
+C++ Tasks and Conditions read evaluation results, effective dispositions, Focus, memory-derived flags, etc. from the Instance.  
+Tasks may write light flags or update LookTarget / Focus back onto the Instance.
+
+Abstract action requests (“Attack_Melee”, “Howl”, “Alert”, …) keep Linked Assets species-agnostic. Exact montage mapping is deferred until the broader animation architecture is settled.
+
+---
+
+### 11. Performance – Distance Bands
+
+DistanceBand lives on the Instance and is updated by the Subsystem.
+
+- **Near** – Full Actor, full systems, full tick rates.
+- **Medium** – Live Actor, throttled perception / evaluation / State Tree.
+- **Far** – Actor removed. Instance stays alive under the Subsystem and can be promoted later.
+
+This is the primary performance lever. Everything else (perception frequency, evaluation, EQS, etc.) should also respect the band.
+
+---
+
+### 12. Variation
+
+- Small random scale on spawn (within species limits) + Size Class tag.
+- Material / color variation (see separate CreatureMaterialsAndAppearance document).
+- Personality via the disposition system.
+
+---
+
+### 13. C++ File Structure (recommended)
+
+```
+Source/WoodcraftSurvival/Creatures/
+├── Definitions/
+│   └── CreatureDefinition.h/.cpp
+├── CreatureInstance.h/.cpp
+├── Actors/
+│   └── CreatureActor.h/.cpp
+├── AI/
+│   ├── Tasks/               // STTask_...
+│   ├── Conditions/          // STCondition_...
+│   └── CreatureFactory.h/.cpp (or Subsystem)
+└── Fragments/               // optional
+```
+
+A flatter layout is acceptable. The important points are clear separation of Definition / Instance / Actor / AI nodes.
+
+Content assets live under `Content/WoodcraftSurvival/Creatures/` (Wolf/, Shared/, etc.).
+
+---
+
+### 14. Foundation Creature – Wolf
+
+The wolf establishes every shared system:
+
+- Solo behavior first (more skittish when alone).
+- Full disposition + evaluation + awareness + short-term memory + distance banding.
+- Basic State Tree + core Linked Assets (Idle/Ecological, Investigate, MoveToPreferredRange / KeepDistance, MeleeAttack, Flee).
+- Howl can be added as a simple action once the core loop works; full pack coordination is deferred.
+- Uses AI Perception (Sight) → Awareness → Evaluation (with memory biases) → State Tree decisions.
+- Serves as the template for all later creatures, including the Desert Wyvern.
+
+---
+
+### 15. Design Principles (Always Apply)
+
+- Species identity remains dominant; individual variation only shifts tendencies.
+- Prefer data and composition over deep inheritance or unique code.
+- Keep top-level State Trees shallow; push complexity into reusable Linked Assets.
+- Telegraphs and readable feedback are mandatory.
+- Throttle everything by distance early.
+- Mirror the item system philosophy wherever it makes sense (Instance lifetime, Fragment policy, Factory ownership, single base Actor).
+- Player is evaluated through the same path as any other creature.
+- Pack / group systems are explicitly out of scope for the first wolf pass.
+- Evaluation + short-term memory is the core decision engine; keep it centralized and debuggable.
+
+---
+
+### 16. Current Status (2026-08-19)
+
+**Locked**
+- Single `ACreatureActor` base, data-driven.
+- `UCreatureDefinition` + long-lived `UCreatureInstance` (UObject).
+- State Trees + Linked Assets + C++ Tasks/Conditions.
+- Built-in AI Perception (Sight first).
+- Hybrid public state + relative evaluation.
+- Short-term memory via capped `TArray<FCreatureMemoryEntry>` (prevents oscillation and gives general recent-history).
+- Awareness = Primary Focus + small decaying list.
+- Distance-band Actor removal with Instance kept alive under Subsystem.
+- Fragments with lightweight OnCreatureSpawned-style init.
+- Player treated as another animal.
+- Pack logic deferred.
+- Animation request details deferred.
+
+**Next implementation order (refined later)**
+1. Core types (`UCreatureDefinition`, `UCreatureInstance`, `ACreatureActor`).
+2. Basic Factory / Subsystem spawn + ownership path.
+3. AI Perception → Awareness list.
+4. Public state + `EvaluateTarget` (including memory bias).
+5. Minimal State Tree (Idle + Investigate + simple reaction) driven by the Instance.
+6. Distance-band despawn / promote.
+7. Expand Linked Assets and wolf behaviors.
+8. Only then pack logic, richer animation requests, and advanced creatures.
+
+---
+
+This document supersedes the older high-level AI summary for implementation purposes.  
+Update it whenever a design decision is locked or significantly changed.
