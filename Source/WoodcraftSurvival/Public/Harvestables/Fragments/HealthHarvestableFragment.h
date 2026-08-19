@@ -19,5 +19,5 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Health", meta = (ClampMin = "0.0"))
 	float MaxHealth = 100.f;
 
-	virtual void OnInstanceCreated(UHarvestableInstance* Instance) override;
+	virtual void OnHarvestableInstanceCreated(UHarvestableInstance* Instance) override;
 };

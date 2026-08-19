@@ -3,7 +3,7 @@
 #include "HealthHarvestableFragment.h"
 #include "HarvestableInstance.h"
 
-void UHealthHarvestableFragment::OnInstanceCreated(UHarvestableInstance* Instance)
+void UHealthHarvestableFragment::OnHarvestableInstanceCreated(UHarvestableInstance* Instance)
 {
 	if (Instance)
 	{

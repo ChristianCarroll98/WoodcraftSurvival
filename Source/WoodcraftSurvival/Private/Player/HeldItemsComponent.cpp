@@ -4,7 +4,7 @@
 #include "Items/ItemActor.h"
 #include "Items/ItemFactorySubsystem.h"
 #include "Items/ItemInstance.h"
-#include "Items/Fragments/EquippableFragment.h"
+#include "Items/Fragments/EquippableItemFragment.h"
 #include "Core/WoodcraftTypes.h"
 #include "Player/FPArmsAnimInstance.h"
 #include <PhysicsControlComponent.h>
@@ -71,8 +71,8 @@ EHand UHeldItemsComponent::GetIsHoldingTwoHanded() const
 	AItemActor* LeftItem = GetHeldItem(EHand::Left);
 	if (LeftItem)
 	{
-		if (const UEquippableFragment* LeftEquippable
-			= LeftItem->GetItemInstance()->FindFragment<UEquippableFragment>())
+		if (const UEquippableItemFragment* LeftEquippable
+			= LeftItem->GetItemInstance()->FindFragment<UEquippableItemFragment>())
 		{
 			if (LeftEquippable && LeftEquippable->bTwoHanded) return EHand::Left;
 		}
@@ -81,8 +81,8 @@ EHand UHeldItemsComponent::GetIsHoldingTwoHanded() const
 	AItemActor* RightItem = GetHeldItem(EHand::Right);
 	if (RightItem)
 	{
-		if (const UEquippableFragment* RightEquippable
-			= RightItem->GetItemInstance()->FindFragment<UEquippableFragment>())
+		if (const UEquippableItemFragment* RightEquippable
+			= RightItem->GetItemInstance()->FindFragment<UEquippableItemFragment>())
 		{
 			if (RightEquippable && RightEquippable->bTwoHanded) return EHand::Right;
 		}
@@ -244,10 +244,10 @@ bool UHeldItemsComponent::BeginPickupAnimation(AItemActor* Item, EHand Hand, FSt
 		return false;
 	}
 
-	const UEquippableFragment* EquipFrag = Item->GetItemInstance()->FindFragment<UEquippableFragment>();
+	const UEquippableItemFragment* EquipFrag = Item->GetItemInstance()->FindFragment<UEquippableItemFragment>();
 	if (!EquipFrag)
 	{
-		OutResult += TEXT("Could not find ItemEquippableFragment for Item: " + Item->GetName());
+		OutResult += TEXT("Could not find EquippableItemFragment for Item: " + Item->GetName());
 		return false;
 	}
 

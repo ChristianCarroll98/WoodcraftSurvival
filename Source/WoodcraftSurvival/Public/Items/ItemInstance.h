@@ -26,7 +26,7 @@ public:
 	//UPROPERTY(Replicated, BlueprintReadOnly, Category = "Item")
 	//FGuid UniqueId;
 
-	/** Current durability or health of this instance (only meaningful if the definition has a DurabilityFragment or HealthFragment?). */
+	/** Current durability or health of this instance (only meaningful if the definition has a DurabilityItemFragment). */
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = "Item")
 	float CurrentHealth = 100.f;
 

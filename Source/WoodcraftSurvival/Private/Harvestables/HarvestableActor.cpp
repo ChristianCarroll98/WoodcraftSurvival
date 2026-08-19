@@ -68,7 +68,7 @@ void AHarvestableActor::PromoteToInstance()
 		if (UHarvestableFactorySubsystem* Factory = World->GetSubsystem<UHarvestableFactorySubsystem>())
 		{
 			Instance = Factory->CreateInstanceFromDefinition(Definition);
-			// OnInstanceCreated has already been called inside the Factory.
+			// OnHarvestableInstanceCreated has already been called inside the Factory.
 		}
 	}
 }

@@ -60,7 +60,7 @@ public:
 	/**
 	 * Finds a fragment of the requested type.
 	 * Returns nullptr if this definition does not have that fragment.
-	 * Example: const UStackableFragment* Stack = Definition->FindFragment<UStackableFragment>();
+	 * Example: const UStackableItemFragment* Stack = Definition->FindFragment<UStackableItemFragment>();
 	 */
 	template<typename T>
 	const T* FindFragment() const

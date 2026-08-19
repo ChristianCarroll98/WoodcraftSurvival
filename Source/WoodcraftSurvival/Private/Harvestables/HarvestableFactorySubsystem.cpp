@@ -22,7 +22,7 @@ UHarvestableInstance* UHarvestableFactorySubsystem::CreateInstanceFromDefinition
 	{
 		if (Fragment)
 		{
-			Fragment->OnInstanceCreated(Instance);
+			Fragment->OnHarvestableInstanceCreated(Instance);
 		}
 	}
 

@@ -16,7 +16,7 @@ class UHarvestableDefinition;
  * Created lazily for most world-generated resources (trees, rocks, ore...).
  * Always created immediately for player-planted crops.
  *
- * Fragments write their default runtime values into this object via OnInstanceCreated.
+ * Fragments write their default runtime values into this object via OnHarvestableInstanceCreated.
  * Additional mutable state (CurrentHealth, growth stage/progress, quality, etc.)
  * can live here directly or be added by future specialized fragments.
  */
@@ -31,7 +31,7 @@ public:
 	TObjectPtr<UHarvestableDefinition> Definition;
 
 	/**
-	 * Current health. Set by UHealthHarvestableFragment::OnInstanceCreated.
+	 * Current health. Set by UHealthHarvestableFragment::OnHarvestableInstanceCreated.
 	 * Reduced by ApplyDamage path. When <= 0 the death / yield sequence runs.
 	 */
 	UPROPERTY(BlueprintReadOnly, Category = "Health")

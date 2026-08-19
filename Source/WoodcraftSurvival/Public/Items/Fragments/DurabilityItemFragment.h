@@ -3,7 +3,7 @@
 #pragma once
 
 #include "ItemFragment.h"
-#include "DurabilityFragment.generated.h"
+#include "DurabilityItemFragment.generated.h"
 
 /**
  * Marks an item as having durability (tools, weapons, etc.).
@@ -11,7 +11,7 @@
  * How much durability is lost on each use is decided by the systems that perform the action.
  */
 UCLASS(EditInlineNew, DefaultToInstanced)
-class WOODCRAFTSURVIVAL_API UDurabilityFragment : public UItemFragment
+class WOODCRAFTSURVIVAL_API UDurabilityItemFragment : public UItemFragment
 {
 	GENERATED_BODY()
 

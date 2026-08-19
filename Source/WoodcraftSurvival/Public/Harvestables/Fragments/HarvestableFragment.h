@@ -13,8 +13,8 @@ class AHarvestableActor;
  * Abstract base for all harvestable capability fragments.
  * Primarily pure data (EditDefaultsOnly). 
  * Two lightweight virtuals that mirror the Item system:
- *   - OnInstanceCreated  → one-time runtime defaults on the long-lived Instance
- *   - OnHarvestableSpawned → actor-side setup every time an Actor is created/initialized
+ *   - OnHarvestableInstanceCreated → one-time runtime defaults on the long-lived Instance
+ *   - OnHarvestableSpawned         → actor-side setup every time an Actor is created/initialized
  *
  * Concrete fragments follow the naming convention:
  *   UHealthHarvestableFragment, UYieldHarvestableFragment, UCropHarvestableFragment, etc.
@@ -31,7 +31,7 @@ public:
 	 * Use for default runtime values (CurrentHealth = MaxHealth, growth progress = 0, etc.).
 	 * Never perform actor-side work here.
 	 */
-	virtual void OnInstanceCreated(UHarvestableInstance* Instance) {}
+	virtual void OnHarvestableInstanceCreated(UHarvestableInstance* Instance) {}
 
 	/**
 	 * Called every time an AHarvestableActor is spawned / initialized

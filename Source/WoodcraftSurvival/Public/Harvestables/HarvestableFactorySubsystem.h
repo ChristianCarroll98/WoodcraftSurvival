@@ -27,7 +27,7 @@ class WOODCRAFTSURVIVAL_API UHarvestableFactorySubsystem : public UWorldSubsyste
 
 public:
 	/**
-	 * Creates a long-lived UHarvestableInstance and calls OnInstanceCreated
+	 * Creates a long-lived UHarvestableInstance and calls OnHarvestableInstanceCreated
 	 * on every fragment of the Definition. Outer is TransientPackage.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Harvestable")

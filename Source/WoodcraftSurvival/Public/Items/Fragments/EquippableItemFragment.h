@@ -3,16 +3,16 @@
 #pragma once
 
 #include "Items/Fragments/ItemFragment.h"
-#include "EquippableFragment.generated.h"
+#include "EquippableItemFragment.generated.h"
 
 class AItemActor;
 
 /**
  * Data required to hold / equip an item in the hands.
- * Used by HeldItemComponent for attachment, two-handed logic, and later poses / IK.
+ * Used by HeldItemsComponent for attachment, two-handed logic, and later poses / IK.
  */
 UCLASS(EditInlineNew, DefaultToInstanced)
-class WOODCRAFTSURVIVAL_API UEquippableFragment : public UItemFragment
+class WOODCRAFTSURVIVAL_API UEquippableItemFragment : public UItemFragment
 {
 	GENERATED_BODY()
 

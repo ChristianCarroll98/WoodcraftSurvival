@@ -3,7 +3,7 @@
 #pragma once
 
 #include "ItemFragment.h"
-#include "DamageFragment.generated.h"
+#include "DamageItemFragment.generated.h"
 
 /**
  * Provides basic damage information for items that can deal damage
@@ -11,7 +11,7 @@
  * Actual damage application is handled by the systems that perform the hit.
  */
 UCLASS(EditInlineNew, DefaultToInstanced)
-class WOODCRAFTSURVIVAL_API UDamageFragment : public UItemFragment
+class WOODCRAFTSURVIVAL_API UDamageItemFragment : public UItemFragment
 {
 	GENERATED_BODY()
 

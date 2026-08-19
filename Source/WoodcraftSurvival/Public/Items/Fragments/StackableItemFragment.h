@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "ItemFragment.h"
-#include "StackableFragment.generated.h"
+#include "StackableItemFragment.generated.h"
 
 /**
  * Defines how the player carries multiple of this item.
@@ -12,7 +12,7 @@
  * This fragment only describes carry limits and visual representation when the player holds several.
  */
 UCLASS(EditInlineNew, DefaultToInstanced)
-class WOODCRAFTSURVIVAL_API UStackableFragment : public UItemFragment
+class WOODCRAFTSURVIVAL_API UStackableItemFragment : public UItemFragment
 {
 	GENERATED_BODY()
 
