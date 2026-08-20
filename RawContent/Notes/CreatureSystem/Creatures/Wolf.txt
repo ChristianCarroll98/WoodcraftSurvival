@@ -33,10 +33,11 @@ Related general documents:
 
 #### 2.2 Evaluation-Driven Reactions
 - Uses the shared `EvaluateTarget` path (player is treated as another animal).
-- Short-term memory (`FCreatureMemoryEntry`) prevents oscillation in mutual threat/intimidation and records recent attacks, submissions, and flees.
+- Short-term memory (`FCreatureMemoryEntry`) prevents oscillation in mutual threat/intimidation and records recent attacks, submissions, flees, and incoming gaze.
 - High Aggression + low Threat → more likely to press or attack.
 - High Threat or low Health → stronger flee / keep-distance bias.
 - “Target is already attacking me” can force an immediate reaction branch.
+- Incoming gaze (shared system): `LookingAtMe` (transient) and `StaringAtMe` (sustained threshold) bias toward noticing the actor, holding focus, or escalating to a dominance/intimidate display. See `CreatureAISystemDefinition.txt` §6–8 for the full rules.
 
 #### 2.3 Ecological & Alive Behavior
 - Sit and lie down for rest.

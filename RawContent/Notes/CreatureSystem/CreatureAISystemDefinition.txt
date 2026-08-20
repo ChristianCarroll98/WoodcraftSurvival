@@ -112,11 +112,12 @@ Every creature (and the player) exposes a cheap, read-only public state that oth
 - Current activity flags (IsAttacking, IsFleeing, IsInvestigating, IsHowling, IsIntimidating, IsSubmitting, …)
 - A simple demeanor / intent category if useful (Neutral, Alert, Aggressive, Submissive, …)
 - Optionally a general outward hostility scalar
+- **Current LookTarget** (who this actor is looking at right now, or null). This is required so other creatures can detect incoming gaze.
 
 This is the “broadcast” half of the hybrid design.  
 `EvaluateTarget` still performs the relative calculations (size, role, own modifiers, memory biases). The public state simply makes the target’s current observable behavior easy and explicit to read.
 
-The player is treated as another animal and must expose the same public-state interface (or equivalent data) so the evaluation path stays uniform.
+The player is treated as another animal and must expose the same public-state interface (or equivalent data) so the evaluation path stays uniform. For the player, “LookTarget” can be approximated from camera forward direction.
 
 ---
 
@@ -137,27 +138,29 @@ FCreatureEvaluationResult EvaluateOther(const UCreatureInstance* Other) const;
 - PerceivedAggression (how aggressive the target currently appears)
 - Activity / state flags from the target’s public state
 - Distance / DistanceBand
-- Whether the target is currently focusing on me
-- Any memory-derived biases (see §8)
+- Whether the target is currently focusing on / looking at me
+- Any memory-derived biases (see §8), including incoming-gaze biases
 
 **Decision examples**:
 - High effective Aggression + Low PerceivedThreat → more likely to approach / attack
 - High effective Aggression + High PerceivedThreat → keep distance, circle, or flee
 - Low Health + High Threat → strong flee bias
 - “Target is already attacking me” → can force an immediate reaction branch
+- “Target has been staring at me” → bias toward dominance display, hold focus, or escalate
 
 Evaluation is the single place that combines:
-- What the target is currently showing (public state)
+- What the target is currently showing (public state, including LookTarget)
 - Relative factors (size, role, own Bravery/Injury/etc.)
-- Short-term memory about this specific actor
+- Short-term memory about this specific actor (including incoming gaze)
 
 ---
 
 ### 8. Short-Term Memory System
 
-Prevents oscillation (e.g. mutual intimidation flip-flopping) and gives creatures a lightweight sense of recent history.
+Prevents oscillation (e.g. mutual intimidation flip-flopping) and gives creatures a lightweight sense of recent history. Also records significant social signals such as incoming gaze.
 
-**Storage**: Simple capped `TArray<FCreatureMemoryEntry>` on the Instance (target max 6–10 entries). Linear search is fine at this scale.
+**Storage**: Simple capped `TArray<FCreatureMemoryEntry>` on the Instance.  
+Suggested cap raised slightly to **8–12 entries** to comfortably accommodate gaze memories alongside combat/social ones. Linear search remains fine at this scale.
 
 ```cpp
 UENUM(BlueprintType)
@@ -169,8 +172,11 @@ enum class ECreatureMemoryType : uint8
     SubmittedToMe,
     ISubmitted,
     FledFromMe,
-    IFled
-    // Extend later only as needed
+    IFled,
+
+    // Incoming gaze (shared behavior)
+    LookingAtMe,     // Other is currently / recently looking at me (transient, refreshed while true)
+    StaringAtMe      // Other has held gaze on me for a sustained period (threshold crossed)
 };
 
 USTRUCT(BlueprintType)
@@ -185,17 +191,29 @@ struct FCreatureMemoryEntry
 };
 ```
 
+**Incoming gaze handling (shared)**  
+Gaze is treated as information *about the other actor*, not about my own looking.
+
+1. Public state of every creature includes its current LookTarget.
+2. On my side, while I can perceive another actor:
+   - If their public LookTarget == me → add or refresh a `LookingAtMe` memory (short lifetime, e.g. 2–4 s, constantly refreshed while the condition holds).
+   - If the continuous looking has lasted longer than a threshold (e.g. 1.5–2.5 s) → also write / refresh a `StaringAtMe` memory (longer lifetime, e.g. 6–12 s).
+3. Both memories live on *my* Instance. The other creature does not write into me.
+
 **Usage inside EvaluateTarget**:
 1. Prune expired entries.
-2. If an entry exists for the current evaluation target, apply a simple bias according to its Type (multipliers or additive modifiers on PerceivedThreat / PerceivedAggression, or set flags such as “already resolved”).
-3. Rising severity updates immediately; significant drops are naturally damped by the presence of a recent Submitted / Fled memory.
+2. If an entry exists for the current evaluation target, apply a simple bias according to its Type:
+   - Combat / submission / flee memories as before (stronger biases, prevent oscillation).
+   - `LookingAtMe` → mild bias (slightly higher Curiosity or PerceivedAggression, slight preference to notice / keep awareness).
+   - `StaringAtMe` → stronger social bias (favor dominance display / intimidate, prefer keeping or switching Primary Focus to this actor, modest increase in PerceivedAggression or tension).
+3. Rising severity updates immediately; significant drops are damped by recent Submitted / Fled memories.
 
-Memories are written from clear events (damage taken, successful intimidation that caused submission, flee start, etc.), not every frame.  
-When adding a memory about an actor, refresh an existing matching entry or replace the oldest if at capacity.
+Memories are still written from clear conditions, not every frame of unrelated activity.  
+When adding a memory about an actor, refresh an existing matching entry (same Target + Type) or replace the oldest/lowest-priority if at capacity. Gaze memories have lower prune priority than AttackedMe / Submitted / Fled so important events are preserved.
 
-Durations are short (typically 4–20 s for the wolf foundation). Later these can be driven from the Definition.
+Durations are short (typically 2–12 s depending on type). Later these can be driven from the Definition per species.
 
-This system is deliberately general: it serves combat, social resolution, hunting follow-ups, etc., and is not limited to dominance contests.
+This system remains general: combat, social resolution, hunting follow-ups, and now sustained incoming gaze all flow through the same evaluation path.
 
 ---
 
