@@ -4,7 +4,10 @@
 #include "Harvestables/HarvestableDefinition.h"
 #include "Harvestables/HarvestableInstance.h"
 #include "Harvestables/Fragments/HarvestableFragment.h"
+#include "Harvestables/Fragments/YieldHarvestableFragment.h"
 #include "Harvestables/HarvestableFactorySubsystem.h"
+#include "Items/ItemFactorySubsystem.h"
+#include "Items/ItemDefinition.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 
@@ -143,6 +146,69 @@ void AHarvestableActor::ApplyDamage(const FDamageInfo& DamageInfo)
 
 void AHarvestableActor::HandleDeath()
 {
+	if (!Definition)
+	{
+		Destroy();
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		Destroy();
+		return;
+	}
+
+	const FTransform SpawnTransform = GetActorTransform();
+
+	// Center of the mesh is a better origin for scattered items (sticks, rocks, etc.)
+	FVector ItemSpawnOrigin = SpawnTransform.GetLocation();
+	if (PrimaryMeshComponent)
+	{
+		ItemSpawnOrigin = PrimaryMeshComponent->Bounds.Origin;
+	}
+
+	if (const UYieldHarvestableFragment* YieldFrag = Definition->FindFragment<UYieldHarvestableFragment>())
+	{
+		// ----- Yield Items -----
+		if (UItemFactorySubsystem* ItemFactory = World->GetSubsystem<UItemFactorySubsystem>())
+		{
+			for (const FHarvestableYieldEntry& Entry : YieldFrag->Yields)
+			{
+				UItemDefinition* ItemDef = Entry.ItemDefinition.LoadSynchronous();
+				if (!ItemDef || Entry.Count <= 0) continue;
+
+				for (int32 i = 0; i < Entry.Count; ++i)
+				{
+					FVector Offset(
+						FMath::FRandRange(-40.f, 40.f),
+						FMath::FRandRange(-40.f, 40.f),
+						FMath::FRandRange(-20.f, 30.f)
+					);
+
+					FTransform ItemTransform;
+					ItemTransform.SetLocation(ItemSpawnOrigin + Offset);
+					ItemTransform.SetRotation(FQuat(FRotator(0.f, FMath::FRandRange(0.f, 360.f), 0.f)));
+
+					ItemFactory->SpawnItemActorFromDefinition(ItemDef, ItemTransform);
+				}
+			}
+		}
+
+		// ----- Optional Replacement Harvestable (stump / next stage) -----
+		// Stays at the Actor transform so it sits correctly on the ground.
+		if (!YieldFrag->ReplacementHarvestable.IsNull())
+		{
+			if (UHarvestableDefinition* ReplacementDef = YieldFrag->ReplacementHarvestable.LoadSynchronous())
+			{
+				if (UHarvestableFactorySubsystem* HarvestFactory = World->GetSubsystem<UHarvestableFactorySubsystem>())
+				{
+					HarvestFactory->SpawnActorFromDefinition(ReplacementDef, SpawnTransform);
+				}
+			}
+		}
+	}
+
 	if (GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage
@@ -150,11 +216,11 @@ void AHarvestableActor::HandleDeath()
 			-1,
 			5.0f,
 			FColor::Red,
-			FString::Printf(TEXT("%s destroyed (death)"), *GetNameSafe(this))
+			FString::Printf(TEXT("%s destroyed – yields spawned"), *GetNameSafe(this))
 		);
 	}
 
-	// Temporary: just destroy the actor.
-	// Next step will spawn sticks + stump via Yield fragment before destroying.
+	// Instance will be collected once no longer referenced.
+	// Explicit cleanup can be added later if we keep a registry.
 	Destroy();
 }

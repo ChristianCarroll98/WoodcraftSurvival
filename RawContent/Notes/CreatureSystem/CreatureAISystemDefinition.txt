@@ -1,6 +1,6 @@
 **Creature AI System Definition**  
 *Woodcraft Survival – UE 5.8*  
-*(Central reference – compiled 2026-08-19)*
+*(Central reference – compiled 2026-08-19, runtime-data rules added 2026-08-21)*
 
 This document is the single source of truth for the creature AI architecture.  
 It consolidates the original AI design summary with all subsequent design decisions (Instance lifetime, evaluation, public state, short-term memory, oscillation prevention, etc.).  
@@ -79,11 +79,55 @@ The central runtime brain. Direct analogue of `UItemInstance`.
 - LookTarget + LookWeight
 - Group fields (GroupSize, CurrentLeader, …) – present but unused until pack work
 - Flags (JustHowled, FlightDisabled, …)
+- **Generic runtime data map** (see below)
 
 **Key methods**:
 - `EvaluateTarget(AActor* Target)` / `EvaluateOther(const UCreatureInstance* Other)`
 - `GetPublicState()` – cheap read-only view of current outward demeanor and activity
 - Helpers for effective disposition values, memory management, etc.
+- Generic data accessors (GetData / SetData / HasData) – no species-specific methods
+
+#### 4.1 Creature-Specific Runtime Data & Optional Components
+
+**Goal:** Support different tracking needs across many species without subclassing `UCreatureInstance` or `ACreatureActor` and without putting species-specific function calls on the base types.
+
+**Persistent data (preferred)**  
+Lives on `UCreatureInstance` so it survives distance despawn/promote:
+
+```cpp
+UENUM(BlueprintType)
+enum class ECreatureData : uint8
+{
+    LastLongHowlTime,
+    // Add entries only as real needs appear
+};
+
+TMap<ECreatureData, float> RuntimeData;
+```
+
+Generic accessors only:
+- `float GetData(ECreatureData Key, float Default = 0.f) const`
+- `void SetData(ECreatureData Key, float Value)`
+- `bool HasData(ECreatureData Key) const`
+
+Fragments may initialize the keys they care about during `OnInstanceCreated` / `OnCreatureSpawned`.  
+State Tree conditions and tasks use only the generic accessors. Evaluation stays generic.
+
+A pure `float` map covers timestamps, simple counters, normalized values, and bool-like flags (0/1). Start here; evolve only if richer payloads become necessary.
+
+**Optional lightweight components (behavior only)**  
+Spawned by a Fragment’s `OnCreatureSpawned` **only when required** for ongoing Actor-side work that cannot live cleanly as data + State Tree tasks (special traces, complex procedural drivers, etc.).
+
+Rules:
+- The component must read and write the Instance; it never owns long-term state.
+- When the Actor is despawned the component is destroyed; the data remains on the Instance.
+- Most creatures (including the foundation wolf) should need **zero** extra components.
+
+**Preferred order of implementation**
+1. Data on Instance + State Tree conditions/tasks.
+2. Only if that is insufficient → optional component that operates on the Instance data.
+
+This keeps the base Instance and Actor free of species-specific methods while still allowing rich, data-driven variation.
 
 ---
 

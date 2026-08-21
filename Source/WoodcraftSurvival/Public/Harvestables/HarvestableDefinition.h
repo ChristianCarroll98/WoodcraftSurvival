@@ -29,4 +29,22 @@ public:
 	TSoftObjectPtr<UStaticMesh> PrimaryMesh;
 
 	// Secondary mesh support can be added later if needed for complex trees.
+
+	/**
+	 * Finds a fragment of the requested type.
+	 * Returns nullptr if this definition does not have that fragment.
+	 * Example: const UYieldHarvestableFragment* Yield = Definition->FindFragment<UYieldHarvestableFragment>();
+	 */
+	template<typename T>
+	const T* FindFragment() const
+	{
+		for (UHarvestableFragment* Fragment : Fragments)
+		{
+			if (const T* Casted = Cast<T>(Fragment))
+			{
+				return Casted;
+			}
+		}
+		return nullptr;
+	}
 };

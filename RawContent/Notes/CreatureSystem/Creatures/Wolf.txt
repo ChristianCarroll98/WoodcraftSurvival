@@ -29,7 +29,7 @@ Related general documents:
 - Keep distance or approach according to PerceivedThreat vs effective Aggression / Bravery.
 - Combat: MoveToPreferredRange → MeleeAttack (bite/lunge) when conditions favor it.
 - Flee when Health is low, PerceivedThreat is high, or Bravery is overwhelmed.
-- Howl as a simple action (can later become a grouping signal).
+- Howl (see §2.6 for full rules).
 
 #### 2.2 Evaluation-Driven Reactions
 - Uses the shared `EvaluateTarget` path (player is treated as another animal).
@@ -54,6 +54,30 @@ Related general documents:
 #### 2.5 Readable Telegraphs
 - Alert posture, growl/intimidate, snarl (shape key), ear and tail positions, and clear attack wind-ups are mandatory.
 - Submission / yield should also be readable so dominance resolution via memory feels fair.
+
+#### 2.6 Howl Behavior (Foundation – data + State Tree only)
+
+Goal: a wolf may randomly decide to perform a long howl at most once per night. Nearby wolves that hear it should join if they are free; even those that cannot respond still mark the night so they do not initiate later.
+
+**Data (on each wolf’s Instance)**  
+- `ECreatureData::LastLongHowlTime` (or equivalent night index) stored via the generic RuntimeData map.
+
+**Initiator**
+- In Ecological / Idle (or other low-priority) State Tree branch, a chance-based decision may attempt a long howl.
+- Condition: enough time / a new night has passed since `LastLongHowlTime`.
+- On success: play howl montage, write `LastLongHowlTime = Now`, and emit a howl signal (hearing noise event, gameplay message, or Subsystem spatial notify) with range.
+
+**Receivers (hearing range)**
+- On receiving the howl signal:
+  - Always write / refresh own `LastLongHowlTime` (so this wolf will not initiate a long howl later the same night, even if it cannot respond right now).
+  - If currently in a high-priority state (Combat, Flee, etc.) → do not play a howl.
+  - Otherwise → transition into a short respond-to-howl state / Linked Asset, play howl, and the timestamp is already updated.
+
+**Rules**
+- Entirely data + State Tree (+ one lightweight broadcast/perception path). No wolf-specific component required.
+- Once-per-night limit is per individual.
+- “If not doing anything more important” is normal State Tree priority.
+- Later pack-grouping logic can reuse the same signal; the foundation version only needs the chorus + per-wolf nightly limit.
 
 ---
 
