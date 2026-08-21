@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Christian Carroll. All Rights Reserved.
 
-#include "Components/HeldItemsComponent.h"
+#include "Player/HeldItemsComponent.h"
 #include "Items/ItemActor.h"
 #include "Items/ItemFactorySubsystem.h"
 #include "Items/ItemInstance.h"

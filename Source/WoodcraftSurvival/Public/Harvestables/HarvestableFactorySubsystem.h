@@ -14,11 +14,11 @@ class AHarvestableActor;
  * Single authority for creating Harvestable Instances and Actors.
  * Access via GetWorld()->GetSubsystem<UHarvestableFactorySubsystem>().
  *
- * Public API (locked):
+ * Public API:
  *   CreateInstanceFromDefinition
  *   SpawnActorFromDefinition
  *   SpawnActorFromInstance
- *   PromoteToInstance (also callable from the Actor itself)
+ *   PromoteToInstance (also callable from the Actor itself) - TODO TBD
  */
 UCLASS()
 class WOODCRAFTSURVIVAL_API UHarvestableFactorySubsystem : public UWorldSubsystem
@@ -50,6 +50,6 @@ public:
 	 * Promotes a pure-Definition Actor to have a real Instance.
 	 * Called by the Actor on first meaningful interaction (or can be called externally).
 	 */
-	UFUNCTION(BlueprintCallable, Category = "Harvestable")
-	void PromoteToInstance(AHarvestableActor* Actor);
+	//UFUNCTION(BlueprintCallable, Category = "Harvestable")
+	//void PromoteToInstance(AHarvestableActor* Actor);
 };

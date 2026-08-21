@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Christian Carroll. All Rights Reserved.
 
-#include "HealthHarvestableFragment.h"
-#include "HarvestableInstance.h"
+#include "Harvestables/Fragments/HealthHarvestableFragment.h"
+#include "Harvestables/HarvestableInstance.h"
 
 void UHealthHarvestableFragment::OnHarvestableInstanceCreated(UHarvestableInstance* Instance)
 {

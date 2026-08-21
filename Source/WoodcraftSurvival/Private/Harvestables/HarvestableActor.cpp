@@ -1,10 +1,10 @@
 // Copyright (c) 2026 Christian Carroll. All Rights Reserved.
 
-#include "HarvestableActor.h"
-#include "HarvestableDefinition.h"
-#include "HarvestableInstance.h"
-#include "HarvestableFragment.h"
-#include "HarvestableFactorySubsystem.h"
+#include "Harvestables/HarvestableActor.h"
+#include "Harvestables/HarvestableDefinition.h"
+#include "Harvestables/HarvestableInstance.h"
+#include "Harvestables/Fragments/HarvestableFragment.h"
+#include "Harvestables/HarvestableFactorySubsystem.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 

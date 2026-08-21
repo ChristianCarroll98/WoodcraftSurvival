@@ -2,9 +2,9 @@
 
 #pragma once
 
-#include "CoreMinimal.h"
+//#include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
-#include "HarvestableFragment.h"
+#include "Harvestables/Fragments/HarvestableFragment.h"
 #include "HarvestableDefinition.generated.h"
 
 /**

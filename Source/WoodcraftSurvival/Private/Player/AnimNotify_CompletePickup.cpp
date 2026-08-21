@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Christian Carroll. All Rights Reserved.
 
 #include "Player/AnimNotify_CompletePickup.h"
-#include "Components/HeldItemsComponent.h"
+#include "Player/HeldItemsComponent.h"
 
 void UAnimNotify_CompletePickup::Notify(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation,
         const FAnimNotifyEventReference& EventReference)

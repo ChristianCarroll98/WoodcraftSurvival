@@ -13,7 +13,7 @@ AItemActor::AItemActor()
 	// Create the mesh component and make it the root
 	PrimaryMeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PrimaryMeshComponent"));
 	SetRootComponent(PrimaryMeshComponent);
-	PrimaryMeshComponent->SetCollisionProfileName(TEXT("Item"));
+	PrimaryMeshComponent->SetCollisionProfileName(TEXT("ItemProfile"));
 }
 
 UItemInstance* AItemActor::GetItemInstance() const
