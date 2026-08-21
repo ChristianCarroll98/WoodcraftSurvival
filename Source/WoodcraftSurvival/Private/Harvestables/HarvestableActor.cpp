@@ -8,7 +8,7 @@
 #include "Harvestables/HarvestableFactorySubsystem.h"
 #include "Items/ItemFactorySubsystem.h"
 #include "Items/ItemDefinition.h"
-#include "Components/StaticMeshComponent.h"
+#include <Components/StaticMeshComponent.h>
 #include "Engine/StaticMesh.h"
 
 AHarvestableActor::AHarvestableActor()

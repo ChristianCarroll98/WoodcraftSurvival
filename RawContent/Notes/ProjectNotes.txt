@@ -18,5 +18,6 @@ if (GEngine) GEngine->AddOnScreenDebugMessage
 
 current issues/working task list:
 
-- Create basic tree mesh (can be placeholder, just needs collision primitive for damage system)
-- implement foundation for HarvestableSystem before futher item testing can continue
+- Collision damage path live (AItemActor hit events → IDamageable). Test with Stick + DamageItemFragment against TestTree.
+- Next high priority: extract named collision primitive (Blunt/Sharp/Pierce/…) from the hit for proper part-based multipliers + tree blunt resistance.
+- After that: swing feel / Physics Control tuning, then Core Loop Playable milestone.

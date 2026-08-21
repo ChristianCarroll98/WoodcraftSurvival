@@ -466,6 +466,10 @@ bool UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand, FStr
 	// Disable collision for the item mesh while it's being held
 	ItemMesh->SetCollisionResponseToChannel(COLLISION_PLAYER, ECollisionResponse::ECR_Ignore);
 
+	// Mark this item as held by the character (prevents held-item vs held-item damage)
+	Item->Holder = GetOwner();
+	Item->SetOwner(GetOwner());
+
 	const FName WeaponBoneName = GetWeaponBoneName(Hand);
 
 	FPhysicsControlData ControlData;
@@ -524,6 +528,9 @@ void UHeldItemsComponent::DetachItemFromControl(EHand Hand)
 
 	if (Item)
 	{
+		// Clear held state
+		Item->Holder = nullptr;
+
 		UStaticMeshComponent* ItemMesh = Item->GetItemPrimaryMesh();
 		if (ItemMesh)
 		{
@@ -563,9 +570,9 @@ void UHeldItemsComponent::PreventItemStuck(EHand Hand)
 	{
 		bItemStuck = true;
 		Mesh->SetCollisionResponseToChannel(COLLISION_ITEM, ECR_Ignore);
+		Mesh->SetCollisionResponseToChannel(COLLISION_HARVESTABLE, ECR_Ignore);
 		//Mesh->SetCollisionResponseToChannel(COLLISION_STRUCTURE, ECR_Ignore);
 		//Mesh->SetCollisionResponseToChannel(COLLISION_CREATURE, ECR_Ignore);
-		//Mesh->SetCollisionResponseToChannel(COLLISION_HARVESTABLE, ECR_Ignore);
 		Mesh->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Ignore);
 		Mesh->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Ignore);
 	}
@@ -573,9 +580,9 @@ void UHeldItemsComponent::PreventItemStuck(EHand Hand)
 	{
 		bItemStuck = false;
 		Mesh->SetCollisionResponseToChannel(COLLISION_ITEM, ECR_Block);
+		Mesh->SetCollisionResponseToChannel(COLLISION_HARVESTABLE, ECR_Block);
 		//Mesh->SetCollisionResponseToChannel(COLLISION_STRUCTURE, ECR_Block);
 		//Mesh->SetCollisionResponseToChannel(COLLISION_CREATURE, ECR_Block);
-		//Mesh->SetCollisionResponseToChannel(COLLISION_HARVESTABLE, ECR_Block);
 		Mesh->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
 		Mesh->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
 	}
