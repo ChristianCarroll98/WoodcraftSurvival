@@ -54,9 +54,9 @@ Content/
 PLAYER:
 
 Input: various controls will be configurable in settings with accessibility options (sticky activation, and others)
- - Q: activates Pickup/Drop mode. While holding Q, a player will pickup an equippable item they are looking at. The item is equipped to either the right hand for RMB or left hand for LMB (RMB-LMB flip toggleable in settings). If the player already holds an item in the corresponding hand, it will stack if its the same item type and stackable, otherwise the player will drop the item(s) held in that hand. more in item system section.
- - LMB/RMB without Q: "activates" the held item causing it to enter an active state depending on the item. Weapons swing, containers enter take/put mode overriding the opposite hand's action, resources either do nothing or slightly extend for an examine action, or function as a makeshift weapon (swing a stick).
- - R: Cancel action (ex: Cancel shooting arrow, just releasing button with drawn bow would shoot)
+ - Q: activates Pickup/Drop mode. While holding Q, a player will pickup an equippable item they are looking at. The item is equipped to either the right hand for RMB or left hand for LMB (RMB-LMB flip toggleable in settings). If the hand is already occupied, the action does nothing (swap / other transfer later). More detail in the item system section.
+ - LMB/RMB without Q: "activates" the held item causing it to enter an active state depending on the item. Weapons swing, containers enter take/put mode overriding the opposite hand's action, resources either do nothing or slightly extend for an examine action, or function as a makeshift weapon (swing a stick). When a hand holds a stack (count ≥ 2) primary actions are disabled.
+ - R: Cancel action (ex: Cancel shooting arrow, just releasing button with drawn bow would shoot). Also used intentionally to start a stack: when both hands hold the same stackable item type, R + LMB/RMB calls into HeldItemsComponent to move one item into the clicked hand, creating a stack of 2.
  - Also basic controls: Sprint, Crouch, Inventory, and Jump.
  - E/F/other common keys: TBD, should be useful, but pickup is handled via extend + Q. I am sure as I add functionality I will find a good use for intuitive control. 
  - possibly LEFTALT to lock view direction?

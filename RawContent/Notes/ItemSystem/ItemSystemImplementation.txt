@@ -1,5 +1,5 @@
 **Full Description of the Intended Item System**  
-*(Updated 2026-08-19 – Fragment naming convention locked to <Capability>ItemFragment; previous content from 2026-08-15 still authoritative)*
+*(Updated 2026-08-20 – Held Stacks + Stab/Extend activation design locked; fragment naming convention remains <Capability>ItemFragment)*
 
 ### 1. High-Level Goals
 - Fully data-driven item definitions using Primary Data Assets + Fragments.
@@ -161,6 +161,9 @@ Left-hand IK works without extra transform mirroring.
 - `PreventItemStuck` safety.
 - Owns the targeted-item query (`FindLookedAtItem`) and will drive highlight logic.
 - Provides clean Blueprint API.
+- Owns per-hand stack state (single UItemInstance or TArray of same-Definition Instances? TBD).
+- Owns one UInstancedStaticMeshComponent per hand (created once, enabled only while that hand holds a stack. Owns? Components created on player. Maybe created from BeginPlay in HeldItemsComponent to get the references easily, or can create from engine and assign to EditDefaultsOnly class variable. TBD).
+- Exposes TryStartStack(EHand TargetHand) for intentional stack creation (called from player input, tentatively [R] + mouse click).
 
 **Pickup / Drop API (implemented 2026-08-15)**
 
@@ -176,10 +179,10 @@ bool TryPickupOrDrop(EHand Hand);
 bool GetIsUnarmed(EHand Hand) const;
 ```
 
-**TryPickupOrDrop decision tree (basic version – live)**
+**TryPickupOrDrop decision tree (updated 2026-08-20)**
 - Looking at valid item + hand is Unarmed → Pickup
-- Looking at valid item + hand occupied → Do nothing (swap later)
-- Looking at empty space + hand occupied → Drop
+- Looking at valid item + hand occupied → Do nothing (or drop, or swap, TBD)
+- Looking at empty space + hand occupied → Drop (entire stack if count > 1)
 - Looking at empty space + hand Unarmed → Do nothing
 
 **Implementation notes**
@@ -194,6 +197,36 @@ bool GetIsUnarmed(EHand Hand) const;
 - `GetIsUnarmed(EHand)` compares the held item’s Definition against the stored `UnarmedDefinition`.
 - On pickup of a real item: previous Unarmed actor is simply `Destroy()`ed.
 - On drop: `EquipUnarmed(Hand)` is called immediately after detach.
+
+### Held Stacks (Locked 2026-08-20)
+
+Hand-held stacks are a lightweight, same-type-only special case managed entirely by UHeldItemsComponent (may change when final plan created at start of implementation). They intentionally reuse the player-facing feel of containers without being full container actors.
+
+**Starting a stack**
+- Both hands must currently hold the same stackable Definition.
+- Player input calls `TryStartStack(EHand TargetHand)` on UHeldItemsComponent (R + LMB/RMB).
+- The function evaluates the condition and, if valid, moves one item from the opposite hand into the target hand, creating a stack of 2.
+- This leaves the ability to hold and use two separate matching items (e.g. two sticks) completely intact.
+- UI tooltip for the control is future work.
+
+**While a hand holds a stack (count ≥ 2)**
+- Primary actions (swing, throw, examine, etc.) are disabled on that hand.
+- Extending the stack hand enables container-style take/put with the free hand (one item at a time, same type only).
+- Q + mouse button on the stack hand drops the entire stack.
+
+**Collapsing a stack**
+- Taking the last item out of a stack of 2 simply leaves two normal single items.
+- The player can immediately re-stack them with the same R + mouse chord if desired.
+
+**Data & Visuals**
+- UItemInstance remains never stacked (each Instance stays unique and long-lived).
+- The extra AItemActor is destroyed when stacking begins; only its UItemInstance is kept.
+- One UInstancedStaticMeshComponent exists per hand on UHeldItemsComponent. It is enabled only while that hand has a stack, using the item’s mesh and a small set of pre-authored relative transforms (max count comes from UStackableItemFragment).
+- When count returns to 1 the ISMC is disabled and the normal single-item mesh is restored.
+
+**Relationship to real containers**
+- Real containers continue to use AItemActor + UItemContainerComponent.
+- Shared take/put + UI logic will later be extracted into a common interface or thin handler so stacks and real containers feel identical when extended.
 
 ### 7. Player Structure
 
@@ -218,7 +251,41 @@ bool GetIsUnarmed(EHand Hand) const;
 - Dropping an item immediately re-equips Unarmed in that hand.
 - Eliminates null-hand special cases.
 
-### 9. Current Status (2026-08-15)
+### 9. Item Activation & Stab (Design Locked 2026-08-20)
+
+Activation (LMB/RMB without Q-mode) for supported items switches the hand between Neutral and Extended poses. The poses themselves are already authored as soft object references on `UEquippableItemFragment` (`NeutralPose` / `ExtendedPose`). Unarmed uses the same path.
+
+**Call site**
+- Input calls a single function on `UHeldItemsComponent` (preferred name: `SetExtended(EHand Hand, bool bExtended)` or the more semantic `OnExtended` / `OnRetracted` pair).
+- The component:
+  1. Updates the `UFPArmsAnimInstance` extended state flags and pushes the correct pose (Neutral ↔ Extended). This is the visual “punch / thrust” transfer (currently 2-frame poses).
+  2. When transitioning *to* Extended, looks up a `UStabItemFragment` on the currently held item’s Definition.
+  3. If the fragment exists, applies a linear impulse to the item’s PrimaryMesh.
+
+**UStabItemFragment** (pure data, follows `<Capability>ItemFragment` naming)
+- `float ImpulseStrength` — primary tunable value. Applied as a world-space linear impulse (direction starts as camera / look forward; can later gain a bias toward item-local forward).
+- Optional `float AngularImpulseStrength` (default 0) for rotational snap if desired later.
+- No damage numbers, multipliers, or special-case logic. The fragment only answers “how hard do I shove the physics body on extend.”
+
+**Why this works with Physics Control**
+Current control strengths are intentionally soft (Linear ~3, Angular ~5). A short impulse temporarily dominates, the item surges forward, the hands follow via the existing grip / Control Rig, and the Physics Control then recovers the item toward the new Extended target pose. This produces the desired “punchy” feel without fighting the laggy free-swing combat style.
+
+**Damage remains 100% collision-driven**
+All damage (Unarmed punch, spear tip, thrown rock, arrow, dropped item, etc.) uses the single shared path:
+- Collision occurs
+- Named primitive (`Blunt`, `Point`, `Sharp`, `Head`, …)
+- Relative velocity + incidence angle (and any per-name falloff)
+- Physical Material for impact sound / VFX
+
+No activation flag or special-case damage path is required. Higher velocity from the impulse naturally increases impact severity.
+
+**Applies equally to**
+- Unarmed (fists) — just put a `UStabItemFragment` on `DA_Unarmed` with appropriate strength.
+- Spears, knives, sharpened sticks, etc.
+
+Future polish (not required for first version): direction bias enum, impulse application point (COM vs tip socket), temporary Physics Control strength modulation during the activation window, stamina cost.
+
+### 10. Current Status (2026-08-20)
 
 **Working / Implemented**
 - `UItemFactorySubsystem` (World Subsystem) with the three creation methods
@@ -233,15 +300,21 @@ bool GetIsUnarmed(EHand Hand) const;
 - **Basic TryPickup / TryDrop / TryPickupOrDrop + GetIsUnarmed** (sphere sweep on TRACE_EQUIPPABLE)
 - Hybrid collision setup (Item profile + EquippableItemFragment sets TRACE_EQUIPPABLE = Block)
 - Pickup and drop fully functional end-to-end (including left-hand mirroring)
+- Held Stacks design locked
+- EquippableItemFragment already carries NeutralPose / ExtendedPose soft refs
+
+**Designed (not yet implemented)**
+- Stab / Extend activation path (`UStabItemFragment` + `SetExtended` / `OnExtended` on `UHeldItemsComponent`)
+- Pure collision-driven damage (primitive name + velocity + angle) — confirmed as the single path for punches, stabs, throws, projectiles
 
 **In progress / Next**
 1. Animation hooks between `UHeldItemsComponent` and AnimBP (hold poses / item-specific anims based on held items).
-2. 12-frame reach montage + AnimNotify finalization (replace immediate attach).
+2. 12-frame reach montage + AnimNotify finalization (replace immediate attach) — largely complete; polish remains.
 3. Dual item highlight (nearby gray + targeted stronger) driven by PickUpMode / FindLookedAtItem.
 4. Move input binding + Q-mode / PickUpMode state into C++.
-5. Basic Extend (neutral vs extended anim soft refs).
-6. Later: swinging, inventory/storage (Actor destroy/recreate from Instance), two-handed rules, damage, mass-based Physics Control strength, etc.
+5. Basic Extend (Neutral ↔ Extended) + `UStabItemFragment` impulse on extend.
+6. Later: swinging, inventory/storage (Actor destroy/recreate from Instance), two-handed rules, full impact/damage system, mass-based Physics Control strength, etc.
 
 ---
 
-This document reflects the design state as of 2026-08-15 after successful implementation of the basic pickup/drop loop, finalization of the hybrid collision approach, and addition of `GetIsUnarmed`.
+This document reflects the design state as of 2026-08-20. Core pickup/drop, collision hybrid, Unarmed, Held Stacks, and the Stab/Extend activation design are locked. Implementation of the Stab fragment and `SetExtended` path is next when activation work begins.
