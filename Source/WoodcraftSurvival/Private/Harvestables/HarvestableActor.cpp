@@ -19,6 +19,7 @@ AHarvestableActor::AHarvestableActor()
 	// Physics simulation is only enabled later (e.g. FallableHarvestableFragment or when becoming an Item).
 	PrimaryMeshComponent->SetSimulatePhysics(false);
 	PrimaryMeshComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	PrimaryMeshComponent->SetCollisionProfileName(TEXT("HarvestableProfile"));
 }
 
 void AHarvestableActor::BeginPlay()
@@ -37,7 +38,6 @@ void AHarvestableActor::InitializeFromDefinition(UHarvestableDefinition* InDefin
 	Instance = nullptr; // pure Definition path – Instance created lazily later
 
 	SetupMeshFromDefinition();
-	ApplyBaseCollision();
 	NotifyFragmentsSpawned();
 }
 
@@ -52,7 +52,6 @@ void AHarvestableActor::InitializeFromInstance(UHarvestableInstance* InInstance)
 	Definition = InInstance->Definition;
 
 	SetupMeshFromDefinition();
-	ApplyBaseCollision();
 	NotifyFragmentsSpawned();
 }
 
@@ -95,18 +94,6 @@ void AHarvestableActor::SetupMeshFromDefinition()
 	}
 }
 
-void AHarvestableActor::ApplyBaseCollision()
-{
-	if (!PrimaryMeshComponent)
-	{
-		return;
-	}
-
-	// Hybrid pattern (locked): apply the shared "Harvestable" profile first,
-	// then let fragments override individual responses in OnHarvestableSpawned.
-	PrimaryMeshComponent->SetCollisionProfileName(TEXT("Harvestable"));
-}
-
 void AHarvestableActor::NotifyFragmentsSpawned()
 {
 	if (!Definition)
@@ -121,4 +108,53 @@ void AHarvestableActor::NotifyFragmentsSpawned()
 			Fragment->OnHarvestableSpawned(this);
 		}
 	}
+}
+
+void AHarvestableActor::ApplyDamage(const FDamageInfo& DamageInfo)
+{
+	if (DamageInfo.Amount <= 0.f) return;
+
+	// First meaningful interaction → create the long-lived Instance
+	if (!HasInstance())
+	{
+		PromoteToInstance();
+	}
+
+	if (!Instance) return; // promote failed (no Definition or no World)
+
+	Instance->CurrentHealth -= DamageInfo.Amount;
+
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage
+		(
+			-1,
+			3.0f,
+			FColor::Orange,
+			FString::Printf(TEXT("%s health: %.1f"), *GetNameSafe(this), Instance->CurrentHealth)
+		);
+	}
+
+	if (Instance->CurrentHealth <= 0.f)
+	{
+		HandleDeath();
+	}
+}
+
+void AHarvestableActor::HandleDeath()
+{
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage
+		(
+			-1,
+			5.0f,
+			FColor::Red,
+			FString::Printf(TEXT("%s destroyed (death)"), *GetNameSafe(this))
+		);
+	}
+
+	// Temporary: just destroy the actor.
+	// Next step will spawn sticks + stump via Yield fragment before destroying.
+	Destroy();
 }

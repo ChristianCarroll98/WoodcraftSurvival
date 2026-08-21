@@ -4,11 +4,11 @@
 
 #include "CoreMinimal.h"
 #include "UObject/Interface.h"
-#include "Damageable.generated.h"
+#include "IDamageable.generated.h"
 
 /**
  * Minimal damage payload for the first pass.
- * Expand later with tool references, exact hit bone, etc.
+ * Expand later with tool references, exact hit primitive name, etc.
  * Final damage calculation (tool effectiveness, hardness, etc.) can live
  * on the tool, a shared helper, or a fragment – the interface only provides
  * the common entry point.
@@ -23,7 +23,7 @@ struct FDamageInfo
 
 	/** Simple tags or expand to FGameplayTagContainer later. */
 	UPROPERTY(BlueprintReadWrite, Category = "Damage")
-	FName DamageType = NAME_None;
+	TSubclassOf<UDamageType> DamageType;
 
 	UPROPERTY(BlueprintReadWrite, Category = "Damage")
 	FVector HitLocation = FVector::ZeroVector;

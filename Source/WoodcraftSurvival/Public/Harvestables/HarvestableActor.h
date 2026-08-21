@@ -2,8 +2,8 @@
 
 #pragma once
 
-#include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Core/Interfaces/IDamageable.h"
 #include "HarvestableActor.generated.h"
 
 class UHarvestableDefinition;
@@ -23,7 +23,7 @@ class UStaticMeshComponent;
  * - Primary mesh is set from the Definition (or Instance→Definition).
  */
 UCLASS()
-class WOODCRAFTSURVIVAL_API AHarvestableActor : public AActor
+class WOODCRAFTSURVIVAL_API AHarvestableActor : public AActor, public IDamageable
 {
 	GENERATED_BODY()
 
@@ -46,11 +46,15 @@ public:
 
 	UStaticMeshComponent* GetPrimaryMeshComponent() const { return PrimaryMeshComponent; }
 
+
+	// ---------- Interface Overrides ----------
+
+	/** Applies damage from FDamageInfo struct */
+	UFUNCTION(BlueprintCallable, Category = "Damage")
+	virtual void ApplyDamage(const FDamageInfo& DamageInfo) override;
+
 protected:
 	virtual void BeginPlay() override;
-
-	/** Applies the "Harvestable" collision profile and lets fragments override responses. */
-	void ApplyBaseCollision();
 
 	/** Loads and assigns the PrimaryMesh from the current Definition. */
 	void SetupMeshFromDefinition();
@@ -58,7 +62,9 @@ protected:
 	/** Calls OnHarvestableSpawned on every fragment of the current Definition. */
 	void NotifyFragmentsSpawned();
 
-protected:
+	/** Called when CurrentHealth reaches ≤ 0. Yield / stump logic will live here later. */
+	virtual void HandleDeath();
+
 	/** Always present. The visual and collision body of the harvestable. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UStaticMeshComponent> PrimaryMeshComponent;
