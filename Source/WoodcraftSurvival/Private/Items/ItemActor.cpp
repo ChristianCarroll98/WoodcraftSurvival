@@ -134,6 +134,9 @@ void AItemActor::OnItemMeshHit(UPrimitiveComponent* HitComp, AActor* OtherActor,
 
 	if (RelativeSpeed < MinDamageSpeed) return;
 
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (Now - LastDamageTime < DamageCooldown) return;
+
 	// Need a damage fragment to deal anything
 	if (!ItemInstance) return;
 	const UDamageItemFragment* DamageFrag = ItemInstance->FindFragment<UDamageItemFragment>();
@@ -154,4 +157,6 @@ void AItemActor::OnItemMeshHit(UPrimitiveComponent* HitComp, AActor* OtherActor,
 	Info.Instigator = Holder.IsValid() ? Holder.Get() : this;
 
 	Damageable->ApplyDamage(Info);
+
+	LastDamageTime = Now;
 }

@@ -39,6 +39,10 @@ public:
 	/** Currently a no-op. Durability / breakdown logic will live here later. */
 	virtual void ApplyDamage(const FDamageInfo& DamageInfo) override;
 
+	/** The cooldown timer for how often this Item can damage something */
+	UPROPERTY(EditDefaultsOnly, Category = "Item|Damage")
+	float DamageCooldown = 0.2f;
+
 
 	// ---------- Helpers ----------
 
@@ -92,4 +96,8 @@ protected:
 	UFUNCTION()
 	void OnItemMeshHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp,
 		FVector NormalImpulse, const FHitResult& Hit);
+
+	/** The time that this Item last damaged something */
+	float LastDamageTime = -1000.f;
+
 };
