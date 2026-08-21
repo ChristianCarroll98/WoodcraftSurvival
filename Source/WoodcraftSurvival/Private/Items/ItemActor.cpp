@@ -77,16 +77,10 @@ void AItemActor::InitializeFromInstance(UItemInstance* Instance)
 
 	PrimaryMeshComponent->RecreatePhysicsState();
 
-	// Enable collision damage on both meshes
-	EnableCollisionDamage(PrimaryMeshComponent);
-	if (SecondaryMeshComponent)
-	{
-		EnableCollisionDamage(SecondaryMeshComponent);
-	}
-
+	// Fragments run after base mesh/physics setup.
+	// UDamageItemFragment::OnItemSpawned enables collision hit events if present.
 	for (UItemFragment* Fragment : Instance->ItemDefinition->Fragments)
 	{
-		// Call each fragment's OnItemSpawned function on this item to allow them to initialize the item actor
 		if (Fragment) Fragment->OnItemSpawned(this);
 	}
 }

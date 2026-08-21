@@ -9,6 +9,8 @@
  * Provides basic damage information for items that can deal damage
  * (weapons, tools, unarmed, etc.).
  * Actual damage application is handled by the systems that perform the hit.
+ * OnItemSpawned enables collision hit events so only items with this fragment
+ * generate OnComponentHit callbacks.
  */
 UCLASS(EditInlineNew, DefaultToInstanced)
 class WOODCRAFTSURVIVAL_API UDamageItemFragment : public UItemFragment
@@ -24,4 +26,7 @@ public:
 	/** Base damage value before any modifiers. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Damage", meta = (ClampMin = "0.0"))
 	float BaseDamage = 0.f;
+
+	/** Enables hit events + binds the actor's OnItemMeshHit handler on Primary and Secondary meshes. */
+	virtual void OnItemSpawned(AItemActor* ItemActor) override;
 };

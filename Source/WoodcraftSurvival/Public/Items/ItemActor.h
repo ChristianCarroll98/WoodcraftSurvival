@@ -51,6 +51,10 @@ public:
 	/** Returns the relative transform of the primary mesh component from the ItemDefinition */
 	FTransform GetSecondaryRelativeTransform() const;
 
+	/** Enables hit events and binds OnItemMeshHit for the given mesh.
+	 *  Called from UDamageItemFragment::OnItemSpawned so only damaging items generate hits. */
+	void EnableCollisionDamage(UStaticMeshComponent* Mesh);
+
 
 	// ---------- Held State ----------
 
@@ -88,7 +92,4 @@ protected:
 	UFUNCTION()
 	void OnItemMeshHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp,
 		FVector NormalImpulse, const FHitResult& Hit);
-
-	/** Enables hit events and binds OnItemMeshHit for the given mesh. */
-	void EnableCollisionDamage(UStaticMeshComponent* Mesh);
 };
