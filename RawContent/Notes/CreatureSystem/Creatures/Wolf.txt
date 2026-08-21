@@ -1,9 +1,9 @@
 **Wolf – Foundation Creature Reference**  
-*Woodcraft Survival – UE 5.8*  
-*(Created 2026-08-19)*
+*Woodcraft Survival – UE 5.8 / Blender 5.2*  
+*(Created 2026-08-19 – updated 2026-08-21)*
 
 This is the species-specific reference for the wolf, the first creature that establishes the full shared AI, animation, and appearance systems.  
-It sits alongside `DesertWyvern.txt` and is kept lighter on lore/anatomy than the Wyvern document. Focus is on behavior patterns, rigging decisions, animation vision, and implementation notes needed for the foundation pass.
+It sits alongside `DesertWyvern.txt` and is kept lighter on lore/anatomy than the Wyvern document. Focus is on behavior patterns, **locked rigging**, animation vision, and implementation notes for the foundation pass.
 
 Related general documents:
 - `../CreatureAISystemDefinition.txt`
@@ -59,34 +59,79 @@ Related general documents:
 
 ### 3. Rigging Decisions (Locked for Wolf)
 
-*Art direction: edge-shaded / polygonal. Realistic deformation desired, extreme smoothness not required.*
+*Art direction: edge-shaded / polygonal. Realistic deformation desired, extreme smoothness not required. Fully manual armature (no Rigify).*
 
 #### 3.1 Skeleton Counts
-| Section       | Decision                          | Rationale                                      |
-|---------------|-----------------------------------|------------------------------------------------|
-| Spine         | Root + 2 mid + Chest              | Good flex without excess                       |
-| Neck          | 3 + Head                          | Solid look-around range                        |
-| Tail          | **6**                             | Leaner for polygonal style; still usable curl  |
-| Hind legs     | Root → Thigh (head at socket)     | Pelvis is rigid; no intermediate hip bones     |
-| Front legs    | Chest → Shoulder → UpperArm       | Scapula needs the extra bone                   |
-| Toes          | 1 per foot                        | Sufficient for low-poly                        |
-| Ears          | Base + Tip                        | Good expressive range                          |
-| Jaw           | 1 lower jaw bone                  | Standard                                       |
 
-#### 3.2 Root Placement
-- Centered in the pelvic / butt mass (not high at the tail exit).
-- Base of Root points toward the natural tail root.
-- Head of Root points forward along the spine.
-- Slightly lower than the high real-life tail exit for better center-of-mass and volume.
+| Section | Decision | Rationale |
+|---|---|---|
+| Root | Non-deform ground origin | UE character / capsule / future root motion |
+| Pelvis | Deforming hip at pelvic mass | Parent of spine, tail, hind legs |
+| Spine | `spine_01`–`spine_03` (last = chest) | Flex without excess; scapula + neck attach at `spine_03` |
+| Neck | `neck_01`–`neck_03` + `head` | Solid look-around range |
+| Tail | **`tail_01`–`tail_07`** | Smoother curl; `_01` = base at pelvis, `_07` = tip |
+| Hind legs | `hind_upper` → `hind_lower` → `hind_foot` → `hind_toes` | Direct from pelvis, Keep Offset, head at hip socket |
+| Front legs | `scapula` → `fore_upper` → `fore_lower` → `fore_foot` → `fore_toes` | Scapula from `spine_03`, Keep Offset |
+| Toes | 1 per foot | Low-poly sufficient |
+| Ears | **`ear_01`–`ear_03`** per side | Pin / curve without stiff paddle |
+| Jaw | 1 lower jaw | Standard |
+| Tongue | **`tongue_01`–`tongue_05`** under jaw | `_01` quiet base in attached third; neutral rest shape |
 
-#### 3.3 Shape Keys
-- **Snarl**: Single shape key. Basis has lips slightly covering teeth; shape key raises lips to expose teeth and front gums.
-- **Eyes**: Single multi-value shape key (0.0 = fully closed / quad collapsed, ~0.7 = normal, 1.0 = wider).
-- Blink = drive Eyes to 0.0 + turn emissive off (see materials document).
-- Optional later: Driver on Snarl from Jaw rotation; Tongue bone or shape key for panting / lolling.
+#### 3.2 Hierarchy (as built)
 
-#### 3.4 Style Impact
-Slightly lower bone counts (especially tail = 6) are preferred. Focus deformation effort on clear silhouettes and readable poses.
+```
+root                    (ground, Deform off)
+└── pelvis
+    ├── tail_01 → … → tail_07
+    ├── spine_01 → spine_02 → spine_03 (chest)
+    │     ├── neck_01 → neck_02 → neck_03 → head
+    │     │     ├── jaw
+    │     │     │     └── tongue_01 → … → tongue_05
+    │     │     ├── ear_01_r → ear_02_r → ear_03_r
+    │     │     └── ear_01_l → ear_02_l → ear_03_l
+    │     ├── scapula_r → fore_upper_r → fore_lower_r → fore_foot_r → fore_toes_r
+    │     └── scapula_l → …
+    ├── hind_upper_r → hind_lower_r → hind_foot_r → hind_toes_r
+    └── hind_upper_l → …
+```
+
+- Naming: lowercase, `_l` / `_r`, numbered chains. See general rigging doc §2.6.
+- Bone groups + viewport colors: see general rigging doc §2.7 (applied on this armature; same set for all future creatures).
+
+#### 3.3 Root & Pelvis Placement
+
+- **`root`:** ground, midline, under the torso / between the four feet (not mesh nose-to-tail midpoint, not hind-only). Small bone, +Y up, +X character’s right, Deform off.
+- **`pelvis`:** centered in the pelvic mass (not high at the tail exit). Slightly lower than the high real-life tail exit for volume. Child of root, Keep Offset. Parent of spine, tail, hind legs.
+
+#### 3.4 Scapula (Wolf)
+
+- Head: withers, just off spine, slightly behind chest–neck junction, about halfway from midline toward skin.
+- Tail: shoulder joint on the side/front of the chest (start of `fore_upper`).
+- Runs down, forward, out; length a bit over half the upper arm is fine.
+- Keep Offset on `spine_03`. Mostly small up/forward translate on steps. **Not** in the leg IK chain.
+
+#### 3.5 Shape Keys
+
+- **Snarl:** single shape key. Basis = lips slightly covering teeth; shape key exposes teeth + front gums. **Independent of jaw** — animations may combine jaw open + snarl or use either alone. No jaw driver.
+- **Eyes:** multi-value shape key (0.0 = fully closed / quad collapsed, ~0.7 = normal, 1.0 = wider). Blink = drive to 0.0 + turn emissive off (see materials document).
+- **Tongue:** bone chain only for now. Neutral rest shape. Optional TongueFlatten / tip-curl shape keys only if pant animation looks too tubular later.
+- No lip/muzzle bones.
+
+#### 3.6 Blender Authoring IK (Wolf)
+
+Posing aids only; not exported to UE.
+
+- **Leg IK:** on `fore_lower_*` / `hind_lower_*`, chain 2 → `fore_IK_*` / `hind_IK_*`, poles at elbow (behind) / knee (in front). Targets + poles parented to `root` (or pole offset under leg IK).
+- **Paw IK:** on `fore_toes_*` / `hind_toes_*`, chain 2 → `fore_toes_IK_*` / `hind_toes_IK_*`.
+- **`*_toes_IK` is parented to the corresponding leg IK target** so the paw follows the plant by default.
+- Deform off on all IK targets and poles. No Copy Transforms on foot when the second IK owns foot + toes.
+- Scapula / jaw / ears / tongue / tail / spine: FK.
+
+Runtime foot plant / terrain adaptation remains Unreal Control Rig after basic locomotion is solid.
+
+#### 3.7 Style Impact
+
+Slightly higher tail count (7) and ear/tongue detail are acceptable for readable expression. Focus deformation on clear silhouettes and poses, not ultra-smooth curves.
 
 ---
 
@@ -104,29 +149,30 @@ Quick priority reminder for this species:
 - Sniff, look-around, additional combat variants
 
 **Polish (alive when nearby)**
-- Scratch, shake, stretch, pant (with tongue), additive ear/tail, eat/chew, etc.
+- Scratch, shake, stretch, pant (jaw + tongue bones), additive ear/tail, eat/chew, etc.
 
 **Future systems**
 - Play / social, full submission set, taming/befriending animations
-
-Panting + tongue is high-value for nearby presence and should use the Jaw + Tongue (bone or shape key) approach described in the rigging document.
 
 ---
 
 ### 5. Implementation Notes
 
 - `ACreatureActor` derives from `ACharacter` (capsule + Character Movement + NavMesh integration). Tune capsule to roughly match the body; add extra collision later if needed.
-- Start without full foot IK. Add Control Rig / AnimBP foot placement after basic locomotion is solid on test terrain.
+- Start without full runtime foot IK. Add Control Rig / AnimBP foot placement after basic locomotion is solid on test terrain.
 - Materials and color variation follow the shared system in `CreatureMaterialsAndAppearance.txt`.
 - All AI decisions flow through `UCreatureInstance` (evaluation + short-term memory + awareness). State Tree stays relatively shallow and uses Linked Assets.
+- Current mesh/armature work: model complete; remaining work is weight painting and animation authoring in Blender before deeper UE creature integration.
 
 ---
 
 ### 6. Open / Future for This Species
 
 - Exact rest-pose joint pre-bends.
-- Tongue implementation final choice (bone vs shape key).
-- Foot IK introduction timing.
+- Scapula location range on a step.
+- MouthOpen shape key (optional).
+- TongueFlatten / tip-curl after pant tests.
+- Foot IK introduction timing in Unreal.
 - Pack behavior and howl-as-grouping signal.
 - Taming / befriending design and required extra animations.
 - LOD skeleton reduction.
