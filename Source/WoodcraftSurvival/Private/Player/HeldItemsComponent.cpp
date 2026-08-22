@@ -561,7 +561,7 @@ void UHeldItemsComponent::PreventItemStuck(EHand Hand)
 	const float Distance = FVector::Dist(HandBoneLocation, GripLocation);
 
 	// Hysteresis to prevent flickering - TODO: tune later
-	const float EnterUnsafeDistance = 55.0f;
+	const float EnterUnsafeDistance = 70.0f;
 	const float ExitUnsafeDistance = 40.0f;
 
 	bool& bItemStuck = (Hand == EHand::Left) ? bLeftItemStuck : bRightItemStuck;

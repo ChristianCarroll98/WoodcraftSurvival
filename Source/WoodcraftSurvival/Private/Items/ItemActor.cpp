@@ -7,6 +7,7 @@
 #include "Items/Fragments/DamageItemFragment.h"
 #include "Core/WoodcraftTypes.h"
 #include <Components/StaticMeshComponent.h>
+#include <PhysicsEngine/PhysicsConstraintComponent.h>
 
 AItemActor::AItemActor()
 {
@@ -49,14 +50,12 @@ void AItemActor::InitializeFromInstance(UItemInstance* Instance)
 	if (!Instance->ItemDefinition->SecondaryMesh.IsNull())
 	{
 		UStaticMesh* SecondaryMesh = Instance->ItemDefinition->SecondaryMesh.LoadSynchronous();
-		
 		if (SecondaryMesh)
 		{
 			SecondaryMeshComponent = NewObject<UStaticMeshComponent>(this, TEXT("SecondaryMeshComponent"));
-
 			SecondaryMeshComponent->SetStaticMesh(SecondaryMesh);
 			SecondaryMeshComponent->SetRelativeTransform(Instance->ItemDefinition->SecondaryRelativeTransform);
-			SecondaryMeshComponent->SetCollisionProfileName(TEXT("Item"));
+			SecondaryMeshComponent->SetCollisionProfileName(TEXT("ItemProfile"));
 
 			SecondaryMeshComponent->SetupAttachment(PrimaryMeshComponent);
 			SecondaryMeshComponent->RegisterComponent();
@@ -67,16 +66,23 @@ void AItemActor::InitializeFromInstance(UItemInstance* Instance)
 			SecondaryMeshComponent->SetLinearDamping(0.05f);
 			SecondaryMeshComponent->SetAngularDamping(0.5f);
 
-			SecondaryMeshComponent->WeldTo(PrimaryMeshComponent);
-		}
-		else
-		{
-			if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Cyan,
-				TEXT("Failed to load secondary mesh for item. Skipping... item: ") + GetName());
+			// Fixed constraint = rigid connection (Chaos-friendly dual-mesh)
+			UPhysicsConstraintComponent* Constraint = NewObject<UPhysicsConstraintComponent>(this,
+				TEXT("SecondaryConstraint"));
+			Constraint->SetupAttachment(PrimaryMeshComponent);
+			Constraint->RegisterComponent();
+			Constraint->SetConstrainedComponents(PrimaryMeshComponent, NAME_None, SecondaryMeshComponent,
+				NAME_None);
+			Constraint->SetDisableCollision(true);
+
+			Constraint->SetLinearXLimit(ELinearConstraintMotion::LCM_Locked, 0.f);
+			Constraint->SetLinearYLimit(ELinearConstraintMotion::LCM_Locked, 0.f);
+			Constraint->SetLinearZLimit(ELinearConstraintMotion::LCM_Locked, 0.f);
+			Constraint->SetAngularSwing1Limit(EAngularConstraintMotion::ACM_Locked, 0.f);
+			Constraint->SetAngularSwing2Limit(EAngularConstraintMotion::ACM_Locked, 0.f);
+			Constraint->SetAngularTwistLimit(EAngularConstraintMotion::ACM_Locked, 0.f);
 		}
 	}
-
-	PrimaryMeshComponent->RecreatePhysicsState();
 
 	// Fragments run after base mesh/physics setup.
 	// UDamageItemFragment::OnItemSpawned enables collision hit events if present.

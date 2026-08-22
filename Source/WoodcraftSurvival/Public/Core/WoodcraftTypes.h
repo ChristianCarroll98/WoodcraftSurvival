@@ -4,6 +4,7 @@
 
 #include "WoodcraftTypes.generated.h"
 
+
 // ---------- Const Global Vars ----------
 
 /** Error string prefix */
@@ -11,6 +12,7 @@ const FString GErrorPrefix = TEXT("ERROR: ");
 
 /** Minimum impulse required for a collision to deal damage. Tunable later. */
 const float GMinImpulse = 100.f;
+
 
 // ---------- Enums ----------
 
