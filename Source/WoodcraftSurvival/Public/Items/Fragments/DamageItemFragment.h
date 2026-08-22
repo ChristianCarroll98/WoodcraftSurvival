@@ -6,11 +6,13 @@
 #include "DamageItemFragment.generated.h"
 
 /**
- * Provides basic damage information for items that can deal damage
- * (weapons, tools, unarmed, etc.).
- * Actual damage application is handled by the systems that perform the hit.
- * OnItemSpawned enables collision hit events so only items with this fragment
- * generate OnComponentHit callbacks.
+ * Pure marker fragment that enables collision hit events on an item.
+ * Presence of this fragment causes AItemActor to bind OnComponentHit on
+ * Primary and Secondary meshes and to apply damage on valid impacts.
+ *
+ * DamageType is derived at hit time from the named collision primitive
+ * (Blunt / Slash / Pierce / aliases). Amount is derived from impulse magnitude.
+ * No BaseDamage or DamageType data is stored on the fragment.
  */
 UCLASS(EditInlineNew, DefaultToInstanced)
 class WOODCRAFTSURVIVAL_API UDamageItemFragment : public UItemFragment
@@ -18,14 +20,6 @@ class WOODCRAFTSURVIVAL_API UDamageItemFragment : public UItemFragment
 	GENERATED_BODY()
 
 public:
-
-	/** Type of damage this item deals. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Damage")
-	TSubclassOf<UDamageType> DamageType;
-
-	/** Base damage value before any modifiers. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Damage", meta = (ClampMin = "0.0"))
-	float BaseDamage = 0.f;
 
 	/** Enables hit events + binds the actor's OnItemMeshHit handler on Primary and Secondary meshes. */
 	virtual void OnItemSpawned(AItemActor* ItemActor) override;

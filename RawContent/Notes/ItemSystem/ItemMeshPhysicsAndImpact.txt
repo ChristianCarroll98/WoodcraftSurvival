@@ -55,8 +55,14 @@ Logical materials have been removed; Physical Materials are the single source of
 - After Secondary is welded to Primary, Unreal calculates the combined mass and combined center of mass automatically.
 
 **Part / Damage Identification**
-- The name of the collision primitive that was hit *is* the damage type / part key (`Blunt`, `Sharp`, `Point`, `Head`, etc.).
-- Extract it from the hit (shape name / element). Use it directly for damage multipliers and special feedback.
+- The name of the collision primitive that was hit *is* the damage type / part key.
+- Extract via `Hit.MyItem` (or `ElementIndex`) → `BodySetup->AggGeom.GetElement` → `FKShapeElem::GetName()`.
+- Mapping (multiple descriptive names allowed):
+  - `Slash` / `Sharp` / `Blade` → UDamageType_Slash
+  - `Pierce` / `Point` → UDamageType_Pierce
+  - everything else (`Blunt`, `Head`, `Handle`, empty, unknown) → UDamageType_Blunt
+- UDamageItemFragment is a pure enable-hits marker; no BaseDamage or DamageType stored on it.
+- Amount is derived from impulse magnitude only (mass already contributes via PhysMats).
 - No extra data map is required on the Definition.
 
 **Placement of Secondary Mesh**

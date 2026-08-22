@@ -6,8 +6,12 @@
 #include "Items/Fragments/ItemFragment.h"
 #include "Items/Fragments/DamageItemFragment.h"
 #include "Core/WoodcraftTypes.h"
+#include "Core/Damage/DamageType_Blunt.h"
+#include "Core/Damage/DamageType_Slash.h"
+#include "Core/Damage/DamageType_Pierce.h"
 #include <Components/StaticMeshComponent.h>
 #include <PhysicsEngine/PhysicsConstraintComponent.h>
+#include <PhysicsEngine/BodySetup.h>
 
 AItemActor::AItemActor()
 {
@@ -120,6 +124,29 @@ void AItemActor::EnableCollisionDamage(UStaticMeshComponent* Mesh)
 	Mesh->OnComponentHit.AddDynamic(this, &AItemActor::OnItemMeshHit);
 }
 
+TSubclassOf<UDamageType> AItemActor::ResolveDamageTypeFromShapeName(FName ShapeName)
+{
+	if (ShapeName.IsNone())
+	{
+		return UDamageType_Blunt::StaticClass();
+	}
+
+	const FString Name = ShapeName.ToString().ToLower();
+
+	if (Name.Contains(TEXT("slash")) || Name.Contains(TEXT("sharp")) || Name.Contains(TEXT("blade")))
+	{
+		return UDamageType_Slash::StaticClass();
+	}
+
+	if (Name.Contains(TEXT("pierce")) || Name.Contains(TEXT("point")))
+	{
+		return UDamageType_Pierce::StaticClass();
+	}
+
+	// Blunt, Head, Handle, or any unrecognised name
+	return UDamageType_Blunt::StaticClass();
+}
+
 void AItemActor::OnItemMeshHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp,
 	FVector NormalImpulse, const FHitResult& Hit)
 {
@@ -143,26 +170,55 @@ void AItemActor::OnItemMeshHit(UPrimitiveComponent* HitComp, AActor* OtherActor,
 	const float Now = GetWorld()->GetTimeSeconds();
 	if (Now - LastDamageTime < DamageCooldown) return;
 
-	// Need a damage fragment to deal anything
+	// Need the enable-hits marker fragment
 	if (!ItemInstance) return;
 	const UDamageItemFragment* DamageFrag = ItemInstance->FindFragment<UDamageItemFragment>();
-	if (!DamageFrag || DamageFrag->BaseDamage <= 0.f) return;
+	if (!DamageFrag) return;
 
 	// Only continue if the target can take damage
 	IDamageable* Damageable = Cast<IDamageable>(OtherActor);
 	if (!Damageable) return;
 
-	// Simple linear scale for now (can become a curve or per-DamageType later)
-	const float SpeedScale = FMath::Clamp(NormalImpulse.Size() / 500.f, 0.1f, 2.0f);
-	const float Amount = DamageFrag->BaseDamage * SpeedScale;
+	// Extract the named collision primitive on *this* item (the part that contacted)
+	FName ShapeName = NAME_None;
+	if (HitComp)
+	{
+		if (UBodySetup* BodySetup = HitComp->GetBodySetup())
+		{
+			// MyItem = shape index on the component that generated the hit event
+			const int32 ShapeIndex = (Hit.MyItem >= 0) ? Hit.MyItem : static_cast<int32>(Hit.ElementIndex);
+			if (const FKShapeElem* Elem = BodySetup->AggGeom.GetElement(ShapeIndex))
+			{
+				ShapeName = Elem->GetName();
+			}
+		}
+	}
+
+	const TSubclassOf<UDamageType> ResolvedType = ResolveDamageTypeFromShapeName(ShapeName);
+
+	// Amount from impulse only (mass already contributes via physics / PhysMats)
+	const float ImpulseMag = NormalImpulse.Size();
+	const float Amount = FMath::Clamp(ImpulseMag * 0.01f, 0.5f, 40.f);
 
 	FDamageInfo Info;
 	Info.Amount = Amount;
-	Info.DamageType = DamageFrag->DamageType;
+	Info.DamageType = ResolvedType;
 	Info.HitLocation = Hit.ImpactPoint;
 	Info.Instigator = Holder.IsValid() ? Holder.Get() : this;
 
 	Damageable->ApplyDamage(Info);
 
 	LastDamageTime = Now;
+
+	// Debug (remove or gate later)
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 1.5f, FColor::Yellow,
+			FString::Printf(TEXT("Hit %s | Shape=%s → %s | Impulse=%.0f Amount=%.1f"),
+				*OtherActor->GetName(),
+				*ShapeName.ToString(),
+				ResolvedType ? *ResolvedType->GetName() : TEXT("None"),
+				ImpulseMag,
+				Amount));
+	}
 }

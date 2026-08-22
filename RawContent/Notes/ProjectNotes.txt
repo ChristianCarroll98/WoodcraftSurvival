@@ -19,14 +19,19 @@ if (GEngine) GEngine->AddOnScreenDebugMessage
 current issues/working task list:
 
 - Collision damage path is live (held-only, GMinImpulse, short cooldown). Stick works on TestTree.
-- Resistance data on HealthHarvestableFragment so trees ignore / heavily resist Blunt (Slash-only for chopping).
-- Copper Hatchet as a normal dual-mesh item (handle + head), Slash DamageItemFragment, primitives named Blunt/Slash only.
-- Extract named collision primitive from the hit so the part that contacted matters.
+- DONE: Resistance data lives on HealthHarvestableFragment (defaults) → copied to UHarvestableInstance at creation. ApplyDamage multiplies by Instance->GetDamageMultiplier. Tree data asset: put Blunt in Immunities (or high positive modifier) so sticks stop killing trees.
+- DONE: Copper Hatchet dual-mesh via fixed UPhysicsConstraintComponent (Chaos WeldTo unreliable for runtime NewObject secondaries). Both meshes simulate; constraint locks all 6 DOF + SetDisableCollision(true). Feels heavier, hits register, head stays attached.
+- DONE: DamageItemFragment is pure “enable hit events” marker. DamageType from named collision primitives (Slash/Sharp/Blade → Slash, Pierce/Point → Pierce, else Blunt). Amount from impulse only (mass already in physics). Softness multipliers later on Physical Material.
+- DONE: Extract named collision primitive from the hit (Hit.MyItem / ElementIndex → AggGeom.GetElement → ShapeName).
+- DONE: Mass-scaled Physics Control strengths (Linear/Angular × MassScale, ref ~0.8 kg). Should stop hatchet sag.
 - Procedural swing orientation for tools/weapons (item rotates toward swing direction). Hard wrist rotation limits later.
 - Explicitly deferred: separate head/handle durability / dual Instances. Hatchet just breaks into wood + CopperScrap like any other item.
 
 Architecture reminder:
-- Fragments = data + minimal spawn/init hooks.
+- Fragments = data + minimal spawn/init hooks. No runtime work in fragments.
 - Actors stay thin. Behaviour lives in systems.
 - Same resistance shape will be reused on Creatures/Player later.
 - MVP first — no composite tools, no part durability until much later.
+- Physical Materials = single source of truth for density/mass + future impact/softness scales.
+- Dual-mesh tools: fixed Physics Constraint (not WeldTo). SecondaryRelativeTransform must be correct on the Item Definition.
+- Named primitives on Static Meshes drive DamageType (multiple author names can map to one type).

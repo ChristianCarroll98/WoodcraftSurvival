@@ -472,10 +472,15 @@ bool UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand, FStr
 
 	const FName WeaponBoneName = GetWeaponBoneName(Hand);
 
+	// Scale Physics Control strength by item mass so heavy tools (hatchet) don't sag
+	// while light sticks stay responsive. Reference ~0.8 kg stick.
+	const float Mass = ItemMesh->GetMass();
+	const float MassScale = FMath::Clamp(Mass / 0.8f, 0.6f, 3.5f);
+
 	FPhysicsControlData ControlData;
-	ControlData.LinearStrength = 3.0f;
+	ControlData.LinearStrength = 3.0f * MassScale;
 	ControlData.LinearDampingRatio = 1.3f;
-	ControlData.AngularStrength = 5.0f;
+	ControlData.AngularStrength = 5.0f * MassScale;
 	ControlData.AngularDampingRatio = 1.2f;
 	ControlData.bUseSkeletalAnimation = true;
 	ControlData.bDisableCollision = true;
