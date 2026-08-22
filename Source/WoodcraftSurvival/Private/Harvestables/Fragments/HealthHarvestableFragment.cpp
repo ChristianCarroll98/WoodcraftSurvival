@@ -5,8 +5,12 @@
 
 void UHealthHarvestableFragment::OnHarvestableInstanceCreated(UHarvestableInstance* Instance)
 {
-	if (Instance)
+	if (!Instance)
 	{
-		Instance->CurrentHealth = MaxHealth;
+		return;
 	}
+
+	Instance->CurrentHealth = MaxHealth;
+	Instance->DamageModifiers = DamageModifiers;
+	Instance->DamageImmunities = DamageImmunities;
 }

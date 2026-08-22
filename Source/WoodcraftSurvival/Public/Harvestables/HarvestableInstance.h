@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "UObject/Object.h"
+#include "GameFramework/DamageType.h"
 #include "HarvestableInstance.generated.h"
 
 class UHarvestableDefinition;
@@ -36,6 +37,25 @@ public:
 	 */
 	UPROPERTY(BlueprintReadOnly, Category = "Health")
 	float CurrentHealth = 0.f;
+
+	/**
+	 * Runtime copy of resistance data. Populated once from UHealthHarvestableFragment.
+	 * Status effects may later ++/-- the integer values here.
+	 * Positive = more resistant, Negative = more weak. Missing/0 → ×1.0.
+	 * Final multiplier = Pow(0.5f, Modifier).
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "Health|Resistance")
+	TMap<TSubclassOf<UDamageType>, int32> DamageModifiers;
+
+	/** Completely ignore these damage types (multiplier 0). Copied from fragment at creation. */
+	UPROPERTY(BlueprintReadOnly, Category = "Health|Resistance")
+	TArray<TSubclassOf<UDamageType>> DamageImmunities;
+
+	/**
+	 * Returns 0 if the damage type is immune, otherwise Pow(0.5f, Modifier).
+	 * Missing or 0 modifier → 1.0.
+	 */
+	float GetDamageMultiplier(TSubclassOf<UDamageType> InDamageType) const;
 
 	// Future: growth stage, progress, water, quality, regrowth timer, etc.
 	// can be added here or driven entirely by specialized fragments.
