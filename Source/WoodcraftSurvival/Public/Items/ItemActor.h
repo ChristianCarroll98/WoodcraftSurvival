@@ -4,6 +4,7 @@
 
 #include "GameFramework/Actor.h"
 #include "ItemActorInterface.h"
+#include "Core/Interfaces/IDamageable.h"
 #include "ItemActor.generated.h"
 
 class UItemInstance;
@@ -13,10 +14,10 @@ class UStaticMeshComponent;
  * World representation of an item.
  * Root component is always a StaticMeshComponent.
  * May have a secondary StaticMeshComponent for tool/weapon heads.
- * Holds a UItemInstance and implements IItemActorInterface.
+ * Holds a UItemInstance and implements IItemActorInterface + IDamageable.
  */
 UCLASS()
-class WOODCRAFTSURVIVAL_API AItemActor : public AActor, public IItemActorInterface
+class WOODCRAFTSURVIVAL_API AItemActor : public AActor, public IItemActorInterface, public IDamageable
 {
 	GENERATED_BODY()
 
@@ -33,6 +34,16 @@ public:
 	virtual void InitializeFromInstance(UItemInstance* Instance) override;
 
 
+	// ---------- IDamageable ----------
+
+	/** Currently a no-op. Durability / breakdown logic will live here later. */
+	virtual void ApplyDamage(const FDamageInfo& DamageInfo) override;
+
+	/** The cooldown timer for how often this Item can damage something */
+	UPROPERTY(EditDefaultsOnly, Category = "Item|Damage")
+	float DamageCooldown = 0.2f;
+
+
 	// ---------- Helpers ----------
 
 	/** Returns the primary mesh component of this item actor */
@@ -43,6 +54,22 @@ public:
 
 	/** Returns the relative transform of the primary mesh component from the ItemDefinition */
 	FTransform GetSecondaryRelativeTransform() const;
+
+	/** Enables hit events and binds OnItemMeshHit for the given mesh.
+	 *  Called from UDamageItemFragment::OnItemSpawned so only damaging items generate hits. */
+	void EnableCollisionDamage(UStaticMeshComponent* Mesh);
+
+
+	// ---------- Held State ----------
+
+	/**
+	 * Actor currently holding this item (usually the player character).
+	 * Set by UHeldItemsComponent on attach, cleared on detach.
+	 * Used to prevent held items from damaging each other and for Instigator.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "Item|Held")
+	TWeakObjectPtr<AActor> Holder;
+
 
 protected:
 
@@ -57,4 +84,20 @@ protected:
 	/** Optional tool/weapon head mesh component. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Item|PrimaryMesh")
 	TObjectPtr<UStaticMeshComponent> SecondaryMeshComponent;
+
+	/** Minimum relative speed (cm/s) required for a collision to deal damage. Tunable later. */
+	UPROPERTY(EditDefaultsOnly, Category = "Item|Damage")
+	float MinDamageSpeed = 50.f;
+
+
+	// ---------- Collision Damage ----------
+
+	/** Bound to Primary and Secondary mesh OnComponentHit. */
+	UFUNCTION()
+	void OnItemMeshHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp,
+		FVector NormalImpulse, const FHitResult& Hit);
+
+	/** The time that this Item last damaged something */
+	float LastDamageTime = -1000.f;
+
 };

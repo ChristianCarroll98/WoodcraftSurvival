@@ -1,5 +1,5 @@
 **Harvestable System Definition**
-*(Updated 2026-08-16 – crops/farming direction locked)*
+*(Updated 2026-08-16 – crops/farming direction locked; fragment naming convention updated 2026-08-19)*
 
 ### 1. High-Level Goals
 
@@ -23,7 +23,7 @@
 
 ```cpp
 /** Called once when a UHarvestableInstance is first created. */
-virtual void OnInstanceCreated(UHarvestableInstance* Instance) {}
+virtual void OnHarvestableInstanceCreated(UHarvestableInstance* Instance) {}
 
 /** Called every time an AHarvestableActor is spawned/initialized. */
 virtual void OnHarvestableSpawned(AHarvestableActor* Actor) {}
@@ -226,22 +226,24 @@ Different crops simply author different stage durations and different sensitivit
 
 ### 8. Fragments – Initial Ideas
 
-These are starting points only; exact set will evolve:
+These are starting points only; exact set will evolve.  
+**Naming convention (locked 2026-08-19):** concrete fragments use `<Capability>HarvestableFragment`.
 
-- `UHealthFragment` – MaxHealth, current health lives on Instance.
-- `UYieldFragment` – what Items to spawn and in what quantities / chances when destroyed or on stage change.
-- `UFallableFragment` – fall behaviour, direction bias, physics settings for the falling phase.
-- `UBranchableFragment` / `UPartDamageFragment` – support for damaging individual parts (branches) independently.
-- `UToolRequirementFragment` – gameplay tags or damage types this harvestable responds to.
-- `UMultiStageFragment` – ordered list of stages with different meshes / health / yields (used by both trees and crops).
-- `URegrowFragment` – for stumps or plants that can return over time.
+- `UHealthHarvestableFragment` – MaxHealth, current health lives on Instance.
+- `UYieldHarvestableFragment` – what Items to spawn and in what quantities / chances when destroyed or on stage change.
+- `UFallableHarvestableFragment` – fall behaviour, direction bias, physics settings for the falling phase.
+- `UBranchableHarvestableFragment` / `UPartDamageHarvestableFragment` – support for damaging individual parts (branches) independently.
+- `UToolRequirementHarvestableFragment` – gameplay tags or damage types this harvestable responds to.
+- `UMultiStageHarvestableFragment` – ordered list of stages with different meshes / health / yields (used by both trees and crops).
+- `URegrowHarvestableFragment` – for stumps or plants that can return over time.
 - Crop-oriented:
-  - `UGrowthFragment` – stage list, base durations, MinPlantDistance, starting stage for seeds vs cuttings.
-  - `USeasonalFragment` – preferred seasons / temperature / humidity windows + multipliers.
-  - `USoilPreferenceFragment` – preferred biome tags and soil quality response.
-  - `UWaterFragment` – consumption rate, drought thresholds (future).
-  - `UPropagationFragment` – which stages allow seeds or cuttings and the resulting Item definitions.
-  - `UMultiHarvestFragment` – for plants that can be picked repeatedly.
+  - `UGrowthHarvestableFragment` – stage list, base durations, MinPlantDistance, starting stage for seeds vs cuttings.
+  - `USeasonalHarvestableFragment` – preferred seasons / temperature / humidity windows + multipliers.
+  - `USoilPreferenceHarvestableFragment` – preferred biome tags and soil quality response.
+  - `UWaterHarvestableFragment` – consumption rate, drought thresholds (future).
+  - `UPropagationHarvestableFragment` – which stages allow seeds or cuttings and the resulting Item definitions.
+  - `UMultiHarvestHarvestableFragment` – for plants that can be picked repeatedly.
+  - `UCropHarvestableFragment` – convenience / collision + growth related settings for crops.
 
 ### 9. World Generation & Performance Notes
 

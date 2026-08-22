@@ -1,0 +1,228 @@
+**Harvestable System Implementation**
+*(Created 2026-08-19 – Core architecture + Tree MVP locked)*
+
+**Fragment naming convention (locked 2026-08-19)**  
+Concrete fragments use the form `<Capability>HarvestableFragment` (e.g. `UHealthHarvestableFragment`, `UYieldHarvestableFragment`, `UCropHarvestableFragment`).  
+The abstract base remains `UHarvestableFragment`.  
+This mirrors the Item convention (`UEquippableItemFragment`, etc.) and keeps the two systems clearly distinct.
+
+### 1. High-Level Goals
+- Fully data-driven harvestable resources using Primary Data Assets + Fragments.
+- Mirror the locked Item system patterns as closely as possible for consistency and maintainability.
+- `UHarvestableInstance` is the long-lived identity of a specific world resource. It is only destroyed when the resource is fully harvested / removed.
+- `AHarvestableActor` is the current world representation and **may** be destroyed and later recreated from an Instance (streaming, save/load, density management).
+- Support lazy Instance creation for dense world-generated resources (trees, rocks, ore, etc.).
+- Player-planted crops always create an Instance immediately.
+- When a harvestable is processed it **produces Items** via `UItemFactorySubsystem`. It is never itself an Item.
+- Clean separation of concerns:
+  - **Data** → Definitions + Fragments
+  - **Runtime state** → `UHarvestableInstance` (long-lived, lazy)
+  - **World presence** → `AHarvestableActor` (disposable)
+  - **Creation** → `UHarvestableFactorySubsystem`
+  - **Damage entry** → shared `IDamageable` interface (also implemented by `AItemActor`)
+
+### 2. Core Code Types
+
+**UHarvestableDefinition** (Primary Data Asset)
+Contains an array of `UHarvestableFragment*` (EditInlineNew, Instanced).
+This is the pure type data for a harvestable (OakTree, PineTree, CopperVein, ClayDeposit, Stump_Generic, Carrot, BerryBush, etc.).
+
+**UHarvestableFragment** (abstract base)
+Lightweight, primarily pure data (EditDefaultsOnly).
+Two virtuals that exactly mirror the Item system:
+
+```cpp
+/** Called only once when a new UHarvestableInstance is first created.
+ *  Use for default runtime values (CurrentHealth = MaxHealth, growth progress = 0, etc.). */
+virtual void OnHarvestableInstanceCreated(UHarvestableInstance* Instance) {}
+
+/** Called every time an AHarvestableActor is spawned / initialized.
+ *  Use only for actor-side setup (collision responses, mesh, components).
+ *  Never write default values into the Instance here. */
+virtual void OnHarvestableSpawned(AHarvestableActor* Actor) {}
+```
+
+**UHarvestableInstance** (UObject)
+- Long-lived runtime state for one specific harvestable (CurrentHealth, growth stage/progress, quality, regrowth timer, etc.).
+- Created with `NewObject<UHarvestableInstance>(GetTransientPackage())` (or owned by the subsystem later if desired).
+- Only destroyed when the resource is truly gone.
+- Created **lazily** for most world-generated resources.
+- Always created immediately for player-planted crops.
+
+**AHarvestableActor** (single base class)
+- The world representation.
+- Always holds a reference to its `UHarvestableDefinition`.
+- Holds a reference to its `UHarvestableInstance` **only after** promotion (or from the start for crops).
+- Owns a Primary Static Mesh Component (Secondary support can be added later if needed for complex trees).
+- `InitializeFromDefinition()` – used for pure Definition spawns (lazy path).
+- `InitializeFromInstance()` – full path once an Instance exists; sets mesh and calls `OnHarvestableSpawned` on every fragment.
+- Handles collision, visual representation, damage reception, and stage transitions.
+- May be destroyed and later recreated from the same Instance.
+
+**UHarvestableFactorySubsystem** (`UWorldSubsystem`)
+Single authority for creation. Access via `GetWorld()->GetSubsystem<UHarvestableFactorySubsystem>()`.
+
+Public API:
+```cpp
+UHarvestableInstance* CreateInstanceFromDefinition(UHarvestableDefinition* Definition);
+AHarvestableActor*    SpawnActorFromDefinition(UHarvestableDefinition* Definition, const FTransform& Transform);
+AHarvestableActor*    SpawnActorFromInstance(UHarvestableInstance* Instance, const FTransform& Transform);
+void                  PromoteToInstance(AHarvestableActor* Actor); // creates Instance on first meaningful interaction
+```
+
+- `CreateInstanceFromDefinition` creates the Instance and calls `Fragment->OnHarvestableInstanceCreated` on all fragments.
+- `SpawnActorFromInstance` spawns the Actor and calls `Actor->InitializeFromInstance`.
+- `SpawnActorFromDefinition` is the convenience / world-gen path (no Instance yet).
+- `PromoteToInstance` is called by the Actor the first time state must be persisted (first damage that matters, etc.).
+
+### 3. Lifetime & Lazy Instance Rules (Locked)
+
+- World generation and foliage systems may spawn pure `AHarvestableActor`s that only reference a Definition.
+- No `UHarvestableInstance` exists yet → minimal memory cost for dense forests.
+- On the first meaningful interaction (damage that changes health, any event that needs to be saved, etc.) the Actor calls `PromoteToInstance()`.
+- From that point the Instance owns all mutable runtime data and the Actor simply references it.
+- Player-planted crops **always** create the Instance at plant time (they carry unique growth state from day zero).
+- When the resource is fully harvested the Instance is destroyed along with the final Actor.
+
+### 4. Collision (Locked – Hybrid Profile + Fragment Override)
+
+Exactly the same philosophy as the Item system.
+
+- Create a **“Harvestable”** collision profile (Project Settings → Collision → Presets).
+  - Object Type = `Harvestable` (custom)
+  - Collision Enabled = QueryAndPhysics
+  - Sensible default responses that make standing trees / stumps / rocks solid (Block WorldStatic, WorldDynamic, Pawn, Item, etc.).
+  - Does **not** respond to `TRACE_EQUIPPABLE` by default.
+
+- In `AHarvestableActor` initialization the Primary Mesh receives:
+  ```cpp
+  PrimaryMeshComponent->SetCollisionProfileName(TEXT("Harvestable"));
+  // Then fragments may override individual responses
+  ```
+
+- Fragments own specialized behaviour in `OnHarvestableSpawned`:
+  - Trees / large rocks / stumps → leave the solid defaults (or explicitly reinforce them).
+  - `UCropHarvestableFragment` (or a thin collision helper) changes responses for plants:
+    - Ignore Pawn (or very soft Block) for small crops.
+    - QueryOnly or NoCollision for the tiniest sprout stage.
+    - Optionally scale collision with growth stage later.
+
+- Standing harvestables start **kinematic / non-simulating**. Physics simulation is only enabled later if a FallableHarvestableFragment decides to drop the tree, or when the resource becomes an Item (Log).
+
+- When a tree dies and spawns a Log Item, the Item system takes over completely and applies the normal “Item” profile + physics simulation. Clean hand-off.
+
+### 5. Damage Interface (Locked)
+
+Both `AItemActor` and `AHarvestableActor` implement the same generic interface so tools work uniformly.
+
+```cpp
+UINTERFACE()
+class UDamageable : public UInterface
+{
+	GENERATED_BODY()
+};
+
+class IDamageable
+{
+	GENERATED_BODY()
+public:
+	virtual void ApplyDamage(const FDamageInfo& DamageInfo) = 0;
+};
+```
+
+`FDamageInfo` (still minimal for MVP – expand later):
+- float Amount
+- FGameplayTagContainer DamageTypeTags (or simple enum for first pass)
+- FVector HitLocation
+- AActor* Instigator
+- optional tool / item reference
+
+Exact calculation of final damage (tool effectiveness, material hardness, etc.) remains open and can live in a shared helper or on the tool itself. The interface only guarantees a common entry point.
+
+### 6. Minimal Fragments for Tree MVP
+
+**UHealthHarvestableFragment**
+- `MaxHealth` (EditDefaultsOnly on the fragment)
+- OnHarvestableInstanceCreated: sets `Instance->CurrentHealth = MaxHealth`
+- Provides a simple way for the Actor / damage path to read MaxHealth
+
+**Yield / Death logic**
+For the first pass this can live either:
+- Directly on a simple `UYieldHarvestableFragment` that stores soft references to the Item Definition(s) and quantities + the Stump Harvestable Definition, **or**
+- Hard-coded in a Tree-specific fragment / in the Actor for extreme simplicity while we prove the pipeline.
+
+Recommended for cleanliness: a lightweight `UYieldHarvestableFragment` with:
+- TArray of yield entries (Item Definition + count range or fixed count)
+- Optional Stump / replacement Harvestable Definition
+
+On health reaching ≤ 0 the Actor (or the fragment via a virtual) executes the death sequence.
+
+### 7. Tree Death Sequence (MVP – Sticks + Stump)
+
+When trunk health reaches zero:
+
+1. (Optional future) Play fall sequence.
+2. Destroy / hide the standing tree Actor.
+3. Spawn sticks via `UItemFactorySubsystem` (use the existing Stick Item Definition). Start with a fixed or small random count (e.g. 4–8).
+4. Spawn a simple Stump Harvestable via `UHarvestableFactorySubsystem` (or from Definition).
+5. Destroy the tree’s Instance (resource is gone).
+
+The stump is itself a lightweight Harvestable that can later be destroyed for a few more sticks or wood scraps.
+
+**Note:** A proper Log Item (with branch-removal rules, two-handed carry, size decisions, etc.) is explicitly deferred. Sticks prove the full pipeline immediately.
+
+### 8. Implementation Order (Recommended)
+
+1. **Core scaffolding**
+   - `UHarvestableDefinition`
+   - `UHarvestableFragment` (base + the two virtuals)
+   - `UHarvestableInstance`
+   - `AHarvestableActor` (InitializeFromDefinition + InitializeFromInstance)
+   - `UHarvestableFactorySubsystem` with the four public methods
+
+2. **Collision profile**
+   - Create “Harvestable” profile + Object Type in Project Settings.
+   - Apply profile in Actor initialization.
+
+3. **Health + Damage**
+   - `UHealthHarvestableFragment`
+   - `IDamageable` + minimal `FDamageInfo`
+   - Basic `ApplyDamage` path that reduces CurrentHealth (promote to Instance on first real damage if needed).
+
+4. **Death → products**
+   - Simple yield path that spawns Stick Items + Stump Harvestable and cleans up.
+
+5. **Data Assets + test**
+   - `DA_TestTree` (or DA_OakTree) with Health + Yield fragments.
+   - `DA_Stump_Generic`
+   - Place a few in a test level, damage them, confirm sticks + stump appear.
+
+6. **CropHarvestableFragment collision override** (can be done in parallel or immediately after core works)
+   - Prove that fragments can change collision responses cleanly.
+
+### 9. Future / Not in MVP (documented so they are not lost)
+
+- Progressive trunk damage via shape keys or material parameters.
+- Independent branch health / removal (hit branch → spawn sticks + hide branch mesh / shape key).
+- Directional fall based on hit location + attacker position.
+- Rooted physics constraint or animation + physics hybrid during fall.
+- Multi-stage visual LODs / mesh swaps for standing trees.
+- Proper Log Item (size, two-handed rules, “remove branches before pickup”).
+- Tool requirement tags / effectiveness curves.
+- Part-damage / hit-zone system.
+- Save/load of partially damaged resources and lazy Instances.
+- Full crop growth stages, water, soil, seasonal multipliers (architecture already supports them via fragments).
+
+### 10. Open Questions (still small)
+
+- Exact shape of `FDamageInfo` and where final damage calculation lives (tool vs shared helper vs fragment).
+- Whether `AHarvestableActor` should support a Secondary mesh from day one (probably not needed for MVP trees).
+- Exact folder layout under Content (Environment/Harvestables/ vs top-level Harvestables/).
+- Whether the Factory should eventually own a registry of all live Instances for save/load and density management.
+
+---
+
+This document is the authoritative implementation plan for the Harvestable system as of 2026-08-19.  
+It deliberately stays parallel to `ItemSystemImplementation.txt`.  
+Core lifetime, lazy promotion, Factory, collision hybrid, and `IDamageable` are locked.  
+First concrete target is a damageable tree that produces sticks + a stump.

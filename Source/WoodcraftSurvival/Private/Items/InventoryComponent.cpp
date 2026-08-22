@@ -1,3 +1,4 @@
 // Copyright (c) 2026 Christian Carroll. All Rights Reserved.
 
-#include "Items/InventoryComponent.h"
+// Stub – InventoryComponent header not yet created.
+// #include "Items/InventoryComponent.h"

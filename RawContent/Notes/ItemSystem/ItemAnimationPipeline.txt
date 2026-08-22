@@ -23,15 +23,15 @@ Replaces earlier experimental approaches (per-arm sub-AnimBPs, large animation s
 
 | Data                          | Location                          | Type                          | Notes |
 |-------------------------------|-----------------------------------|-------------------------------|-------|
-| HoldPose                      | `UEquippableFragment`             | `TSoftObjectPtr<UAnimSequence>` | Item-specific. Usually a short/static 1–2 frame pose. |
+| HoldPose                      | `UEquippableItemFragment`         | `TSoftObjectPtr<UAnimSequence>` | Item-specific. Usually a short/static 1–2 frame pose. |
 | Default Pickup Montage        | `UHeldItemsComponent`             | `TObjectPtr<UAnimMontage>`    | Single shared asset (right-arm authored). Hard ref. |
 | Default Drop Montage          | `UHeldItemsComponent`             | `TObjectPtr<UAnimMontage>`    | Same pattern. Hard ref. |
 | Current runtime HoldPoses     | `UFPArmsAnimInstance`             | `TObjectPtr<UAnimSequence>`   | Hard references after load. |
 
-HoldPose lives on the EquippableFragment because it is part of how the item is held.  
+HoldPose lives on the EquippableItemFragment because it is part of how the item is held.  
 The generic 12-frame reach lives on the component as a hard reference because it is fixed and shared by all one-handed items.
 
-Unarmed also carries an EquippableFragment with its own HoldPose (neutral fists / rest pose).
+Unarmed also carries an EquippableItemFragment with its own HoldPose (neutral fists / rest pose).
 
 An individual item may later supply an optional EquipMontage override on its fragment; the component will check for it and fall back to the default if none exists.
 
@@ -107,7 +107,7 @@ The visible mesh (FPArmsMeshVisible) continues to copy the pose from AnimRef and
 
 1. **Input** (`TryPickupOrDrop` confirms a valid pickup)
    - Store the target item in the **per-hand** pending slot for that hand (`PendingItem[Hand]`).
-   - Begin loading the target item’s `HoldPose` from its EquippableFragment.
+   - Begin loading the target item’s `HoldPose` from its EquippableItemFragment.
 
 2. **Play montage**
    - Play the single shared DefaultPickupMontage into the correct arm slot (LeftArm or RightArm) via `PlayMontageInSlot` / `Montage_Play`.
@@ -161,7 +161,7 @@ Exact blend timings remain open for tuning by the user on the montage assets.
 
 ### 8. Implementation Checklist
 
-1. Add `HoldPose` soft reference to `UEquippableFragment`.
+1. Add `HoldPose` soft reference to `UEquippableItemFragment`.
 2. Create `UFPArmsAnimInstance` and reparent the FPArms AnimBP.
 3. Add hard-ref `DefaultPickupMontage` and `DefaultDropMontage` to `UHeldItemsComponent`.
 4. Convert the existing 12-frame sequence into a single Montage (right-arm authored). Play it into either LeftArm or RightArm slot; the post-slot Mirror node handles the rest.
@@ -172,4 +172,4 @@ Exact blend timings remain open for tuning by the user on the montage assets.
 
 ---
 
-*Locked 2026-08-15. Updated same day with mirror-after-slot clarification, hard montage refs, per-hand pending data, Physics Control wording, and HoldPose push-on-load preference. Update when open points are resolved or when two-handed / swing support is designed.*
+*Locked 2026-08-15. Updated same day with mirror-after-slot clarification, hard montage refs, per-hand pending data, Physics Control wording, and HoldPose push-on-load preference. Fragment renamed to UEquippableItemFragment 2026-08-19. Update when open points are resolved or when two-handed / swing support is designed.*

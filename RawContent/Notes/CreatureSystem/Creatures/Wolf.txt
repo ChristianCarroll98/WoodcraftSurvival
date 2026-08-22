@@ -1,0 +1,206 @@
+**Wolf – Foundation Creature Reference**  
+*Woodcraft Survival – UE 5.8 / Blender 5.2*  
+*(Created 2026-08-19 – updated 2026-08-21)*
+
+This is the species-specific reference for the wolf, the first creature that establishes the full shared AI, animation, and appearance systems.  
+It sits alongside `DesertWyvern.txt` and is kept lighter on lore/anatomy than the Wyvern document. Focus is on behavior patterns, **locked rigging**, animation vision, and implementation notes for the foundation pass.
+
+Related general documents:
+- `../CreatureAISystemDefinition.txt`
+- `../CreatureRiggingAndAnimation.txt`
+- `../CreatureMaterialsAndAppearance.txt`
+
+---
+
+### 1. Role in the Project
+
+- **Foundation creature.** Every shared system (Definition → Instance → Actor, State Trees + Linked Assets, evaluation, short-term memory, awareness, distance bands, materials, basic facial system) is proven on the wolf first.
+- Solo behavior is implemented and tuned before any pack logic.
+- Later creatures (including the Desert Wyvern) build directly on the systems established here.
+- Intentionally edge-shaded, polygonal, flat-color art direction. Readable silhouettes and clear poses matter more than ultra-smooth deformation.
+
+---
+
+### 2. Behavior Patterns (Foundation + Vision)
+
+#### 2.1 Core Loop (Solo)
+- Default ecological state: idle / patrol / rest.
+- Investigate interesting stimuli (player, movement, sounds, carcasses) based on Curiosity + evaluation.
+- Keep distance or approach according to PerceivedThreat vs effective Aggression / Bravery.
+- Combat: MoveToPreferredRange → MeleeAttack (bite/lunge) when conditions favor it.
+- Flee when Health is low, PerceivedThreat is high, or Bravery is overwhelmed.
+- Howl (see §2.6 for full rules).
+
+#### 2.2 Evaluation-Driven Reactions
+- Uses the shared `EvaluateTarget` path (player is treated as another animal).
+- Short-term memory (`FCreatureMemoryEntry`) prevents oscillation in mutual threat/intimidation and records recent attacks, submissions, flees, and incoming gaze.
+- High Aggression + low Threat → more likely to press or attack.
+- High Threat or low Health → stronger flee / keep-distance bias.
+- “Target is already attacking me” can force an immediate reaction branch.
+- Incoming gaze (shared system): `LookingAtMe` (transient) and `StaringAtMe` (sustained threshold) bias toward noticing the actor, holding focus, or escalating to a dominance/intimidate display. See `CreatureAISystemDefinition.txt` §6–8 for the full rules.
+
+#### 2.3 Ecological & Alive Behavior
+- Sit and lie down for rest.
+- Sniff (ground/air).
+- Look-around (blends with dynamic head Look-At).
+- Flavor idles when safe and unoccupied: scratch, shake, stretch, pant, etc.
+- Panting intensity can be driven by heat, recent exertion, or state (helps the creature feel alive when the player is nearby).
+
+#### 2.4 Deferred / Future
+- **Pack logic** (howl grouping, follow leader, peel-off, pack aggression boost) is explicitly deferred until basic solo behaviors are solid.
+- **Taming / befriending** is a future system. When designed it will need additional soft/affiliative animations and AI states (cautious approach, accept food/touch, relaxed companion idle, etc.). The facial and posture foundation should already support them.
+- Hunting other animals is lower priority than player threat or (later) pack business.
+
+#### 2.5 Readable Telegraphs
+- Alert posture, growl/intimidate, snarl (shape key), ear and tail positions, and clear attack wind-ups are mandatory.
+- Submission / yield should also be readable so dominance resolution via memory feels fair.
+
+#### 2.6 Howl Behavior (Foundation – data + State Tree only)
+
+Goal: a wolf may randomly decide to perform a long howl at most once per night. Nearby wolves that hear it should join if they are free; even those that cannot respond still mark the night so they do not initiate later.
+
+**Data (on each wolf’s Instance)**  
+- `ECreatureData::LastLongHowlTime` (or equivalent night index) stored via the generic RuntimeData map.
+
+**Initiator**
+- In Ecological / Idle (or other low-priority) State Tree branch, a chance-based decision may attempt a long howl.
+- Condition: enough time / a new night has passed since `LastLongHowlTime`.
+- On success: play howl montage, write `LastLongHowlTime = Now`, and emit a howl signal (hearing noise event, gameplay message, or Subsystem spatial notify) with range.
+
+**Receivers (hearing range)**
+- On receiving the howl signal:
+  - Always write / refresh own `LastLongHowlTime` (so this wolf will not initiate a long howl later the same night, even if it cannot respond right now).
+  - If currently in a high-priority state (Combat, Flee, etc.) → do not play a howl.
+  - Otherwise → transition into a short respond-to-howl state / Linked Asset, play howl, and the timestamp is already updated.
+
+**Rules**
+- Entirely data + State Tree (+ one lightweight broadcast/perception path). No wolf-specific component required.
+- Once-per-night limit is per individual.
+- “If not doing anything more important” is normal State Tree priority.
+- Later pack-grouping logic can reuse the same signal; the foundation version only needs the chorus + per-wolf nightly limit.
+
+---
+
+### 3. Rigging Decisions (Locked for Wolf)
+
+*Art direction: edge-shaded / polygonal. Realistic deformation desired, extreme smoothness not required. Fully manual armature (no Rigify).*
+
+#### 3.1 Skeleton Counts
+
+| Section | Decision | Rationale |
+|---|---|---|
+| Root | Non-deform ground origin | UE character / capsule / future root motion |
+| Pelvis | Deforming hip at pelvic mass | Parent of spine, tail, hind legs |
+| Spine | `spine_01`–`spine_03` (last = chest) | Flex without excess; scapula + neck attach at `spine_03` |
+| Neck | `neck_01`–`neck_03` + `head` | Solid look-around range |
+| Tail | **`tail_01`–`tail_07`** | Smoother curl; `_01` = base at pelvis, `_07` = tip |
+| Hind legs | `hind_upper` → `hind_lower` → `hind_foot` → `hind_toes` | Direct from pelvis, Keep Offset, head at hip socket |
+| Front legs | `scapula` → `fore_upper` → `fore_lower` → `fore_foot` → `fore_toes` | Scapula from `spine_03`, Keep Offset |
+| Toes | 1 per foot | Low-poly sufficient |
+| Ears | **`ear_01`–`ear_03`** per side | Pin / curve without stiff paddle |
+| Jaw | 1 lower jaw | Standard |
+| Tongue | **`tongue_01`–`tongue_05`** under jaw | `_01` quiet base in attached third; neutral rest shape |
+
+#### 3.2 Hierarchy (as built)
+
+```
+root                    (ground, Deform off)
+└── pelvis
+    ├── tail_01 → … → tail_07
+    ├── spine_01 → spine_02 → spine_03 (chest)
+    │     ├── neck_01 → neck_02 → neck_03 → head
+    │     │     ├── jaw
+    │     │     │     └── tongue_01 → … → tongue_05
+    │     │     ├── ear_01_r → ear_02_r → ear_03_r
+    │     │     └── ear_01_l → ear_02_l → ear_03_l
+    │     ├── scapula_r → fore_upper_r → fore_lower_r → fore_foot_r → fore_toes_r
+    │     └── scapula_l → …
+    ├── hind_upper_r → hind_lower_r → hind_foot_r → hind_toes_r
+    └── hind_upper_l → …
+```
+
+- Naming: lowercase, `_l` / `_r`, numbered chains. See general rigging doc §2.6.
+- Bone groups + viewport colors: see general rigging doc §2.7 (applied on this armature; same set for all future creatures).
+
+#### 3.3 Root & Pelvis Placement
+
+- **`root`:** ground, midline, under the torso / between the four feet (not mesh nose-to-tail midpoint, not hind-only). Small bone, +Y up, +X character’s right, Deform off.
+- **`pelvis`:** centered in the pelvic mass (not high at the tail exit). Slightly lower than the high real-life tail exit for volume. Child of root, Keep Offset. Parent of spine, tail, hind legs.
+
+#### 3.4 Scapula (Wolf)
+
+- Head: withers, just off spine, slightly behind chest–neck junction, about halfway from midline toward skin.
+- Tail: shoulder joint on the side/front of the chest (start of `fore_upper`).
+- Runs down, forward, out; length a bit over half the upper arm is fine.
+- Keep Offset on `spine_03`. Mostly small up/forward translate on steps. **Not** in the leg IK chain.
+
+#### 3.5 Shape Keys
+
+- **Snarl:** single shape key. Basis = lips slightly covering teeth; shape key exposes teeth + front gums. **Independent of jaw** — animations may combine jaw open + snarl or use either alone. No jaw driver.
+- **Eyes:** multi-value shape key (0.0 = fully closed / quad collapsed, ~0.7 = normal, 1.0 = wider). Blink = drive to 0.0 + turn emissive off (see materials document).
+- **Tongue:** bone chain only for now. Neutral rest shape. Optional TongueFlatten / tip-curl shape keys only if pant animation looks too tubular later.
+- No lip/muzzle bones.
+
+#### 3.6 Blender Authoring IK (Wolf)
+
+Posing aids only; not exported to UE.
+
+- **Leg IK:** on `fore_lower_*` / `hind_lower_*`, chain 2 → `fore_IK_*` / `hind_IK_*`, poles at elbow (behind) / knee (in front). Targets + poles parented to `root` (or pole offset under leg IK).
+- **Paw IK:** on `fore_toes_*` / `hind_toes_*`, chain 2 → `fore_toes_IK_*` / `hind_toes_IK_*`.
+- **`*_toes_IK` is parented to the corresponding leg IK target** so the paw follows the plant by default.
+- Deform off on all IK targets and poles. No Copy Transforms on foot when the second IK owns foot + toes.
+- Scapula / jaw / ears / tongue / tail / spine: FK.
+
+Runtime foot plant / terrain adaptation remains Unreal Control Rig after basic locomotion is solid.
+
+#### 3.7 Style Impact
+
+Slightly higher tail count (7) and ear/tongue detail are acceptable for readable expression. Focus deformation on clear silhouettes and poses, not ultra-smooth curves.
+
+---
+
+### 4. Animation Vision (Summary)
+
+Full categorized list lives in `../CreatureRiggingAndAnimation.txt` §6.  
+Quick priority reminder for this species:
+
+**Foundation (do first)**
+- Idle, Walk, Trot, Run/strong trot, Turn
+- Alert, Growl/intimidate, Bite/lunge, Hit reaction, Death
+- Sit + stand, Lie + get-up, Howl
+
+**Early expansion**
+- Sniff, look-around, additional combat variants
+
+**Polish (alive when nearby)**
+- Scratch, shake, stretch, pant (jaw + tongue bones), additive ear/tail, eat/chew, etc.
+
+**Future systems**
+- Play / social, full submission set, taming/befriending animations
+
+---
+
+### 5. Implementation Notes
+
+- `ACreatureActor` derives from `ACharacter` (capsule + Character Movement + NavMesh integration). Tune capsule to roughly match the body; add extra collision later if needed.
+- Start without full runtime foot IK. Add Control Rig / AnimBP foot placement after basic locomotion is solid on test terrain.
+- Materials and color variation follow the shared system in `CreatureMaterialsAndAppearance.txt`.
+- All AI decisions flow through `UCreatureInstance` (evaluation + short-term memory + awareness). State Tree stays relatively shallow and uses Linked Assets.
+- Current mesh/armature work: model complete; remaining work is weight painting and animation authoring in Blender before deeper UE creature integration.
+
+---
+
+### 6. Open / Future for This Species
+
+- Exact rest-pose joint pre-bends.
+- Scapula location range on a step.
+- MouthOpen shape key (optional).
+- TongueFlatten / tip-curl after pant tests.
+- Foot IK introduction timing in Unreal.
+- Pack behavior and howl-as-grouping signal.
+- Taming / befriending design and required extra animations.
+- LOD skeleton reduction.
+
+---
+
+*Update this document when wolf-specific decisions are locked or significantly changed. Keep general systems in the parent CreatureSystem documents.*

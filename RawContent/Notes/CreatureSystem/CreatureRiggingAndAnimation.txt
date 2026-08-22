@@ -1,0 +1,322 @@
+**Creature Rigging & Animation Workflow**  
+*Woodcraft Survival – UE 5.8 / Blender 5.2*  
+*Tracking document for skeleton, rigging, shape keys, and animation process across all creatures*  
+*(Created 2026-08-19 – living document, updated 2026-08-21)*
+
+This document is the central reference for how creatures are rigged and prepared for animation.  
+It covers general process, recommended baselines, facial/expression systems, Blender authoring IK, and records where species-specific decisions live.
+
+It sits alongside:
+- `CreatureAISystemDefinition.txt`
+- `CreatureMaterialsAndAppearance.txt`
+
+---
+
+### 1. Goals
+
+- Clean, maintainable skeletons suitable for a solo developer.
+- Good deformation for locomotion, combat, and expression without excessive bone counts.
+- Consistent hierarchy and naming so new creatures can reuse animation patterns and AnimBP logic where possible.
+- Support both realistic movement needs and the project’s stylized (edge-shaded, flat color, polygonal) art direction.
+- Shape keys + bones used pragmatically — prefer the cheapest solution that still reads clearly.
+- Easy export path to Unreal Engine 5.8 (**deform bones only**; no Blender IK/controllers on the exported skeleton).
+
+---
+
+### 2. General Rigging Process
+
+#### 2.1 High-Level Steps (Blender)
+
+1. Place non-deforming **`root`** at ground stance center, then deforming **`pelvis`** at the hip mass (quadrupeds).
+2. Build spine chain forward from pelvis (last spine bone before neck acts as chest).
+3. Add neck + head.
+4. Add tail from pelvis (`tail_01` = base near pelvis, numbers increase toward tip).
+5. Build hind legs direct from pelvis (Keep Offset, head at hip socket).
+6. Build front legs from chest via scapula (Keep Offset).
+7. Add facial bones (jaw, ears, tongue chain under jaw).
+8. Name consistently, Symmetrize `_r` → `_l`.
+9. Assign bone groups (see §2.7).
+10. Create shape keys for expressions bones cannot handle cleanly.
+11. Weight paint / test deformation in Pose Mode.
+12. Build Blender authoring IK (optional for posing; not exported).
+13. Export deform skeleton only to UE 5.8.
+
+**Pipeline split (locked):**  
+- **Blender** = deform skeleton, weights, authored animation (including simple IK for posing).  
+- **Unreal** = Control Rig / AnimBP for runtime foot plant, terrain adaptation, and later complex contacts (e.g. wyvern climbing).  
+Do not rely on importing Blender IK constraints.
+
+Fully **manual** rigging (no Rigify meta-rig as the production path).
+
+#### 2.2 Core Hierarchy Philosophy
+
+- **`root`** = non-deforming character origin on the **ground**, at the center of the four-foot stance (slightly forward of pure nose-to-tail midpoint is fine; not under hind legs only). Deform **off**.
+- **`pelvis`** = deforming hip bone at pelvic center of mass. Child of `root` (Keep Offset). Parent of spine, tail, and hind legs.
+- Hind legs attach directly to **pelvis** (pelvis is rigid in real life). Keep Offset; bone head at hip socket.
+- Front legs attach to **chest** (last spine bone, e.g. `spine_03`) via dedicated **scapula** bones (shoulder blade is mobile). Keep Offset; scapula is **not** in the leg IK chain.
+- Keep deformation bones close to the center of the volume they influence.
+- Prefer slightly bent rest poses at major joints (knee, hock, elbow) for better IK and deformation later.
+
+#### 2.3 Bone Orientation & Roll
+
+- Always enable **Axes** while working. Roll number range (−180..180 vs 0..360) does not matter; axes do.
+- Blender: **+Y** always along the bone (head → tail).
+
+**Legs (both front and hind):**
+
+| Local axis | Direction | Role |
+|---|---|---|
+| **+Y** | Along the bone | Length |
+| **+X** | **Out** (away from midline on the authored side) | Hinge |
+| **+Z** | **Forward** | Completes right-hand system |
+
+- Hinge test: rotate **local X**. Front elbow folds **back**; hind knee folds **forward**.
+- After **Symmetrize**, left-side +X often still points world-right. That is normal. Leave it if the fold test still passes.
+
+**Centerline (spine / neck / head):**
+
+| Local axis | Direction |
+|---|---|
+| **+Y** | Along the bone toward the head |
+| **+X** | Character’s **right** |
+| **+Z** | **Up** on a horizontal spine (more backward on a vertical neck is fine) |
+
+**Tail:** +Y toward the tip (backward). Recalculate Roll Global +Z → +Z up, +X naturally **left**. Do not force tail +X to the right.
+
+**Ears:** follow the ear geometry (+Y toward tip). Do not force world axes.
+
+#### 2.4 Front vs Hind Legs
+
+| Leg Type | Attachment | Intermediate? | Notes |
+|---|---|---|---|
+| Hind | Pelvis | No | `hind_upper` head at hip socket |
+| Front | Chest (`spine_03`) | Yes – scapula | Scapula → `fore_upper` → … |
+
+**Scapula placement (general):**
+- Head: withers height, just off the spine, slightly **behind** the chest–neck junction, in shoulder mass (not chest center of mass).
+- Tail: shoulder joint (glenoid) on the **side** of the chest; bone runs **down, forward, and out**.
+- Length: on the order of ~½–⅔ of the upper arm is fine.
+- Motion: mostly small **translate** up/forward on stride; limited rotation. Limit Location + rotation as needed.
+- Parent: chest, **Keep Offset**, not Connected. **Never** include scapula in the leg IK chain.
+
+#### 2.5 Toes / Digits
+
+- Low-poly / stylized: **1 bone per foot** is sufficient.
+
+#### 2.6 Naming Convention (Locked)
+
+- **Lowercase** throughout.
+- Side suffix: **`_l` / `_r`** (not `.L` / `.R` — friendlier for Unreal).
+- Numbered chains: `_01` = base / proximal, higher numbers toward the tip.
+- Named only for one-off roles: `root`, `pelvis`, `scapula_r`, `jaw`, `head`.
+- Limb prefixes for quadrupeds: **`fore_`** / **`hind_`** (not arm/leg anatomical names). Example: `fore_upper_r`, `hind_lower_l`.
+- Scapula stays `scapula_r` (only one pair; no `fore_` needed).
+
+**Symmetrize:** name the right side `*_r`, Edit Mode → Armature → Symmetrize. Do not scale X = −1.
+
+#### 2.7 Bone Groups (Locked – use on all creature armatures)
+
+Shared group set for Blender viewport organization and selection:
+
+| Group | Contents |
+|---|---|
+| `AllBones` | Everything |
+| `MiddleBones` | Midline (root, pelvis, spine, neck, head, jaw, tongue, tail) |
+| `LeftBones` / `RightBones` | All sided bones |
+| `ForeLeftBones` / `ForeRightBones` | Front limb chains (including scapula) |
+| `HindLeftBones` / `HindRightBones` | Hind limb chains |
+
+**Viewport colors (convention going forward):**
+- Midline → **yellow**
+- Front right → **red**
+- Front left → **blue**
+- Hind right → **pink**
+- Hind left → **purple**
+
+Rear (hind) groups use the distinct pink/purple so front vs back is readable at a glance.
+
+#### 2.8 Blender Authoring IK (Posing Only)
+
+Export does **not** include these controls. They exist to speed animation in Blender.
+
+**Two-stage leg IK (digitigrade-friendly):**
+
+1. **Leg IK** — constraint on `*_lower`, chain length **2**, target = `*_IK` (non-deform), pole = `*_pole`.
+   - Front pole **behind** the elbow; hind pole **in front** of the knee.
+   - Parent leg IK targets and main poles to **`root`** (Keep Offset).
+2. **Paw IK** — constraint on `*_toes`, chain length **2**, target = `*_toes_IK` (non-deform).
+   - **`*_toes_IK` is parented to the leg IK target** so the paw rides the plant by default and can be offset when needed.
+   - Optional toes pole; if used, parent it to the toes IK (or leg IK). Often unnecessary on such a short chain.
+
+- Uncheck **Deform** on all IK targets and poles.
+- Do **not** also Copy Transforms the foot to the leg IK if the second IK owns foot + toes.
+- Scapula, jaw, ears, tongue, tail, spine: **FK** (direct bone control + limits).
+- Tail: for a first pass, key base / mid / tip rather than every bone.
+
+**Limits:**
+- Rotation limits on joints as needed.
+- Location limits only on bones that translate (root, scapula, IK targets).
+- On IK-chain bones, prefer the bone’s **IK limit** sliders over Limit Rotation constraints (constraints fight the solver).
+
+---
+
+### 3. Recommended Baseline Bone Counts
+
+Starting points. Stylized creatures can lean lower; more expressive ones slightly higher.
+
+| Section | Recommended | Notes |
+|---|---|---|
+| Root + pelvis | 1 + 1 | Root non-deform ground; pelvis deform hips |
+| Spine (torso) | Pelvis + 3 spine (last = chest) | e.g. `spine_01`–`spine_03` |
+| Neck | 3 + Head | Good look-around range |
+| Tail | 6–7 | 7 is smoother; 6 is leaner |
+| Hind leg | `hind_upper` → `hind_lower` → `hind_foot` → `hind_toes` | From pelvis |
+| Front leg | `scapula` → `fore_upper` → `fore_lower` → `fore_foot` → `fore_toes` | From chest |
+| Ears | 3 per ear (`ear_01`–`ear_03`) | Base at skull, tip at point |
+| Jaw | 1 | Lower jaw only |
+| Tongue | 3–5 under jaw | `_01` = quiet attached base |
+
+---
+
+### 4. Facial & Expression System
+
+#### 4.1 Bones
+
+- **Jaw** — one lower jaw bone, parented to Head.
+- **Ears** — `ear_01`–`ear_03` per side, parented to Head. Pivot at skull/ear-root mass (not deep in the cranium). For folded low-poly ears, run the chain along the structural fold, not in open cup air and not in one face only.
+- **Tongue** — short chain parented to **Jaw** (not Head). `_01` sits in the attached rear third (limited motion so the mouth floor does not slide); higher numbers are the free length + tip. Neutral rest shape that works for pant / open mouth; tip curl shape keys optional later.
+
+#### 4.2 Shape Keys (Morph Targets)
+
+Preferred for skin bunching bones handle poorly (lips, eye open/close).
+
+**Standard set:**
+
+| Shape Key | Purpose | Notes / Values |
+|---|---|---|
+| Snarl | Raise upper lips, expose teeth + front gums | Basis = lips covering teeth slightly |
+| Eyes | Multi-purpose eye state | 0.0 = closed, ~0.7 = normal, 1.0 = wide |
+
+- **Snarl is independent of the jaw bone.** Animations may use both together (open mouth + snarl) or either alone. No driver from jaw rotation.
+- No lip/muzzle bones — Snarl shape key covers lip raise / muzzle wrinkle.
+- Eyes shape key driven in-game; combine with material work (below).
+- Tongue shape keys: **optional later** only if the bone chain looks too tubular when panting.
+
+**Topology rule:** Shape keys cannot change topology. Move vertices freely (including collapsing an eye quad); do not merge vertices.
+
+#### 4.3 Material Interaction (Eyes)
+
+- Eyes use a Dynamic Material Instance.
+- Emissive on at night / in darkness (eyeshine).
+- When Eyes shape key reaches **0.0** (fully closed), turn emissive off.
+- Result: the glowing eye shape blinks closed.
+
+#### 4.4 Optional / Future Shape Keys
+
+- Separate left/right Snarl — low priority.
+- MouthOpen / Roar morph for very wide opens — nice-to-have.
+- TongueFlatten / tip curl — only if needed after animation tests.
+- Extra eye/brow morphs — only if the face feels static after AI behaviors are in.
+
+---
+
+### 5. Species-Specific Decisions
+
+Detailed locked decisions for individual creatures live under `Creatures/`:
+
+- **Wolf** (foundation) → `Creatures/Wolf.txt`
+- **Desert Wyvern** → `Creatures/DesertWyvern.txt`
+
+Keep only general process and shared baselines in this document.
+
+---
+
+### 6. Full Animation Vision – Wolf (End Product)
+
+Complete set for a living, readable wolf. Many entries are **polish-stage** and should not block foundation AI / locomotion.
+
+#### 6.1 Core Locomotion (Foundation – do first)
+- Idle (standing, weight shift, breathing)
+- Walk
+- Trot (primary travel gait)
+- Run / canter or strong trot (one fast gait is enough at first)
+- Turn-in-place / tight turns (or strong directional variants that work with movement)
+
+#### 6.2 Combat & Threat (Foundation + early expansion)
+- Alert / focus
+- Growl / intimidate / threat display
+- Bite / lunge (one solid montage minimum)
+- Optional later: multiple attack variants, circle, dodge / sidestep, defensive snap
+- Hit reaction / flinch
+- Death (or clean transition into ragdoll)
+
+#### 6.3 Ecological & Rest (High value, add soon after core)
+- Sit (+ sit → stand)
+- Lie down / rest (+ get-up)
+- Howl (standing; sitting/lying variants later)
+- Sniff (ground and/or air)
+- Look around / head sweeps (can blend with dynamic Look-At)
+
+#### 6.4 Flavor / “Alive” Idles (Polish)
+- Scratch (ear, neck, side)
+- Shake (wet / after combat / general)
+- Stretch / yawn
+- Panting (jaw + tongue bones; intensity from heat / exertion / state)
+- Ear twitches, tail swishes, subtle weight shifts (additive or light procedural)
+- Eat / chew / drink
+- Mark / scrape (low priority)
+
+#### 6.5 Social / Future Systems
+- Play bow and related play animations (once pack or taming exists)
+- Submission / passive postures
+- Greeting / investigative mutual sniff
+- **Taming / befriending related** (explicitly future): cautious approach, accept touch/food, relaxed companion idle, affiliative expressions
+
+#### 6.6 Panting, Tongue, and Small Living Details
+
+- Jaw bone opens the mouth; tongue **bone chain** provides visible tongue for pant / open-mouth states.
+- Panting = looping or additive animation (slight jaw open + tongue motion + faster chest/spine breath).
+- Drive intensity from runtime state (temperature, exertion, emotional state).
+- Eyes blink stays independent of tongue/pant.
+- Tail base sway / curl by state (alert vs relaxed vs aggressive).
+- Occasional ear flicks.
+
+#### 6.7 Priority Summary
+
+| Stage | Focus | Goal |
+|---|---|---|
+| Foundation | §6.1 + core of §6.2 + sit/lie/howl | AI loop testable and readable |
+| Early expansion | Sniff, look-around, better combat variants | Stronger ecological + combat feel |
+| Polish | Flavor set + panting/tongue + additives | Nearby creatures feel alive |
+| Future systems | Taming / pack social set | Befriending and richer social AI |
+
+---
+
+### 7. Open Items / Needs Further Discussion
+
+- [ ] Exact rest-pose bend amounts at knee / hock / elbow.
+- [ ] How much scapula location range feels good on a step.
+- [ ] Whether a MouthOpen shape key is needed in addition to the jaw for wide roars / pants.
+- [ ] TongueFlatten / tip-curl shape keys — only after pant animation tests.
+- [ ] LOD skeleton reduction strategy.
+- [ ] Export settings checklist specific to UE 5.8 (axis conversion, morph target naming, etc.).
+- [ ] Unreal Control Rig foot-plant details (after basic locomotion is solid).
+- [ ] Exact AnimBP structure (Blend Spaces, layered locomotion, montage slots, Look-At, additive panting).
+
+---
+
+### 8. Future Creature Workflow Checklist
+
+1. Decide size class and locomotion type (quad, biped, flyer, etc.).
+2. Apply baseline bone counts from §3, adjusting for style and anatomy.
+3. Follow hierarchy, naming, axes, and bone groups from §2.
+4. Add facial bones + shape keys only as needed (reuse Eyes multi-value pattern where possible).
+5. Record species-specific decisions under `Creatures/`.
+6. Decide which subset of the animation vision is required for that creature’s first playable version.
+7. Test major deformation poses before heavy weight painting.
+8. Author in Blender with optional IK; export deform bones only.
+9. Update this document with any new general lessons learned.
+
+---
+
+*End of document – update as decisions are locked or new creatures are added.*
