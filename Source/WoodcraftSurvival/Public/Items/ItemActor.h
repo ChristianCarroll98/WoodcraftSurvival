@@ -85,10 +85,6 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Item|PrimaryMesh")
 	TObjectPtr<UStaticMeshComponent> SecondaryMeshComponent;
 
-	/** Minimum relative speed (cm/s) required for a collision to deal damage. Tunable later. */
-	UPROPERTY(EditDefaultsOnly, Category = "Item|Damage")
-	float MinDamageSpeed = 50.f;
-
 
 	// ---------- Collision Damage ----------
 

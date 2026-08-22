@@ -5,6 +5,7 @@
 #include "Items/ItemDefinition.h"
 #include "Items/Fragments/ItemFragment.h"
 #include "Items/Fragments/DamageItemFragment.h"
+#include "Core/WoodcraftTypes.h"
 #include <Components/StaticMeshComponent.h>
 
 AItemActor::AItemActor()
@@ -116,23 +117,22 @@ void AItemActor::EnableCollisionDamage(UStaticMeshComponent* Mesh)
 void AItemActor::OnItemMeshHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp,
 	FVector NormalImpulse, const FHitResult& Hit)
 {
+	// Only do damage if this item is held (for now)
+	if (!Holder.IsValid()) return;
+
 	if (!OtherActor || OtherActor == this) return;
 
-	// Never damage the actor currently holding us
-	if (Holder.IsValid() && OtherActor == Holder.Get()) return;
+	// Never damage the actor currently holding this item
+	if (OtherActor == Holder.Get()) return;
 
-	// Never damage another held item (player's own sticks, etc.)
+	// Never damage another held item (player's own sticks, etc.), later handle multiplayer (held by other player)
 	if (AItemActor* OtherItem = Cast<AItemActor>(OtherActor))
 	{
 		if (OtherItem->Holder.IsValid()) return;
 	}
 
 	// Relative speed gate
-	FVector MyVel = HitComp ? HitComp->GetPhysicsLinearVelocity() : FVector::ZeroVector;
-	FVector OtherVel = OtherComp ? OtherComp->GetPhysicsLinearVelocity() : FVector::ZeroVector;
-	const float RelativeSpeed = (MyVel - OtherVel).Size();
-
-	if (RelativeSpeed < MinDamageSpeed) return;
+	if (NormalImpulse.Size() < GMinImpulse) return;
 
 	const float Now = GetWorld()->GetTimeSeconds();
 	if (Now - LastDamageTime < DamageCooldown) return;
@@ -147,7 +147,7 @@ void AItemActor::OnItemMeshHit(UPrimitiveComponent* HitComp, AActor* OtherActor,
 	if (!Damageable) return;
 
 	// Simple linear scale for now (can become a curve or per-DamageType later)
-	const float SpeedScale = FMath::Clamp(RelativeSpeed / 500.f, 0.1f, 2.0f);
+	const float SpeedScale = FMath::Clamp(NormalImpulse.Size() / 500.f, 0.1f, 2.0f);
 	const float Amount = DamageFrag->BaseDamage * SpeedScale;
 
 	FDamageInfo Info;

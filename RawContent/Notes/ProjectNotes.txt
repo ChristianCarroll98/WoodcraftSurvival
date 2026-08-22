@@ -18,6 +18,15 @@ if (GEngine) GEngine->AddOnScreenDebugMessage
 
 current issues/working task list:
 
-- Collision damage path live (AItemActor hit events → IDamageable). Test with Stick + DamageItemFragment against TestTree.
-- Next high priority: extract named collision primitive (Blunt/Sharp/Pierce/…) from the hit for proper part-based multipliers + tree blunt resistance.
-- After that: swing feel / Physics Control tuning, then Core Loop Playable milestone.
+- Collision damage path is live (held-only, GMinImpulse, short cooldown). Stick works on TestTree.
+- Resistance data on HealthHarvestableFragment so trees ignore / heavily resist Blunt (Slash-only for chopping).
+- Copper Hatchet as a normal dual-mesh item (handle + head), Slash DamageItemFragment, primitives named Blunt/Slash only.
+- Extract named collision primitive from the hit so the part that contacted matters.
+- Procedural swing orientation for tools/weapons (item rotates toward swing direction). Hard wrist rotation limits later.
+- Explicitly deferred: separate head/handle durability / dual Instances. Hatchet just breaks into wood + CopperScrap like any other item.
+
+Architecture reminder:
+- Fragments = data + minimal spawn/init hooks.
+- Actors stay thin. Behaviour lives in systems.
+- Same resistance shape will be reused on Creatures/Player later.
+- MVP first — no composite tools, no part durability until much later.
