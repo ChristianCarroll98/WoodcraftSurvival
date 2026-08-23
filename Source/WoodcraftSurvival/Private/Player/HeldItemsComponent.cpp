@@ -61,37 +61,34 @@ bool UHeldItemsComponent::TryPickupOrDrop(EHand Hand, FString& OutResult)
 
 AItemActor* UHeldItemsComponent::GetHeldItem(EHand Hand) const
 {
-	if (Hand == EHand::Left) return HeldItemLeft;
-	if (Hand == EHand::Right) return HeldItemRight;
-	return nullptr;
+	if (Hand == EHand::None) return nullptr;
+	return GetHandState(Hand).HeldItem;
 }
 
 void UHeldItemsComponent::SetExtended(EHand Hand, bool bExtended)
 {
-	if (Hand == EHand::Left) bExtendedLeft = bExtended;
-	else if (Hand == EHand::Right) bExtendedRight = bExtended;
+	if (Hand == EHand::None) return;
+	GetHandState(Hand).bExtended = bExtended;
 }
 
 bool UHeldItemsComponent::GetIsExtended(EHand Hand) const
 {
-	if (Hand == EHand::Left) return bExtendedLeft;
-	if (Hand == EHand::Right) return bExtendedRight;
-	return false;
+	if (Hand == EHand::None) return false;
+	return GetHandState(Hand).bExtended;
 }
 
 EHand UHeldItemsComponent::GetHandHoldingItem(const AItemActor* Item) const
 {
 	if (!Item) return EHand::None;
-	if (HeldItemLeft == Item) return EHand::Left;
-	if (HeldItemRight == Item) return EHand::Right;
+	if (HandLeft.HeldItem == Item) return EHand::Left;
+	if (HandRight.HeldItem == Item) return EHand::Right;
 	return EHand::None;
 }
 
 FName UHeldItemsComponent::GetActiveControlName(EHand Hand) const
 {
-	if (Hand == EHand::Left) return ActiveControlLeft;
-	if (Hand == EHand::Right) return ActiveControlRight;
-	return NAME_None;
+	if (Hand == EHand::None) return NAME_None;
+	return GetHandState(Hand).ActiveControl;
 }
 
 FName UHeldItemsComponent::GetHeldItemModifierSet(EHand Hand) const
@@ -99,6 +96,12 @@ FName UHeldItemsComponent::GetHeldItemModifierSet(EHand Hand) const
 	if (Hand == EHand::Left) return TEXT("HeldItemLeft");
 	if (Hand == EHand::Right) return TEXT("HeldItemRight");
 	return NAME_None;
+}
+
+FVector UHeldItemsComponent::GetLastItemVelocity(EHand Hand) const
+{
+	if (Hand == EHand::None) return FVector::ZeroVector;
+	return GetHandState(Hand).LastItemVelocity;
 }
 
 EHand UHeldItemsComponent::GetIsHoldingTwoHanded() const
@@ -202,8 +205,31 @@ void UHeldItemsComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
+	// Sample held-item velocity *before* collision responses for this frame are fully applied.
+	// Used by incidence so we measure pre-bounce swing direction.
+	auto SampleVelocity = [](FHandState& State)
+	{
+		if (!State.HeldItem) return;
+		if (UStaticMeshComponent* Mesh = State.HeldItem->GetItemPrimaryMesh())
+		{
+			State.LastItemVelocity = Mesh->GetPhysicsLinearVelocity();
+		}
+	};
+	SampleVelocity(HandLeft);
+	SampleVelocity(HandRight);
+
 	PreventItemStuck(EHand::Left);
 	PreventItemStuck(EHand::Right);
+}
+
+FHandState& UHeldItemsComponent::GetHandState(EHand Hand)
+{
+	return (Hand == EHand::Left) ? HandLeft : HandRight;
+}
+
+const FHandState& UHeldItemsComponent::GetHandState(EHand Hand) const
+{
+	return (Hand == EHand::Left) ? HandLeft : HandRight;
 }
 
 #pragma endregion
@@ -565,16 +591,10 @@ bool UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand, FStr
 		PhysicsControl->CreateBodyModifier(Secondary, NAME_None, ModifierSet, ModData);
 	}
 
-	if (Hand == EHand::Left)
-	{
-		HeldItemLeft = Item;
-		ActiveControlLeft = NewControlName;
-	}
-	else if (Hand == EHand::Right)
-	{
-		HeldItemRight = Item;
-		ActiveControlRight = NewControlName;
-	}
+	FHandState& State = GetHandState(Hand);
+	State.HeldItem = Item;
+	State.ActiveControl = NewControlName;
+	State.LastItemVelocity = FVector::ZeroVector; // reset until next tick samples
 	return true;
 }
 
@@ -582,19 +602,19 @@ void UHeldItemsComponent::DetachItemFromControl(EHand Hand)
 {
 	if (Hand == EHand::None || !PhysicsControl) return;
 
-	FName& ActiveControl = (Hand == EHand::Left) ? ActiveControlLeft : ActiveControlRight;
+	FHandState& State = GetHandState(Hand);
 
-	if (!ActiveControl.IsNone())
+	if (!State.ActiveControl.IsNone())
 	{
-		PhysicsControl->DestroyControl(ActiveControl);
-		ActiveControl = NAME_None;
+		PhysicsControl->DestroyControl(State.ActiveControl);
+		State.ActiveControl = NAME_None;
 	}
 
 	// Remove reduced-gravity body modifiers for this hand
 	PhysicsControl->DestroyBodyModifiersInSet(GetHeldItemModifierSet(Hand));
 
 	// Restore collision and scale for the item mesh
-	AItemActor* Item = GetHeldItem(Hand);
+	AItemActor* Item = State.HeldItem;
 
 	if (Item)
 	{
@@ -611,6 +631,8 @@ void UHeldItemsComponent::DetachItemFromControl(EHand Hand)
 			ItemMesh->SetCollisionResponseToChannel(COLLISION_PLAYER, ECollisionResponse::ECR_Block);
 		}
 	}
+
+	State.LastItemVelocity = FVector::ZeroVector;
 }
 
 void UHeldItemsComponent::PreventItemStuck(EHand Hand)
@@ -634,7 +656,7 @@ void UHeldItemsComponent::PreventItemStuck(EHand Hand)
 	const float EnterUnsafeDistance = 70.0f;
 	const float ExitUnsafeDistance = 40.0f;
 
-	bool& bItemStuck = (Hand == EHand::Left) ? bLeftItemStuck : bRightItemStuck;
+	bool& bItemStuck = GetHandState(Hand).bItemStuck;
 
 	if (Distance > EnterUnsafeDistance && !bItemStuck)
 	{
@@ -781,7 +803,7 @@ FPendingPickupData& UHeldItemsComponent::GetPendingPickup(EHand Hand)
 		return Empty;
 	}
 
-	return (Hand == EHand::Left) ? PendingPickupLeft : PendingPickupRight;
+	return GetHandState(Hand).PendingPickup;
 }
 
 #pragma endregion

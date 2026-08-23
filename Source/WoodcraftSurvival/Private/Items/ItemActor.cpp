@@ -149,6 +149,94 @@ TSubclassOf<UDamageType> AItemActor::ResolveDamageTypeFromShapeName(FName ShapeN
 	return UDamageType_Blunt::StaticClass();
 }
 
+/**
+ * Chaos frequently returns MyItem = -1 for multi-shape simple collision.
+ * When that happens we find the named shape whose geometry is closest to the impact point.
+ * Supports Box / Sphere / Sphyl (capsule); other types fall back to center distance.
+ */
+static FName ResolveShapeNameFromHit(UPrimitiveComponent* HitComp, const FHitResult& Hit)
+{
+	if (!HitComp) return NAME_None;
+
+	UBodySetup* BodySetup = HitComp->GetBodySetup();
+	if (!BodySetup) return NAME_None;
+
+	const FTransform CompTM = HitComp->GetComponentTransform();
+	const FVector LocalImpact = CompTM.InverseTransformPosition(Hit.ImpactPoint);
+
+	float BestDistSq = TNumericLimits<float>::Max();
+	FName BestName = NAME_None;
+
+	auto Consider = [&](FName Name, float DistSq)
+	{
+		if (DistSq < BestDistSq)
+		{
+			BestDistSq = DistSq;
+			BestName = Name;
+		}
+	};
+
+	// --- Boxes ---
+	for (const FKBoxElem& Box : BodySetup->AggGeom.BoxElems)
+	{
+		// Box local space (Center + Rotation)
+		const FTransform BoxTM(Box.Rotation, Box.Center);
+		const FVector BoxLocal = BoxTM.InverseTransformPosition(LocalImpact);
+
+		const FVector Extents(Box.X * 0.5f, Box.Y * 0.5f, Box.Z * 0.5f);
+		const FVector Clamped(
+			FMath::Clamp(BoxLocal.X, -Extents.X, Extents.X),
+			FMath::Clamp(BoxLocal.Y, -Extents.Y, Extents.Y),
+			FMath::Clamp(BoxLocal.Z, -Extents.Z, Extents.Z));
+
+		const float DistSq = FVector::DistSquared(BoxLocal, Clamped);
+		Consider(Box.GetName(), DistSq);
+	}
+
+	// --- Spheres ---
+	for (const FKSphereElem& Sphere : BodySetup->AggGeom.SphereElems)
+	{
+		const float Dist = FVector::Dist(LocalImpact, Sphere.Center) - Sphere.Radius;
+		const float DistSq = FMath::Square(FMath::Max(0.f, Dist));
+		Consider(Sphere.GetName(), DistSq);
+	}
+
+	// --- Capsules (Sphyl) ---
+	for (const FKSphylElem& Cap : BodySetup->AggGeom.SphylElems)
+	{
+		const FTransform CapTM(Cap.Rotation, Cap.Center);
+		const FVector CapLocal = CapTM.InverseTransformPosition(LocalImpact);
+
+		// Capsule is along Z, half-length = Length*0.5, radius = Radius
+		const float HalfLen = Cap.Length * 0.5f;
+		const float ClampedZ = FMath::Clamp(CapLocal.Z, -HalfLen, HalfLen);
+		const FVector ClosestOnAxis(0.f, 0.f, ClampedZ);
+		const float Dist = FVector::Dist(CapLocal, ClosestOnAxis) - Cap.Radius;
+		const float DistSq = FMath::Square(FMath::Max(0.f, Dist));
+		Consider(Cap.GetName(), DistSq);
+	}
+
+	// --- Convex / other: fall back to element center if any remain ---
+	// (GetElement walks all types; we already handled the common ones above, so this is a safety net)
+	const int32 Num = BodySetup->AggGeom.GetElementCount();
+	for (int32 i = 0; i < Num; ++i)
+	{
+		if (const FKShapeElem* Elem = BodySetup->AggGeom.GetElement(i))
+		{
+			// Skip if we already considered it via the typed arrays (name match is fine; distance will just re-evaluate)
+			// For true unknown types we only have the generic interface, so use a large penalty unless it is the only shape.
+			// Simple center approximation using the first available transform-like data is not exposed generically,
+			// so we only use this path when no better candidate was found.
+			if (BestName.IsNone())
+			{
+				Consider(Elem->GetName(), 0.f); // accept first unknown as last resort
+			}
+		}
+	}
+
+	return BestName;
+}
+
 void AItemActor::OnItemMeshHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp,
 	FVector NormalImpulse, const FHitResult& Hit)
 {
@@ -193,97 +281,80 @@ void AItemActor::OnItemMeshHit(UPrimitiveComponent* HitComp, AActor* OtherActor,
 	IDamageable* Damageable = Cast<IDamageable>(OtherActor);
 	if (!Damageable) return;
 
-	// Extract the named collision primitive on *this* item (the part that contacted)
-	FName ShapeName = NAME_None;
-	if (HitComp)
-	{
-		if (UBodySetup* BodySetup = HitComp->GetBodySetup())
-		{
-			// MyItem = shape index on the component that generated the hit event
-			const int32 ShapeIndex = (Hit.MyItem >= 0) ? Hit.MyItem : static_cast<int32>(Hit.ElementIndex);
-			if (const FKShapeElem* Elem = BodySetup->AggGeom.GetElement(ShapeIndex))
-			{
-				ShapeName = Elem->GetName();
-			}
-		}
-	}
-
+	// Named collision primitive that contacted (Chaos often returns MyItem = -1, so we use
+	// closest-shape against ImpactPoint when the index is unusable).
+	const FName ShapeName = HitComp ? ResolveShapeNameFromHit(HitComp, Hit) : NAME_None;
 	const TSubclassOf<UDamageType> CandidateType = ResolveDamageTypeFromShapeName(ShapeName);
 	TSubclassOf<UDamageType> FinalType = CandidateType;
-	FString ConversionReason = TEXT("kept");
 
-	// Incidence / angle → type conversion (model B)
-	// Shape name decides the candidate; StrikeMode decides which local axis must align with velocity.
+	// Incidence (model B): shape name decides the candidate; StrikeMode decides which local
+	// axis must align with the incoming direction. Prefer previous-tick velocity from
+	// HeldItemsComponent (pre-bounce). Fall back to live velocity, then -NormalImpulse.
 	if (CandidateType == UDamageType_Slash::StaticClass() || CandidateType == UDamageType_Pierce::StaticClass())
 	{
 		const UEquippableItemFragment* EquipFrag = ItemInstance->FindFragment<UEquippableItemFragment>();
 		const EItemStrikeMode Mode = EquipFrag ? EquipFrag->StrikeMode : EItemStrikeMode::None;
 
-		const FVector Velocity = HitComp ? HitComp->GetPhysicsLinearVelocity() : FVector::ZeroVector;
-		const float Speed = Velocity.Size();
-
-		if (Speed > KINDA_SMALL_NUMBER && HitComp)
+		FVector IncomingDir = FVector::ZeroVector;
+		if (UHeldItemsComponent* HeldComp = Holder->FindComponentByClass<UHeldItemsComponent>())
 		{
-			const FVector VelDir = Velocity / Speed;
-			const FTransform MeshXform = HitComp->GetComponentTransform();
+			const EHand Hand = HeldComp->GetHandHoldingItem(this);
+			const FVector LastVel = HeldComp->GetLastItemVelocity(Hand);
+			if (LastVel.SizeSquared() > KINDA_SMALL_NUMBER)
+			{
+				IncomingDir = LastVel.GetSafeNormal();
+			}
+		}
+		if (IncomingDir.IsNearlyZero() && HitComp)
+		{
+			const FVector LiveVel = HitComp->GetPhysicsLinearVelocity();
+			if (LiveVel.SizeSquared() > KINDA_SMALL_NUMBER)
+			{
+				IncomingDir = LiveVel.GetSafeNormal();
+			}
+		}
+		if (IncomingDir.IsNearlyZero() && NormalImpulse.Size() > KINDA_SMALL_NUMBER)
+		{
+			IncomingDir = -NormalImpulse.GetSafeNormal();
+		}
 
-			bool bKeep = false;
-			float AngleDeg = 180.f;
-			FString AxisUsed = TEXT("none");
+		bool bKeep = false;
+		if (!IncomingDir.IsNearlyZero() && HitComp)
+		{
+			const FTransform MeshXform = HitComp->GetComponentTransform();
 
 			if (CandidateType == UDamageType_Slash::StaticClass())
 			{
 				if (Mode == EItemStrikeMode::SingleEdged)
 				{
-					// Prefer +Y only
 					const FVector StrikeDir = MeshXform.GetUnitAxis(EAxis::Y);
-					const float Dot = FVector::DotProduct(VelDir, StrikeDir);
-					AngleDeg = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(Dot, -1.f, 1.f)));
+					const float AngleDeg = FMath::RadiansToDegrees(
+						FMath::Acos(FMath::Clamp(FVector::DotProduct(IncomingDir, StrikeDir), -1.f, 1.f)));
 					bKeep = (AngleDeg <= GSlashMaxAngleDeg);
-					AxisUsed = TEXT("+Y");
 				}
 				else if (Mode == EItemStrikeMode::DoubleEdged)
 				{
-					// ±Y (Abs)
 					const FVector StrikeDir = MeshXform.GetUnitAxis(EAxis::Y);
-					const float AbsDot = FMath::Abs(FVector::DotProduct(VelDir, StrikeDir));
-					AngleDeg = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(AbsDot, -1.f, 1.f)));
+					const float AngleDeg = FMath::RadiansToDegrees(
+						FMath::Acos(FMath::Clamp(FMath::Abs(FVector::DotProduct(IncomingDir, StrikeDir)), -1.f, 1.f)));
 					bKeep = (AngleDeg <= GSlashMaxAngleDeg);
-					AxisUsed = TEXT("±Y");
 				}
-				// else Mode does not support Slash → force Blunt
 			}
 			else // Pierce candidate
 			{
 				if (Mode == EItemStrikeMode::Pierce)
 				{
-					// +Z only (tip)
 					const FVector StrikeDir = MeshXform.GetUnitAxis(EAxis::Z);
-					const float Dot = FVector::DotProduct(VelDir, StrikeDir);
-					AngleDeg = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(Dot, -1.f, 1.f)));
+					const float AngleDeg = FMath::RadiansToDegrees(
+						FMath::Acos(FMath::Clamp(FVector::DotProduct(IncomingDir, StrikeDir), -1.f, 1.f)));
 					bKeep = (AngleDeg <= GPierceMaxAngleDeg);
-					AxisUsed = TEXT("+Z");
 				}
 			}
-
-			if (bKeep)
-			{
-				ConversionReason = FString::Printf(TEXT("%s kept (%.0f° on %s)"),
-					CandidateType == UDamageType_Slash::StaticClass() ? TEXT("Slash") : TEXT("Pierce"),
-					AngleDeg, *AxisUsed);
-			}
-			else
-			{
-				FinalType = UDamageType_Blunt::StaticClass();
-				ConversionReason = FString::Printf(TEXT("%s→Blunt (%.0f° on %s, mode=%d)"),
-					CandidateType == UDamageType_Slash::StaticClass() ? TEXT("Slash") : TEXT("Pierce"),
-					AngleDeg, *AxisUsed, static_cast<int32>(Mode));
-			}
 		}
-		else
+
+		if (!bKeep)
 		{
 			FinalType = UDamageType_Blunt::StaticClass();
-			ConversionReason = TEXT("no velocity → Blunt");
 		}
 	}
 
@@ -298,19 +369,5 @@ void AItemActor::OnItemMeshHit(UPrimitiveComponent* HitComp, AActor* OtherActor,
 	Info.Instigator = Holder.IsValid() ? Holder.Get() : this;
 
 	Damageable->ApplyDamage(Info);
-
 	LastDamageTime = Now;
-
-	// Debug (remove or gate later)
-	if (GEngine)
-	{
-		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Yellow,
-			FString::Printf(TEXT("Hit %s | Shape=%s → %s | %s | Impulse=%.0f Amount=%.1f"),
-				*OtherActor->GetName(),
-				*ShapeName.ToString(),
-				FinalType ? *FinalType->GetName() : TEXT("None"),
-				*ConversionReason,
-				ImpulseMag,
-				Amount));
-	}
 }

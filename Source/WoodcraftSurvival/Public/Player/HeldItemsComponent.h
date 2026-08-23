@@ -27,6 +27,34 @@ struct FPendingPickupData
 };
 
 /**
+ * Per-hand runtime state owned by UHeldItemsComponent.
+ * Keeps Left/Right data in one place and makes adding new per-hand fields (velocity history, etc.) clean.
+ */
+struct FHandState
+{
+	/** Item currently held in this hand (never null after BeginPlay — Unarmed fills empty hands). */
+	TObjectPtr<AItemActor> HeldItem = nullptr;
+
+	/** Temporary data for an in-progress pickup animation. */
+	FPendingPickupData PendingPickup;
+
+	/** Currently active Physics Control name for this hand. */
+	FName ActiveControl = NAME_None;
+
+	/** Whether the held item is currently treated as stuck (too far from the control parent). */
+	bool bItemStuck = false;
+
+	/** Whether this hand is in the extended (strike-ready) pose. */
+	bool bExtended = false;
+
+	/**
+	 * Linear velocity of the held item’s primary mesh from the previous tick.
+	 * Used by incidence so we measure the pre-bounce swing direction instead of the rebound.
+	 */
+	FVector LastItemVelocity = FVector::ZeroVector;
+};
+
+/**
  * Manages items held in both hands.
  * A single component owns both the left and right hand state.
  * Empty hands always hold the Unarmed item so the system never has a null hand.
@@ -128,6 +156,13 @@ public:
 	UFUNCTION(BlueprintPure, Category = "CoreAPI")
 	FName GetHeldItemModifierSet(EHand Hand) const;
 
+	/**
+	 * Linear velocity of the held item’s primary mesh from the previous tick.
+	 * Used by incidence angle checks so we measure pre-bounce swing direction.
+	 */
+	UFUNCTION(BlueprintPure, Category = "CoreAPI")
+	FVector GetLastItemVelocity(EHand Hand) const;
+
 
 protected:
 	
@@ -140,6 +175,12 @@ protected:
 private:
 
 	// ---------- private methods ----------
+
+	/** Returns a mutable reference to the per-hand state. */
+	FHandState& GetHandState(EHand Hand);
+
+	/** Returns a const reference to the per-hand state. */
+	const FHandState& GetHandState(EHand Hand) const;
 
 	/** Attempts to pick up the given item into the specified hand. */
 	bool TryPickup(AItemActor* Item, EHand Hand, FString& OutResult);
@@ -195,17 +236,11 @@ private:
 	/** Returns the item actor that the player is currently looking at, within the specified max distance. */
 	AItemActor* FindLookedAtItem(float Radius = 5.f, float MaxDistance = 250.f) const;
 
-	// Returns all equippable items currently in range (for the gray highlight)
-	//void GetItemsInPickupRange(TArray<AItemActor*>& OutItems, float Radius = 120.f) const;
-
 	/** Returns true if the item in the given hand is the Unarmed item. */
 	const bool GetIsUnarmed(EHand Hand) const;
 
 	/** Plays pickup montage for the specified hand */
 	bool PlayPickupMontage(EHand Hand, FString& OutResult) const;
-
-	/** Plays drop montage for the specified hand */
-	//bool PlayDropMontage(EHand Hand, FString& OutResult) const;
 
 
 	// ---------- private class variables ----------
@@ -216,33 +251,7 @@ private:
 	/** The animation instance for the first-person arms mesh. */
 	TObjectPtr<UFPArmsAnimInstance> AnimInstance;
 
-	/** Item currently held in the left hand. */
-	TObjectPtr<AItemActor> HeldItemLeft;
-
-	/** Item currently held in the right hand. */
-	TObjectPtr<AItemActor> HeldItemRight;
-
-	/** Temporary data for an in-progress pickup animation on the left hand. */
-	FPendingPickupData PendingPickupLeft;
-
-	/** Temporary data for an in-progress pickup animation on the right hand. */
-	FPendingPickupData PendingPickupRight;
-
-	/** Currently active control name for the left hand. */
-	FName ActiveControlLeft;
-
-	/** Currently active control name for the right hand. */
-	FName ActiveControlRight;
-
-	/** Whether the item in the left hand is currently stuck (too far from the control parent). */
-	bool bLeftItemStuck = false;
-
-	/** Whether the item in the right hand is currently stuck (too far from the control parent). */
-	bool bRightItemStuck = false;
-
-	/** Whether the left hand is in the extended (strike-ready) pose. */
-	bool bExtendedLeft = false;
-
-	/** Whether the right hand is in the extended (strike-ready) pose. */
-	bool bExtendedRight = false;
+	/** Per-hand runtime state (item, control, extended, velocity history, etc.). */
+	FHandState HandLeft;
+	FHandState HandRight;
 };

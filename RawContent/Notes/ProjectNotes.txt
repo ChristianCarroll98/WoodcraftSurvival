@@ -22,12 +22,14 @@ current issues/working task list:
 - DONE: Resistance data lives on HealthHarvestableFragment (defaults) → copied to UHarvestableInstance at creation. ApplyDamage multiplies by Instance->GetDamageMultiplier. Tree data asset: put Blunt in Immunities (or high positive modifier) so sticks stop killing trees.
 - DONE: Copper Hatchet dual-mesh via fixed UPhysicsConstraintComponent (Chaos WeldTo unreliable for runtime NewObject secondaries). Both meshes simulate; constraint locks all 6 DOF + SetDisableCollision(true). Feels heavier, hits register, head stays attached.
 - DONE: DamageItemFragment is pure “enable hit events” marker. DamageType from named collision primitives (Slash/Sharp/Blade → Slash, Pierce/Point → Pierce, else Blunt). Amount from impulse only (mass already in physics). Softness multipliers later on Physical Material.
-- DONE: Extract named collision primitive from the hit (Hit.MyItem / ElementIndex → AggGeom.GetElement → ShapeName).
-- DONE: Mass-scaled Physics Control + reduced gravity via Body Modifier (GravityMultiplier 0.2 on Primary+Secondary, sets HeldItemLeft/Right). EffMass = Primary+Secondary; Scale = clamp(EffMass/0.6, 1–6); L=2.8× A=4.5× with rising damping. Modifiers destroyed on detach. Debug print on equip.
+- DONE: Named shape extraction — ResolveShapeNameFromHit uses closest Box/Sphere/Sphyl to ImpactPoint.
+- DONE: Mass-scaled Physics Control + reduced gravity via Body Modifier (GravityMultiplier 0.2 on Primary+Secondary, sets HeldItemLeft/Right). EffMass = Primary+Secondary; Scale = clamp(EffMass/0.6, 1–6); L=2.8× A=4.5× with rising damping. Modifiers destroyed on detach.
 - DONE: Damage also gated by GMinItemSpeed (80 cm/s) so continuous contact while pressed does not keep dealing damage.
-- DONE: Extended state on HeldItemsComponent (SetExtended / GetIsExtended per hand). Damage gated on extended. Helpers: GetHandHoldingItem, GetActiveControlName, GetHeldItemModifierSet.
-- Next: incidence/angle → type conversion (model B); then procedural orientation (tags Weapon.SingleEdged etc., local +Y).
-- Procedural swing orientation for tools/weapons (item rotates toward swing direction). Hard wrist rotation limits later.
+- DONE: Extended state on HeldItemsComponent (SetExtended / GetIsExtended per hand). Damage gated on extended.
+- DONE: FHandState on HeldItemsComponent (HeldItem, PendingPickup, ActiveControl, bItemStuck, bExtended, LastItemVelocity). Tick samples primary-mesh velocity for pre-bounce incidence.
+- DONE: Incidence / angle → type conversion (model B). EItemStrikeMode on EquippableItemFragment (None, SingleEdged +Y, DoubleEdged ±Y, Pierce +Z). Cones: GSlashMaxAngleDeg=35, GPierceMaxAngleDeg=55. Outside cone → force Blunt. Incoming dir = LastItemVelocity → live vel → -NormalImpulse.
+- Next: procedural swing orientation (while extended + speed threshold). Drive Physics Control angular target from StrikeMode axes (+Y / ±Y / +Z). Hard wrist limits only if first pass feels broken.
+- Later polish: audio per resolved damage type; Valheim-style floating damage numbers (gray resist / white neutral / pale yellow weak / gray 0 immunity); optional camera-delta bias for orientation intent; tune cones/thresholds.
 - Explicitly deferred: separate head/handle durability / dual Instances. Hatchet just breaks into wood + CopperScrap like any other item.
 
 Architecture reminder:
@@ -37,4 +39,6 @@ Architecture reminder:
 - MVP first — no composite tools, no part durability until much later.
 - Physical Materials = single source of truth for density/mass + future impact/softness scales.
 - Dual-mesh tools: fixed Physics Constraint (not WeldTo). SecondaryRelativeTransform must be correct on the Item Definition.
-- Named primitives on Static Meshes drive DamageType (multiple author names can map to one type).
+- Named primitives on Static Meshes drive candidate DamageType (multiple author names can map to one type). Incidence can demote Slash/Pierce → Blunt.
+- EItemStrikeMode on EquippableItemFragment drives both incidence axes and (upcoming) procedural orientation.
+- Per-hand state lives in FHandState on HeldItemsComponent (including LastItemVelocity for pre-bounce incidence).
