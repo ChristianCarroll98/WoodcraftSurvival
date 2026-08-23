@@ -23,7 +23,8 @@ current issues/working task list:
 - DONE: Copper Hatchet dual-mesh via fixed UPhysicsConstraintComponent (Chaos WeldTo unreliable for runtime NewObject secondaries). Both meshes simulate; constraint locks all 6 DOF + SetDisableCollision(true). Feels heavier, hits register, head stays attached.
 - DONE: DamageItemFragment is pure “enable hit events” marker. DamageType from named collision primitives (Slash/Sharp/Blade → Slash, Pierce/Point → Pierce, else Blunt). Amount from impulse only (mass already in physics). Softness multipliers later on Physical Material.
 - DONE: Extract named collision primitive from the hit (Hit.MyItem / ElementIndex → AggGeom.GetElement → ShapeName).
-- DONE: Mass-scaled Physics Control strengths (Linear/Angular × MassScale, ref ~0.8 kg). Should stop hatchet sag.
+- DONE: Mass-scaled Physics Control + reduced gravity while held (GravityScale 0.2). EffMass = Primary+Secondary; Scale = clamp(EffMass/0.6, 1–6); L=2.8× A=4.5× with rising damping. Scale restored to 1.0 on detach. Debug print on equip.
+- DONE: Damage also gated by GMinItemSpeed (80 cm/s) so continuous contact while pressed does not keep dealing damage.
 - Procedural swing orientation for tools/weapons (item rotates toward swing direction). Hard wrist rotation limits later.
 - Explicitly deferred: separate head/handle durability / dual Instances. Hatchet just breaks into wood + CopperScrap like any other item.
 

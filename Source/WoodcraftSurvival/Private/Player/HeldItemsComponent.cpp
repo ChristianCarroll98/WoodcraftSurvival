@@ -472,21 +472,35 @@ bool UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand, FStr
 
 	const FName WeaponBoneName = GetWeaponBoneName(Hand);
 
-	// Scale Physics Control strength by item mass so heavy tools (hatchet) don't sag
-	// while light sticks stay responsive. Reference ~0.8 kg stick.
-	const float Mass = ItemMesh->GetMass();
-	const float MassScale = FMath::Clamp(Mass / 0.8f, 0.6f, 3.5f);
+	// Effective mass = Primary + Secondary (constraint does not merge BodyInstances).
+	float EffectiveMass = ItemMesh->GetMass();
+	if (UStaticMeshComponent* Secondary = Item->GetItemSecondaryMesh())
+	{
+		EffectiveMass += Secondary->GetMass();
+	}
+
+	// Softer strengths with reduced gravity; damping still rises with mass.
+	const float MassScale = FMath::Clamp(EffectiveMass / 0.6f, 1.0f, 6.0f);
 
 	FPhysicsControlData ControlData;
-	ControlData.LinearStrength = 3.0f * MassScale;
-	ControlData.LinearDampingRatio = 1.3f;
-	ControlData.AngularStrength = 5.0f * MassScale;
-	ControlData.AngularDampingRatio = 1.2f;
+	ControlData.LinearStrength = 2.8f * MassScale;
+	ControlData.LinearDampingRatio = 1.4f + 0.3f * (MassScale - 1.0f);
+	ControlData.AngularStrength = 4.5f * MassScale;
+	ControlData.AngularDampingRatio = 1.3f + 0.3f * (MassScale - 1.0f);
 	ControlData.bUseSkeletalAnimation = true;
 	ControlData.bDisableCollision = true;
 	ControlData.bUseCustomControlPoint = true;
 	// --- Get the wrist offset from the weapon bone for the custom control point so the item bends at the wrist
 	ControlData.CustomControlPoint = GetRelativeTransformBetweenWeaponAndHandBones(Hand).GetLocation();
+
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Cyan,
+			FString::Printf(TEXT("PhysControl mass=%.2f scale=%.2f  L=%.1f A=%.1f  dampL=%.2f dampA=%.2f"),
+				EffectiveMass, MassScale,
+				ControlData.LinearStrength, ControlData.AngularStrength,
+				ControlData.LinearDampingRatio, ControlData.AngularDampingRatio));
+	}
 
 	FPhysicsControlTarget ControlTarget;
 
@@ -501,6 +515,21 @@ bool UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand, FStr
 		TEXT("HeldItems"),
 		"WSPC_"
 	);
+
+	// Reduced gravity via Physics Control Body Modifier (GravityScale is not available on FBodyInstance in 5.8).
+	// One set per hand so we can cleanly destroy on detach.
+	const FName ModifierSet = (Hand == EHand::Left) ? TEXT("HeldItemLeft") : TEXT("HeldItemRight");
+	PhysicsControl->DestroyBodyModifiersInSet(ModifierSet);
+
+	FPhysicsControlModifierData ModData;
+	ModData.MovementType = EPhysicsMovementType::Simulated;
+	ModData.GravityMultiplier = 0.2f;
+
+	PhysicsControl->CreateBodyModifier(ItemMesh, NAME_None, ModifierSet, ModData);
+	if (UStaticMeshComponent* Secondary = Item->GetItemSecondaryMesh())
+	{
+		PhysicsControl->CreateBodyModifier(Secondary, NAME_None, ModifierSet, ModData);
+	}
 
 	if (Hand == EHand::Left)
 	{
@@ -527,6 +556,9 @@ void UHeldItemsComponent::DetachItemFromControl(EHand Hand)
 		ActiveControl = NAME_None;
 	}
 
+	// Remove reduced-gravity body modifiers for this hand
+	const FName ModifierSet = (Hand == EHand::Left) ? TEXT("HeldItemLeft") : TEXT("HeldItemRight");
+	PhysicsControl->DestroyBodyModifiersInSet(ModifierSet);
 
 	// Restore collision and scale for the item mesh
 	AItemActor* Item = GetHeldItem(Hand);

@@ -164,8 +164,9 @@ void AItemActor::OnItemMeshHit(UPrimitiveComponent* HitComp, AActor* OtherActor,
 		if (OtherItem->Holder.IsValid()) return;
 	}
 
-	// Relative speed gate
+	// Impulse + actual motion gates (stops “lean on the tree and drain health”)
 	if (NormalImpulse.Size() < GMinImpulse) return;
+	if (HitComp && HitComp->GetPhysicsLinearVelocity().Size() < GMinItemSpeed) return;
 
 	const float Now = GetWorld()->GetTimeSeconds();
 	if (Now - LastDamageTime < DamageCooldown) return;

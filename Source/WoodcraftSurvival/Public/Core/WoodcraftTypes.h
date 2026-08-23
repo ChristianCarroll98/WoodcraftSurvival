@@ -13,6 +13,10 @@ const FString GErrorPrefix = TEXT("ERROR: ");
 /** Minimum impulse required for a collision to deal damage. Tunable later. */
 const float GMinImpulse = 100.f;
 
+/** Minimum linear speed (cm/s) of the item mesh required to deal damage.
+ *  Prevents continuous contact while pressed into a surface from repeatedly damaging. */
+const float GMinItemSpeed = 80.f;
+
 
 // ---------- Enums ----------
 
