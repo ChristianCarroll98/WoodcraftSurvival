@@ -66,6 +66,41 @@ AItemActor* UHeldItemsComponent::GetHeldItem(EHand Hand) const
 	return nullptr;
 }
 
+void UHeldItemsComponent::SetExtended(EHand Hand, bool bExtended)
+{
+	if (Hand == EHand::Left) bExtendedLeft = bExtended;
+	else if (Hand == EHand::Right) bExtendedRight = bExtended;
+}
+
+bool UHeldItemsComponent::GetIsExtended(EHand Hand) const
+{
+	if (Hand == EHand::Left) return bExtendedLeft;
+	if (Hand == EHand::Right) return bExtendedRight;
+	return false;
+}
+
+EHand UHeldItemsComponent::GetHandHoldingItem(const AItemActor* Item) const
+{
+	if (!Item) return EHand::None;
+	if (HeldItemLeft == Item) return EHand::Left;
+	if (HeldItemRight == Item) return EHand::Right;
+	return EHand::None;
+}
+
+FName UHeldItemsComponent::GetActiveControlName(EHand Hand) const
+{
+	if (Hand == EHand::Left) return ActiveControlLeft;
+	if (Hand == EHand::Right) return ActiveControlRight;
+	return NAME_None;
+}
+
+FName UHeldItemsComponent::GetHeldItemModifierSet(EHand Hand) const
+{
+	if (Hand == EHand::Left) return TEXT("HeldItemLeft");
+	if (Hand == EHand::Right) return TEXT("HeldItemRight");
+	return NAME_None;
+}
+
 EHand UHeldItemsComponent::GetIsHoldingTwoHanded() const
 {
 	AItemActor* LeftItem = GetHeldItem(EHand::Left);
@@ -516,9 +551,8 @@ bool UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand, FStr
 		"WSPC_"
 	);
 
-	// Reduced gravity via Physics Control Body Modifier (GravityScale is not available on FBodyInstance in 5.8).
-	// One set per hand so we can cleanly destroy on detach.
-	const FName ModifierSet = (Hand == EHand::Left) ? TEXT("HeldItemLeft") : TEXT("HeldItemRight");
+	// Reduced gravity via Physics Control Body Modifier (one set per hand).
+	const FName ModifierSet = GetHeldItemModifierSet(Hand);
 	PhysicsControl->DestroyBodyModifiersInSet(ModifierSet);
 
 	FPhysicsControlModifierData ModData;
@@ -557,8 +591,7 @@ void UHeldItemsComponent::DetachItemFromControl(EHand Hand)
 	}
 
 	// Remove reduced-gravity body modifiers for this hand
-	const FName ModifierSet = (Hand == EHand::Left) ? TEXT("HeldItemLeft") : TEXT("HeldItemRight");
-	PhysicsControl->DestroyBodyModifiersInSet(ModifierSet);
+	PhysicsControl->DestroyBodyModifiersInSet(GetHeldItemModifierSet(Hand));
 
 	// Restore collision and scale for the item mesh
 	AItemActor* Item = GetHeldItem(Hand);

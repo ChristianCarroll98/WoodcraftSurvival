@@ -107,6 +107,27 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "CoreAPI")
 	void CompletePickup(EHand Hand);
 
+	/** Sets whether the given hand is in the extended (ready to strike) state.
+	 *  Call from Player BP alongside the anim extend bool. Gates damage and future orientation. */
+	UFUNCTION(BlueprintCallable, Category = "CoreAPI")
+	void SetExtended(EHand Hand, bool bExtended);
+
+	/** Returns whether the given hand is currently extended. */
+	UFUNCTION(BlueprintPure, Category = "CoreAPI")
+	bool GetIsExtended(EHand Hand) const;
+
+	/** Returns which hand is holding the given item, or EHand::None. */
+	UFUNCTION(BlueprintPure, Category = "CoreAPI")
+	EHand GetHandHoldingItem(const AItemActor* Item) const;
+
+	/** Returns the active Physics Control name for the hand, or NAME_None. */
+	UFUNCTION(BlueprintPure, Category = "CoreAPI")
+	FName GetActiveControlName(EHand Hand) const;
+
+	/** Returns the Body Modifier set name used for the held item in this hand (HeldItemLeft / HeldItemRight). */
+	UFUNCTION(BlueprintPure, Category = "CoreAPI")
+	FName GetHeldItemModifierSet(EHand Hand) const;
+
 
 protected:
 	
@@ -218,4 +239,10 @@ private:
 
 	/** Whether the item in the right hand is currently stuck (too far from the control parent). */
 	bool bRightItemStuck = false;
+
+	/** Whether the left hand is in the extended (strike-ready) pose. */
+	bool bExtendedLeft = false;
+
+	/** Whether the right hand is in the extended (strike-ready) pose. */
+	bool bExtendedRight = false;
 };

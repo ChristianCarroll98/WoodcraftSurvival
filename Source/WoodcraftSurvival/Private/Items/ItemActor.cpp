@@ -5,6 +5,7 @@
 #include "Items/ItemDefinition.h"
 #include "Items/Fragments/ItemFragment.h"
 #include "Items/Fragments/DamageItemFragment.h"
+#include "Player/HeldItemsComponent.h"
 #include "Core/WoodcraftTypes.h"
 #include "Core/Damage/DamageType_Blunt.h"
 #include "Core/Damage/DamageType_Slash.h"
@@ -152,6 +153,17 @@ void AItemActor::OnItemMeshHit(UPrimitiveComponent* HitComp, AActor* OtherActor,
 {
 	// Only do damage if this item is held (for now)
 	if (!Holder.IsValid()) return;
+
+	// Must be extended (strike-ready) on the hand that holds this item
+	if (UHeldItemsComponent* HeldComp = Holder->FindComponentByClass<UHeldItemsComponent>())
+	{
+		const EHand Hand = HeldComp->GetHandHoldingItem(this);
+		if (Hand == EHand::None || !HeldComp->GetIsExtended(Hand)) return;
+	}
+	else
+	{
+		return;
+	}
 
 	if (!OtherActor || OtherActor == this) return;
 
