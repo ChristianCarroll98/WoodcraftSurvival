@@ -5,6 +5,7 @@
 #include "Items/ItemDefinition.h"
 #include "Items/Fragments/ItemFragment.h"
 #include "Items/Fragments/DamageItemFragment.h"
+#include "Items/Fragments/EquippableItemFragment.h"
 #include "Player/HeldItemsComponent.h"
 #include "Core/WoodcraftTypes.h"
 #include "Core/Damage/DamageType_Blunt.h"
@@ -207,7 +208,84 @@ void AItemActor::OnItemMeshHit(UPrimitiveComponent* HitComp, AActor* OtherActor,
 		}
 	}
 
-	const TSubclassOf<UDamageType> ResolvedType = ResolveDamageTypeFromShapeName(ShapeName);
+	const TSubclassOf<UDamageType> CandidateType = ResolveDamageTypeFromShapeName(ShapeName);
+	TSubclassOf<UDamageType> FinalType = CandidateType;
+	FString ConversionReason = TEXT("kept");
+
+	// Incidence / angle → type conversion (model B)
+	// Shape name decides the candidate; StrikeMode decides which local axis must align with velocity.
+	if (CandidateType == UDamageType_Slash::StaticClass() || CandidateType == UDamageType_Pierce::StaticClass())
+	{
+		const UEquippableItemFragment* EquipFrag = ItemInstance->FindFragment<UEquippableItemFragment>();
+		const EItemStrikeMode Mode = EquipFrag ? EquipFrag->StrikeMode : EItemStrikeMode::None;
+
+		const FVector Velocity = HitComp ? HitComp->GetPhysicsLinearVelocity() : FVector::ZeroVector;
+		const float Speed = Velocity.Size();
+
+		if (Speed > KINDA_SMALL_NUMBER && HitComp)
+		{
+			const FVector VelDir = Velocity / Speed;
+			const FTransform MeshXform = HitComp->GetComponentTransform();
+
+			bool bKeep = false;
+			float AngleDeg = 180.f;
+			FString AxisUsed = TEXT("none");
+
+			if (CandidateType == UDamageType_Slash::StaticClass())
+			{
+				if (Mode == EItemStrikeMode::SingleEdged)
+				{
+					// Prefer +Y only
+					const FVector StrikeDir = MeshXform.GetUnitAxis(EAxis::Y);
+					const float Dot = FVector::DotProduct(VelDir, StrikeDir);
+					AngleDeg = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(Dot, -1.f, 1.f)));
+					bKeep = (AngleDeg <= GSlashMaxAngleDeg);
+					AxisUsed = TEXT("+Y");
+				}
+				else if (Mode == EItemStrikeMode::DoubleEdged)
+				{
+					// ±Y (Abs)
+					const FVector StrikeDir = MeshXform.GetUnitAxis(EAxis::Y);
+					const float AbsDot = FMath::Abs(FVector::DotProduct(VelDir, StrikeDir));
+					AngleDeg = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(AbsDot, -1.f, 1.f)));
+					bKeep = (AngleDeg <= GSlashMaxAngleDeg);
+					AxisUsed = TEXT("±Y");
+				}
+				// else Mode does not support Slash → force Blunt
+			}
+			else // Pierce candidate
+			{
+				if (Mode == EItemStrikeMode::Pierce)
+				{
+					// +Z only (tip)
+					const FVector StrikeDir = MeshXform.GetUnitAxis(EAxis::Z);
+					const float Dot = FVector::DotProduct(VelDir, StrikeDir);
+					AngleDeg = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(Dot, -1.f, 1.f)));
+					bKeep = (AngleDeg <= GPierceMaxAngleDeg);
+					AxisUsed = TEXT("+Z");
+				}
+			}
+
+			if (bKeep)
+			{
+				ConversionReason = FString::Printf(TEXT("%s kept (%.0f° on %s)"),
+					CandidateType == UDamageType_Slash::StaticClass() ? TEXT("Slash") : TEXT("Pierce"),
+					AngleDeg, *AxisUsed);
+			}
+			else
+			{
+				FinalType = UDamageType_Blunt::StaticClass();
+				ConversionReason = FString::Printf(TEXT("%s→Blunt (%.0f° on %s, mode=%d)"),
+					CandidateType == UDamageType_Slash::StaticClass() ? TEXT("Slash") : TEXT("Pierce"),
+					AngleDeg, *AxisUsed, static_cast<int32>(Mode));
+			}
+		}
+		else
+		{
+			FinalType = UDamageType_Blunt::StaticClass();
+			ConversionReason = TEXT("no velocity → Blunt");
+		}
+	}
 
 	// Amount from impulse only (mass already contributes via physics / PhysMats)
 	const float ImpulseMag = NormalImpulse.Size();
@@ -215,7 +293,7 @@ void AItemActor::OnItemMeshHit(UPrimitiveComponent* HitComp, AActor* OtherActor,
 
 	FDamageInfo Info;
 	Info.Amount = Amount;
-	Info.DamageType = ResolvedType;
+	Info.DamageType = FinalType;
 	Info.HitLocation = Hit.ImpactPoint;
 	Info.Instigator = Holder.IsValid() ? Holder.Get() : this;
 
@@ -226,11 +304,12 @@ void AItemActor::OnItemMeshHit(UPrimitiveComponent* HitComp, AActor* OtherActor,
 	// Debug (remove or gate later)
 	if (GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(-1, 1.5f, FColor::Yellow,
-			FString::Printf(TEXT("Hit %s | Shape=%s → %s | Impulse=%.0f Amount=%.1f"),
+		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Yellow,
+			FString::Printf(TEXT("Hit %s | Shape=%s → %s | %s | Impulse=%.0f Amount=%.1f"),
 				*OtherActor->GetName(),
 				*ShapeName.ToString(),
-				ResolvedType ? *ResolvedType->GetName() : TEXT("None"),
+				FinalType ? *FinalType->GetName() : TEXT("None"),
+				*ConversionReason,
 				ImpulseMag,
 				Amount));
 	}

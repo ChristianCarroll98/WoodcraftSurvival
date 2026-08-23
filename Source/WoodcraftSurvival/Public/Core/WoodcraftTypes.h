@@ -17,6 +17,14 @@ const float GMinImpulse = 100.f;
  *  Prevents continuous contact while pressed into a surface from repeatedly damaging. */
 const float GMinItemSpeed = 80.f;
 
+/** Max angle (degrees) between item velocity and preferred strike axis to keep Slash damage.
+ *  Outside this cone the hit is forced to Blunt. */
+const float GSlashMaxAngleDeg = 35.f;
+
+/** Max angle (degrees) between item velocity and preferred strike axis to keep Pierce damage.
+ *  Outside this cone the hit is forced to Blunt. */
+const float GPierceMaxAngleDeg = 55.f;
+
 
 // ---------- Enums ----------
 
@@ -27,6 +35,23 @@ enum class EHand : uint8
 	Left,
 	Right,
 	None
+};
+
+/**
+ * Preferred strike axis / orientation mode for equippable items.
+ * Used by incidence (angle → type conversion) and later by procedural swing orientation.
+ * - None / Blunt: no dynamic rotation, Slash/Pierce candidates demoted to Blunt.
+ * - SingleEdged: local +Y only.
+ * - DoubleEdged: local ±Y (closer / Abs).
+ * - Pierce: local +Z (tip).
+ */
+UENUM(BlueprintType)
+enum class EItemStrikeMode : uint8
+{
+	None		UMETA(DisplayName = "None / Blunt"),
+	SingleEdged	UMETA(DisplayName = "Single Edged (+Y)"),
+	DoubleEdged	UMETA(DisplayName = "Double Edged (±Y)"),
+	Pierce		UMETA(DisplayName = "Pierce (+Z)"),
 };
 
 

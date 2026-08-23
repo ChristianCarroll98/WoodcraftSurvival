@@ -1,0 +1,159 @@
+**Fire Salamander – Comprehensive Reference Notes**
+*Woodcraft Survival – UE 5.8 / Blender 5.2*
+*(Created 2026-08-23)*
+
+This document is the species-specific reference for the Fire Salamander, a medium-sized fantasy/speculative-evolution predator built on the shared creature systems. It sits alongside `DesertWyvern.txt` and `Wolf.txt`.  
+Related general documents:
+- `../CreatureAISystemDefinition.txt`
+- `../CreatureMaterialsAndAppearance.txt`
+- `../CreatureRiggingAndAnimation.txt`
+
+The Tar Toad is a separate sibling document; the shared hunting mutualism is described here in ecological detail and cross-referenced.
+
+---
+
+### Section 1: Lore, Morphology, and Behavior
+*(Detailed bestiary entry)*
+
+**Evolutionary Origins**  
+The Fire Salamander is a highly derived, arid-adapted descendant of a large terrestrial caudate (salamander-like) lineage. Ancestral forms were moisture-dependent forest dwellers that already possessed pressurized dorsal and parotoid glands capable of spraying toxic alkaloid secretions—traits still visible in living *Salamandra*.  
+
+As regional climates aridified and continuous forest retreated, isolated populations that colonized permanent oil seeps and tar pits survived. These micro-habitats supplied reliable subsurface moisture, mineral-rich water, and a novel hydrocarbon resource. Selection rapidly favored:
+
+- Increased body size (dog-sized) for improved thermal inertia and the ability to participate in cooperative prey restraint.  
+- Progressive keratinization and thickening of the skin while retaining functional glandular fields.  
+- Specialization of the ancestral dual-gland system into two chemically distinct reservoirs whose secretions become highly reactive only when mixed and exposed to air.  
+- Stronger limb girdles and jaws suited to the “surround-and-bite” phase that follows ignition.  
+- Elevated social tolerance that produced stable small aggregations rather than pure solitariness.
+
+The modern animal is therefore still recognizably salamander-derived in gland placement, moist micro-habitat affinity, and aposematic patterning, yet externally more reptilian in some surface details. The binary chemical weapon co-evolved with the Tar Toad’s sticky hydrocarbon spit; neither partner is fully effective without the other, locking the mutualism in place.
+
+**Exact Appearance and Variants**  
+Adults measure approximately 65–85 cm snout-to-vent with a robust, moderately flattened body and a muscular tail of roughly equal length. The overall silhouette is low-slung, broad, and powerful.  
+
+Base color is a near-uniform dark charcoal to tar-black across the entire body, including the underside. High-contrast irregular spots and short bands occupy the dorsal surfaces from roughly the mid-neck rearward. Pattern colors are randomized at spawn across a wider fun range: pinkish reds, deep reds, oranges, and yellows, kept within a desert-compatible saturation/value envelope. Patterns deliberately phase out on the anterior ~¼ of the body (head + upper neck) so that the portions that remain exposed during partial burial stay pattern-free and read as dark rock.  
+
+Texture is kept relatively simple and uniform so that partial burial produces a convincing irregular rock / tar-crust silhouette at distance. Skin carries a mild moist sheen (elevated specular, tunable later).  
+
+Sexual dimorphism is modest: males average slightly larger with broader heads and higher pattern contrast; females are a little more elongate. Juveniles (deferred) would be smaller, more brightly patterned, and lack full dual-reservoir capacity.
+
+**Detailed Anatomy (modeling reference)**  
+*Overall proportions*  
+- Snout-vent length: ~70–85 cm adult.  
+- Tail: roughly equal to SVL, thick at base, tapering steadily, carried low.  
+- Shoulder height: low, approximately 25–32 cm.  
+- Body is broad and dorsoventrally flattened rather than deep-chested. The silhouette is long, low, and wide.
+
+*Head & neck*  
+- Skull is broad and somewhat triangular when viewed from above, with a blunt but still distinct snout.  
+- Eyes are relatively large and sit high on the head for good scanning while the body is low or partially buried.  
+- No prominent external ear openings.  
+- Jaw is robust; the mouth can gape widely. The dual delivery ducts open near the corners of the mouth / slightly behind the last upper teeth so the two streams can be aimed forward.  
+- Neck is short-to-moderate in length, thick, and flexible enough for the characteristic “rear-back-and-spit” posture. Glandular swellings are visible as paired longitudinal ridges running from just behind the jaw angle onto the anterior dorsum.
+
+*Torso*  
+- Chest is deliberately less deep and more wide. The ribcage produces a broad, flattened dorsal surface ideal for the partial-burial silhouette.  
+- Skin is thick and somewhat loose over the shoulders and flanks, allowing the animal to press itself tightly into a scrape.
+
+*Limbs*  
+- Forelimbs and hind limbs are similar in overall length, producing a level back line.  
+- Stance is strongly sprawled, closer to a true salamander or heavy skink than to the more upright Wyvern or wolf. Humeral and femoral angles are held farther outward; elbows and knees sit well away from the body midline.  
+- Upper limbs are powerful; lower limbs shorter.  
+- Feet are broad with strong, curved claws. Front claws are especially well suited to excavating shallow scrapes. Digitigrade while moving, more plantigrade when resting or digging.
+
+*Tail*  
+- Muscular proximal third, then steadily tapering.  
+- Used for balance during rapid turns and as a signaling organ (lashing during threat displays).  
+- When buried, the tail is usually fully submerged or only the tip remains visible.
+
+*Glandular anatomy (external)*  
+- Primary reservoirs form visible, slightly raised longitudinal ridges starting just behind the jaw and running onto the neck / anterior trunk.  
+- Secondary smaller glands are distributed along the dorsum but are less prominent.  
+- When charged, the ridges can appear slightly swollen.
+
+*Skin & surface*  
+- Small, irregular, overlapping scales / thick plaques over most of the body, giving a subtly textured but not heavily armored look.  
+- Anterior ¼ of the body (head + upper neck) is smoother and pattern-free.  
+- Overall surface carries a mild moist sheen. The persistent moisture also confers innate resistance (or near-immunity) to the burn effects of their own chemical spray and to environmental fire.
+
+**Realistic Lifestyle & Ecology**  
+Water is obtained primarily from the moist micro-climate of the seep itself (subsurface seepage, condensed moisture on cool mornings, and occasional free pools at the margins). The animal rarely wanders far from its home pit for extended periods; desiccation risk rises quickly in open desert. Partial burial into the damper soil near the seep further aids moisture retention and thermal buffering.  
+
+Food is almost exclusively vertebrate prey (small-to-medium mammals, reptiles, and occasional larger animals slowed by the Tar Toad). The salamanders do not enter the liquid tar or oil; they wait on solid or semi-solid crusts. Between major kills they may take smaller independent prey or scavenge, but their metabolism is tuned for infrequent large meals.  
+
+A typical day: low activity during peak heat (resting in shade or half-buried near warm crust), increased scanning and short patrols in the cooler hours, rapid convergence when a toad signals or a coated target is detected. Night activity is moderate; the animals rely more on vision and vibration than on specialized hearing.  
+
+Without a local Tar Toad the pack’s hunting success drops sharply. Individuals may range farther, become more opportunistic, and show higher willingness to abandon a fight if the prey resists vigorously—unless hunger is extreme. The mutualism is therefore both ecological and behavioral: the toad provides the sticky accelerant and the initial immobilization; the salamanders provide the ignition and the active restraint that finishes the prey.
+
+**Behavior Patterns**  
+- Default state is loitering, short patrol, or partial burial within visual range of the home seep.  
+- Social structure is a loose, tolerant aggregation of 3–6 adults (occasionally more at rich pits). Hierarchy is weak; spacing and simple yield displays suffice.  
+- When resting or deliberately waiting near a seep, previous kill site, or small water pool, individuals excavate a shallow scrape and settle so that only the head (or head + upper dorsum) remains exposed, or they go fully flush. The dark, irregular, pattern-free anterior body + simple texture makes the exposed portions read as natural tar crust or scattered boulders at distance. This creates true ambush opportunities.  
+- When a toad launches a tar glob or a coated target appears, nearby salamanders emerge (if buried), converge rapidly, form a loose circle, and deliver dual-stream sprays. Once ignition occurs they press in with bites, preventing escape while the fire does most of the work.  
+- After the prey collapses and the flames subside they begin feeding. The Tar Toad typically arrives mid-meal and swallows the remaining bulk; the salamanders do not contest this.  
+- Intra-group communication uses body posture, low breathy hisses, and short contact sounds. Threat and attack vocalizations are punchier versions of the same limited palette (still far quieter and less varied than the Wyvern).  
+- Flee threshold is relatively high when the pack is intact and a toad is present; it drops sharply for solitary or toad-less individuals facing strong resistance.
+
+---
+
+### Section 2: Gameplay Aspects
+*(Game-ified translation of Section 1 into the shared creature systems)*
+
+**Spawn and Habitat**  
+Medium density around permanent oil seeps / tar pits in arid and semi-arid biomes. Rare or absent far from such features. Groups of 3–6 share a home seep; individuals may be found on short scouting forays or partially buried near residual kill sites and small water pools. Preferred terrain is flat-to-gently-sloped ground with solid or crusted surfaces immediately adjacent to the liquid.
+
+**Core AI Loop (State Tree)**  
+Default Ecological branch: rest / short patrol / scan / partial burial near home seep. Continuously evaluate hunger, health, presence of local Tar Toad, and nearby stimuli via the shared `EvaluateTarget` path. Short-term memory uses the existing reusable last-known-location style entries; no dig-specific memory type is required.
+
+Key branches:
+- **Ambush / Buried** – triggered by proximity to seep, recent kill site, or water feature when hunger urgency is low. Dig-in, maintain buried idle (head exposed or fully flush), emerge on stimulus.  
+- **Hunt Support** – triggered by toad signal, sight of a tar-coated target, or a packmate already engaged. Move to surround, maintain spacing, deliver spit, then press with bites.  
+- **Independent Hunt** (toad absent or low hunger threshold not met) – more cautious approach, higher flee bias if prey fights back.  
+- **Combat / Defend** – when directly threatened or when a packmate is attacked.  
+- **Flee / Scatter** – low health, extreme PerceivedThreat, or (especially when toad-less) strong prey resistance.  
+
+Social yield / spacing within the aggregation uses the existing short-term memory and evaluation system. Full pack leadership logic remains deferred; simple “number of nearby packmates” bias via existing group fields is sufficient for the first pass.
+
+**Player Interaction and Telegraphing**  
+- Distant / unaware: normal ecological behavior (including partial burial that reads as rocks).  
+- Aware but not aggressive: watches, may give low threat displays (raised body, open mouth).  
+- Aggressive / committed: full emerge-surround-and-spit repertoire modulated by hunger, group size present, and whether a Tar Toad is local.  
+
+Hunger and commitment are telegraphed by restlessness, increased scanning, more frequent short advances, and intensity of the limited vocal palette. The dual-spit itself has a clear wind-up (head rear, visible gland swelling, dual jets). Pattern emissive remains off while buried and only ramps once the animal has emerged and begins the spit preparation.
+
+**Combat & Signature Ability**  
+Primary weapon is the dual-stream chemical spit (short-to-medium range). On hit it applies a burn DoT.  
+If the target is currently “tarred” (status from Tar Toad glob or residual oil), fire damage taken is multiplied significantly.  
+
+Because of their persistently moist skin the salamanders themselves have innate resistance (or near-immunity) to the burn effects they create and to environmental fire.  
+
+Secondary: rapid bite lunges once the target is burning or slowed.  
+Pack members attempt to maintain a loose surround so the player cannot easily escape the DoT zone.  
+
+No complex multi-stage chemistry; the tar-multiplier is the only special interaction required for the first pass.
+
+**Intra-Species and Ecological Interactions**  
+Uses the shared evaluation path (size class, ecological role, current action, PerceivedThreat / Aggression). Treats the Tar Toad as a non-competitive partner (low aggression, high tolerance). Other medium predators may be contested at carcasses; very large threats are avoided. Same-species interactions stay lightweight (spacing, simple yield) until broader group systems are expanded.
+
+**Movement and Animation Priorities**  
+- Low, wide, strongly sprawled crawl-walk with moderate lateral undulation.  
+- Short explosive dash.  
+- Dig-in / buried-idle (head-exposed or fully flush) / abrupt emerge cycles (high priority for the ambush fantasy).  
+- Circle / surround locomotion that keeps facing the focus target.  
+- Dual-spit wind-up, projection, and recovery (high priority for readability).  
+- Bite lunge.  
+- Threat display (raised forebody, open mouth, tail lash).  
+- Resting / half-buried poses near seep edges.  
+- Feeding on a downed or recently extinguished carcass.  
+
+Facial / body language reuses the shared systems (LookTarget, simple shape keys if needed for open-mouth threat). Materials follow the existing multi-slot role system: body (dark base + mild moist specular), pattern (expanded color ranges + emissive parameter that is driven only after emergence).
+
+**Runtime Data & Implementation Notes**  
+- Standard `UCreatureInstance` fields plus generic RuntimeData entries as needed (e.g. LastSpitTime, LocalToadPresent, or a simple active-hunt reference).  
+- Group fields already present on the Instance can be lightly used for “number of nearby packmates” bias without implementing full pack logic.  
+- No species-specific component required; all behavior stays data + State Tree + shared Tasks/Conditions.  
+- Collision: Physics Asset is expected to follow the actual mesh shape. Partial burial / world collision handling is left open for later discussion (temporary response changes, lowered capsule, or dedicated profile are all viable).  
+- Harvesting: meat, bone, hide (potential fire-resistant or chemical-resistant properties), and a signature gland/chemical material usable in later crafting.  
+- Juveniles and full life-cycle stages are explicitly deferred; the brighter non-spitting juvenile concept remains available for a future pass.
+
+This document consolidates the morphological, ecological, and gameplay decisions into a single reference for modeling, animation, AI, and future polishing.
