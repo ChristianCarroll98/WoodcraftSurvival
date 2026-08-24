@@ -220,6 +220,9 @@ void UHeldItemsComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 
 	PreventItemStuck(EHand::Left);
 	PreventItemStuck(EHand::Right);
+
+	UpdateProceduralOrientation(EHand::Left);
+	UpdateProceduralOrientation(EHand::Right);
 }
 
 FHandState& UHeldItemsComponent::GetHandState(EHand Hand)
@@ -678,6 +681,84 @@ void UHeldItemsComponent::PreventItemStuck(EHand Hand)
 		Mesh->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
 		Mesh->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
 	}
+}
+
+void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand)
+{
+	if (Hand == EHand::None || !PhysicsControl) return;
+
+	FHandState& State = GetHandState(Hand);
+	if (State.ActiveControl.IsNone() || !State.HeldItem) return;
+	if (GetIsUnarmed(Hand)) return;
+
+	// Clear target and early-out when not in a valid swing state
+	const bool bShouldOrient = State.bExtended
+		&& State.LastItemVelocity.Size() >= GMinSwingOrientSpeed;
+
+	if (!bShouldOrient)
+	{
+		// Restore pure skeletal orientation drive
+		PhysicsControl->SetControlTargetOrientation(
+			State.ActiveControl,
+			FRotator::ZeroRotator,
+			0.f,
+			true,
+			true,
+			true,
+			false);
+		return;
+	}
+
+	const UItemInstance* Instance = State.HeldItem->GetItemInstance();
+	if (!Instance) return;
+
+	const UEquippableItemFragment* EquipFrag = Instance->FindFragment<UEquippableItemFragment>();
+	if (!EquipFrag || EquipFrag->StrikeMode == EItemStrikeMode::None) return;
+
+	UStaticMeshComponent* Mesh = State.HeldItem->GetItemPrimaryMesh();
+	if (!Mesh) return;
+
+	const FVector VelDir = State.LastItemVelocity.GetSafeNormal();
+	if (VelDir.IsNearlyZero()) return;
+
+	const FTransform MeshXform = Mesh->GetComponentTransform();
+
+	// Preferred local axis (authoring: Y+ forward for edged, Z+ for pierce tip)
+	FVector LocalAxis = FVector::YAxisVector;
+	if (EquipFrag->StrikeMode == EItemStrikeMode::Pierce)
+	{
+		LocalAxis = FVector::ZAxisVector;
+	}
+	else if (EquipFrag->StrikeMode == EItemStrikeMode::DoubleEdged)
+	{
+		// Pick the closer of ±Y to velocity
+		const FVector WorldY = MeshXform.GetUnitAxis(EAxis::Y);
+		if (FVector::DotProduct(VelDir, WorldY) < 0.f)
+		{
+			LocalAxis = -FVector::YAxisVector;
+		}
+	}
+
+	const FVector CurrentWorldAxis = MeshXform.TransformVectorNoScale(LocalAxis).GetSafeNormal();
+	if (CurrentWorldAxis.IsNearlyZero()) return;
+
+	// Minimal rotation that aligns the preferred axis to velocity
+	const FQuat DeltaRot = FQuat::FindBetweenNormals(CurrentWorldAxis, VelDir);
+	const FQuat DesiredWorldRot = DeltaRot * MeshXform.GetRotation();
+
+	// Convert to parent-relative (WeaponBone space)
+	const FQuat ParentWorldRot = GetWeaponBoneTransform(Hand).GetRotation();
+	const FQuat RelativeQuat = ParentWorldRot.Inverse() * DesiredWorldRot;
+	const FRotator RelativeRot = RelativeQuat.Rotator();
+
+	PhysicsControl->SetControlTargetOrientation(
+		State.ActiveControl,
+		RelativeRot,
+		0.f,   // AngularVelocityDeltaTime = 0 → zero target ang vel
+		true,  // bEnableControl
+		true,  // bApplyControlPointToTarget (we use CustomControlPoint)
+		true,  // bApplyToControlsWithName
+		false); // bApplyToSetsWithName
 }
 
 #pragma endregion

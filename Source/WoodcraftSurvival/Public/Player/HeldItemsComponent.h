@@ -206,6 +206,13 @@ private:
 	/** Updates collision based on the distance an item is from the control parent to prevent items getting stuck. */
 	void PreventItemStuck(EHand Hand);
 
+	/**
+	 * While extended and above GMinSwingOrientSpeed, drives the Physics Control angular
+	 * target so the item’s preferred strike axis (+Y / ±Y / +Z) aligns with velocity.
+	 * Clears the target when conditions are not met so pure skeletal orientation resumes.
+	 */
+	void UpdateProceduralOrientation(EHand Hand);
+
 	/** Returns a reference to the pending pickup data for the given hand. */
 	FPendingPickupData& GetPendingPickup(EHand Hand);
 
