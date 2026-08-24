@@ -26,8 +26,8 @@ const float GSlashMaxAngleDeg = 35.f;
 const float GPierceMaxAngleDeg = 55.f;
 
 /** Min linear speed (cm/s) of a held item before procedural swing orientation activates.
- *  Testing value — raise once the feel is locked. */
-const float GMinSwingOrientSpeed = 50.f;
+ *  Relative to owner velocity. Raised from 50 to reduce rest jitter. */
+const float GMinSwingOrientSpeed = 100.f;
 
 
 // ---------- Enums ----------

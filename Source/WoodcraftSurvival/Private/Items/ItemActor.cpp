@@ -368,6 +368,17 @@ void AItemActor::OnItemMeshHit(UPrimitiveComponent* HitComp, AActor* OtherActor,
 	Info.HitLocation = Hit.ImpactPoint;
 	Info.Instigator = Holder.IsValid() ? Holder.Get() : this;
 
+	if (GEngine)
+	{
+		const FString TypeName = FinalType ? FinalType->GetName() : TEXT("None");
+		GEngine->AddOnScreenDebugMessage(
+			42, // fixed ID → overwrites previous hit line
+			2.5f,
+			FColor::Cyan,
+			FString::Printf(TEXT("Hit shape=%s  type=%s  amt=%.1f"),
+				*ShapeName.ToString(), *TypeName, Amount));
+	}
+
 	Damageable->ApplyDamage(Info);
 	LastDamageTime = Now;
 }

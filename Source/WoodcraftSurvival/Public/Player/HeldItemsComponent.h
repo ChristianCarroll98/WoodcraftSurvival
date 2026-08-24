@@ -52,6 +52,12 @@ struct FHandState
 	 * Used by incidence so we measure the pre-bounce swing direction instead of the rebound.
 	 */
 	FVector LastItemVelocity = FVector::ZeroVector;
+
+	/**
+	 * True while procedural swing orientation is actively driving this hand’s control.
+	 * Used to edge-trigger skeletal-anim disable/restore and target clear (A+D).
+	 */
+	bool bProceduralOrientActive = false;
 };
 
 /**
@@ -209,9 +215,10 @@ private:
 	/**
 	 * While extended and above GMinSwingOrientSpeed, drives the Physics Control angular
 	 * target so the item’s preferred strike axis (+Y / ±Y / +Z) aligns with velocity.
-	 * Clears the target when conditions are not met so pure skeletal orientation resumes.
+	 * Rotation is constrained to WeaponBone Z and rate-limited. Clears the target when
+	 * conditions are not met so pure skeletal orientation resumes.
 	 */
-	void UpdateProceduralOrientation(EHand Hand);
+	void UpdateProceduralOrientation(EHand Hand, float DeltaTime);
 
 	/** Returns a reference to the pending pickup data for the given hand. */
 	FPendingPickupData& GetPendingPickup(EHand Hand);

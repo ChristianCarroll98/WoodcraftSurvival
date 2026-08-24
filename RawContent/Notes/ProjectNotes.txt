@@ -28,7 +28,7 @@ current issues/working task list:
 - DONE: Extended state on HeldItemsComponent (SetExtended / GetIsExtended per hand). Damage gated on extended.
 - DONE: FHandState on HeldItemsComponent (HeldItem, PendingPickup, ActiveControl, bItemStuck, bExtended, LastItemVelocity). Tick samples primary-mesh velocity for pre-bounce incidence.
 - DONE: Incidence / angle → type conversion (model B). EItemStrikeMode on EquippableItemFragment (None, SingleEdged +Y, DoubleEdged ±Y, Pierce +Z). Cones: GSlashMaxAngleDeg=35, GPierceMaxAngleDeg=55. Outside cone → force Blunt. Incoming dir = LastItemVelocity → live vel → -NormalImpulse.
-- DONE: Procedural swing orientation (first pass). While extended + speed ≥ GMinSwingOrientSpeed (50 for testing), drives Physics Control TargetOrientation so preferred strike axis (+Y / closer ±Y / +Z) aligns with velocity. Clears target when conditions fail → pure skeletal resume. Authoring: bladed Y+ forward / Z+ up. Hard wrist limits only if feel is broken.
+- DONE: Procedural swing orientation (A+B + bone Z + rate limit). While extended + relative speed ≥ GMinSwingOrientSpeed (150): subtract owner velocity, yaw only around WeaponBone Z, clamp step to 720°/s. AngularStrength 5.5×MassScale. Clears target when idle. Authoring: bladed Y+ forward / Z+ up.
 - Later polish: audio per resolved damage type; Valheim-style floating damage numbers (gray resist / white neutral / pale yellow weak / gray 0 immunity); optional camera-delta bias for orientation intent; tune cones/thresholds / GMinSwingOrientSpeed; DoubleEdged wrist-based axis choice.
 - Explicitly deferred: separate head/handle durability / dual Instances. Hatchet just breaks into wood + CopperScrap like any other item.
 

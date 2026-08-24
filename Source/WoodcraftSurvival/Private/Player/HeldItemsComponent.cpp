@@ -221,8 +221,8 @@ void UHeldItemsComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 	PreventItemStuck(EHand::Left);
 	PreventItemStuck(EHand::Right);
 
-	UpdateProceduralOrientation(EHand::Left);
-	UpdateProceduralOrientation(EHand::Right);
+	UpdateProceduralOrientation(EHand::Left, DeltaTime);
+	UpdateProceduralOrientation(EHand::Right, DeltaTime);
 }
 
 FHandState& UHeldItemsComponent::GetHandState(EHand Hand)
@@ -549,7 +549,7 @@ bool UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand, FStr
 	FPhysicsControlData ControlData;
 	ControlData.LinearStrength = 2.8f * MassScale;
 	ControlData.LinearDampingRatio = 1.4f + 0.3f * (MassScale - 1.0f);
-	ControlData.AngularStrength = 4.5f * MassScale;
+	ControlData.AngularStrength = 5.5f * MassScale;
 	ControlData.AngularDampingRatio = 1.3f + 0.3f * (MassScale - 1.0f);
 	ControlData.bUseSkeletalAnimation = true;
 	ControlData.bDisableCollision = true;
@@ -636,6 +636,7 @@ void UHeldItemsComponent::DetachItemFromControl(EHand Hand)
 	}
 
 	State.LastItemVelocity = FVector::ZeroVector;
+	State.bProceduralOrientActive = false;
 }
 
 void UHeldItemsComponent::PreventItemStuck(EHand Hand)
@@ -683,7 +684,7 @@ void UHeldItemsComponent::PreventItemStuck(EHand Hand)
 	}
 }
 
-void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand)
+void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTime)
 {
 	if (Hand == EHand::None || !PhysicsControl) return;
 
@@ -691,22 +692,40 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand)
 	if (State.ActiveControl.IsNone() || !State.HeldItem) return;
 	if (GetIsUnarmed(Hand)) return;
 
-	// Clear target and early-out when not in a valid swing state
-	const bool bShouldOrient = State.bExtended
-		&& State.LastItemVelocity.Size() >= GMinSwingOrientSpeed;
+	// Relative velocity: subtract character velocity so pure walking does not count as a swing
+	FVector RelativeVel = State.LastItemVelocity;
+	if (const AActor* Owner = GetOwner())
+	{
+		RelativeVel -= Owner->GetVelocity();
+	}
 
+	const bool bShouldOrient = State.bExtended
+		&& RelativeVel.Size() >= GMinSwingOrientSpeed;
+
+	// D: only clear target + restore skeletal on the transition off (not every idle frame)
 	if (!bShouldOrient)
 	{
-		// Restore pure skeletal orientation drive
-		PhysicsControl->SetControlTargetOrientation(
-			State.ActiveControl,
-			FRotator::ZeroRotator,
-			0.f,
-			true,
-			true,
-			true,
-			false);
+		if (State.bProceduralOrientActive)
+		{
+			State.bProceduralOrientActive = false;
+			PhysicsControl->SetControlUseSkeletalAnimation(State.ActiveControl, true, 1.f);
+			PhysicsControl->SetControlTargetOrientation(
+				State.ActiveControl,
+				FRotator::ZeroRotator,
+				0.f,
+				true,
+				true,
+				true,
+				false);
+		}
 		return;
+	}
+
+	// A: disable skeletal contribution while procedural is active so pose bias cannot fight the target
+	if (!State.bProceduralOrientActive)
+	{
+		State.bProceduralOrientActive = true;
+		PhysicsControl->SetControlUseSkeletalAnimation(State.ActiveControl, false, 0.f);
 	}
 
 	const UItemInstance* Instance = State.HeldItem->GetItemInstance();
@@ -718,7 +737,7 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand)
 	UStaticMeshComponent* Mesh = State.HeldItem->GetItemPrimaryMesh();
 	if (!Mesh) return;
 
-	const FVector VelDir = State.LastItemVelocity.GetSafeNormal();
+	const FVector VelDir = RelativeVel.GetSafeNormal();
 	if (VelDir.IsNearlyZero()) return;
 
 	const FTransform MeshXform = Mesh->GetComponentTransform();
@@ -742,23 +761,46 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand)
 	const FVector CurrentWorldAxis = MeshXform.TransformVectorNoScale(LocalAxis).GetSafeNormal();
 	if (CurrentWorldAxis.IsNearlyZero()) return;
 
-	// Minimal rotation that aligns the preferred axis to velocity
-	const FQuat DeltaRot = FQuat::FindBetweenNormals(CurrentWorldAxis, VelDir);
+	// Constrain rotation to the WeaponBone’s Z (grip/wrist up).
+	const FTransform BoneXform = GetWeaponBoneTransform(Hand);
+	const FVector BoneWorldZ = BoneXform.GetUnitAxis(EAxis::Z);
+
+	FVector ProjAxis = CurrentWorldAxis - FVector::DotProduct(CurrentWorldAxis, BoneWorldZ) * BoneWorldZ;
+	FVector ProjVel  = VelDir          - FVector::DotProduct(VelDir,          BoneWorldZ) * BoneWorldZ;
+
+	if (ProjAxis.SizeSquared() < KINDA_SMALL_NUMBER || ProjVel.SizeSquared() < KINDA_SMALL_NUMBER)
+	{
+		return; // nearly parallel to bone Z — no meaningful yaw component
+	}
+
+	ProjAxis.Normalize();
+	ProjVel.Normalize();
+
+	const float Dot = FVector::DotProduct(ProjAxis, ProjVel);
+	const float CrossZ = FVector::DotProduct(FVector::CrossProduct(ProjAxis, ProjVel), BoneWorldZ);
+	float AngleRad = FMath::Atan2(CrossZ, Dot);
+
+	// Rate-limit direction reversals (higher now that skeletal is not fighting)
+	const float MaxDegPerSec = 1800.f;
+	const float MaxStep = FMath::DegreesToRadians(MaxDegPerSec) * DeltaTime;
+	AngleRad = FMath::Clamp(AngleRad, -MaxStep, MaxStep);
+
+	const FQuat DeltaRot = FQuat(BoneWorldZ, AngleRad);
 	const FQuat DesiredWorldRot = DeltaRot * MeshXform.GetRotation();
 
 	// Convert to parent-relative (WeaponBone space)
-	const FQuat ParentWorldRot = GetWeaponBoneTransform(Hand).GetRotation();
+	const FQuat ParentWorldRot = BoneXform.GetRotation();
 	const FQuat RelativeQuat = ParentWorldRot.Inverse() * DesiredWorldRot;
 	const FRotator RelativeRot = RelativeQuat.Rotator();
 
 	PhysicsControl->SetControlTargetOrientation(
 		State.ActiveControl,
 		RelativeRot,
-		0.f,   // AngularVelocityDeltaTime = 0 → zero target ang vel
-		true,  // bEnableControl
-		true,  // bApplyControlPointToTarget (we use CustomControlPoint)
-		true,  // bApplyToControlsWithName
-		false); // bApplyToSetsWithName
+		0.f,
+		true,
+		true,
+		true,
+		false);
 }
 
 #pragma endregion
