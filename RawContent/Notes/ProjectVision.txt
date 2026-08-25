@@ -96,6 +96,7 @@ Detailed design lives in:
 
 
 CRAFTING SYSTEM:
+Implementation notes: Notes/CraftingSystem/CraftingSystemImplementation.txt
 
 The player will craft items using resources gathered from the world. If the player extends both hands and each are holding items that make a valid recipe, a crafting animation or minigame will activate (or prompt to activate, E?), which locks the players view and stops movement, allowing the mouse to control the player's arm for a crafting minigame.
 Some crafts will need a specific workstation such as a workbench, leatherworking bench, woodworking station, forge, or anvil. These stations will have one slot the player can drop an item onto to enable 3 item type crafts, although not all workstation crafts will require three items.

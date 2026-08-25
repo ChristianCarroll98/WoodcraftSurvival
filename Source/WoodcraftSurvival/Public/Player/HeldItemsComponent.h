@@ -64,6 +64,12 @@ struct FHandState
 	 * Used to scale Physics Control strengths including velocity-based orient strength.
 	 */
 	float MassScale = 1.0f;
+
+	/**
+	 * Preferred edge side for procedural orientation: +1 = mesh +Y, −1 = mesh −Y.
+	 * Persists across frames for hysteresis; reset when orient deactivates or item detaches.
+	 */
+	int8 OrientEdgeSign = 1;
 };
 
 /**
@@ -226,7 +232,7 @@ private:
 	void PreventItemStuck(EHand Hand);
 
 	/**
-	 * While extended and above GMinSwingOrientSpeed, drives the Physics Control angular
+	 * While extended and above GMinItemSpeed, drives the Physics Control angular
 	 * target so the preferred strike axis aligns with screen-space look intent (SetLookDelta).
 	 * Rotation is constrained to WeaponBone Z and rate-limited. Snaps back to skeletal when
 	 * relative speed falls under the threshold.

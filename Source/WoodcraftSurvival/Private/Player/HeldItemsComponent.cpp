@@ -648,6 +648,7 @@ void UHeldItemsComponent::DetachItemFromControl(EHand Hand)
 
 	State.LastItemVelocity = FVector::ZeroVector;
 	State.bProceduralOrientActive = false;
+	State.OrientEdgeSign = 1;
 }
 
 void UHeldItemsComponent::PreventItemStuck(EHand Hand)
@@ -720,7 +721,7 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 
 	const bool bShouldOrient = bEdged
 		&& State.bExtended
-		&& RelativeVel.Size() >= GMinSwingOrientSpeed;
+		&& RelativeVel.Size() >= GMinItemSpeed;
 
 	// D: only clear target + restore skeletal on the transition off
 	if (!bShouldOrient)
@@ -728,6 +729,7 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 		if (State.bProceduralOrientActive)
 		{
 			State.bProceduralOrientActive = false;
+			State.OrientEdgeSign = 1;
 			PhysicsControl->SetControlUseSkeletalAnimation(State.ActiveControl, true, 1.f);
 			const float DampA = 1.3f + 0.3f * (State.MassScale - 1.0f);
 			const float DampL = 1.4f + 0.3f * (State.MassScale - 1.0f);
@@ -772,7 +774,7 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 	{
 		const float Speed = State.LastItemVelocity.Size();
 		const float T = FMath::Clamp(
-			(Speed - GMinSwingOrientSpeed) / FMath::Max(GOrientStrengthFullSpeed - GMinSwingOrientSpeed, 1.f),
+			(Speed - GMinItemSpeed) / FMath::Max(GOrientStrengthFullSpeed - GMinItemSpeed, 1.f),
 			0.f, 1.f);
 		const float AngMul = FMath::Lerp(GOrientStrengthMin, GOrientStrengthMax, T);
 		const float LinMul = FMath::Lerp(GOrientLinearStrengthMin, GOrientLinearStrengthMax, T);
@@ -823,50 +825,93 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 	const FTransform BoneXform = GetWeaponBoneTransform(Hand);
 	const FVector BoneWorldZ = BoneXform.GetUnitAxis(EAxis::Z);
 
-	// Preferred edge axis in mesh space (+Y, or closer ±Y for DoubleEdged)
-	FVector LocalAxis = FVector::YAxisVector;
-	if (EquipFrag->StrikeMode == EItemStrikeMode::DoubleEdged)
+	// Neutral preferred for mesh +Y = projected WeaponBone +Y (base rotation around Z).
+	FVector NeutralY = BoneXform.GetUnitAxis(EAxis::Y);
+	NeutralY = NeutralY - FVector::DotProduct(NeutralY, BoneWorldZ) * BoneWorldZ;
+	if (NeutralY.SizeSquared() < KINDA_SMALL_NUMBER) return;
+	NeutralY.Normalize();
+
+	// Project screen intent into the twist plane.
+	FVector ProjIntent = Intent - FVector::DotProduct(Intent, BoneWorldZ) * BoneWorldZ;
+	if (ProjIntent.SizeSquared() < KINDA_SMALL_NUMBER) return;
+	ProjIntent.Normalize();
+
+	// Signed angle (degrees) from From → To around BoneWorldZ (positive = right-hand rule / CW in our mapping).
+	auto SignedAngleDeg = [&](const FVector& From, const FVector& To) -> float
 	{
-		const FVector WorldY = MeshXform.GetUnitAxis(EAxis::Y);
-		if (FVector::DotProduct(Intent, WorldY) < 0.f)
+		const float Dot = FVector::DotProduct(From, To);
+		const float CrossZ = FVector::DotProduct(FVector::CrossProduct(From, To), BoneWorldZ);
+		return FMath::RadiansToDegrees(FMath::Atan2(CrossZ, Dot));
+	};
+
+	// Choose preferred edge (±Y) with wrist limits + hysteresis.
+	// Target is never allowed outside the asymmetric legal band.
+	const bool bSingle = (EquipFrag->StrikeMode == EItemStrikeMode::SingleEdged);
+	float BestCost = 1.e9f;
+	int8 BestSign = State.OrientEdgeSign;
+
+	for (int8 Sign : {int8(1), int8(-1)})
+	{
+		const FVector SideNeutral = NeutralY * float(Sign);
+		const float TwistDeg = SignedAngleDeg(SideNeutral, ProjIntent);
+		const bool bLegal = (TwistDeg >= -GWristLimitCCWDeg && TwistDeg <= GWristLimitCWDeg);
+
+		float Cost = FMath::Abs(TwistDeg);
+		if (!bLegal) Cost += 1000.f;
+		if (Sign != State.OrientEdgeSign) Cost += GWristHysteresisDeg;
+
+		// SingleEdged: strong bias to stay on +Y; only leave when +Y would be illegal.
+		if (bSingle && Sign == -1)
 		{
-			LocalAxis = -FVector::YAxisVector;
+			Cost += 500.f;
+		}
+
+		if (Cost < BestCost)
+		{
+			BestCost = Cost;
+			BestSign = Sign;
 		}
 	}
 
-	const FVector CurrentWorldAxis = MeshXform.TransformVectorNoScale(LocalAxis).GetSafeNormal();
-	if (CurrentWorldAxis.IsNearlyZero()) return;
+	State.OrientEdgeSign = BestSign;
 
-	// Project onto plane perpendicular to WeaponBone Z — twist only around that axis
+	// Clamped twist for the chosen side — target always legal.
+	const FVector ChosenNeutral = NeutralY * float(BestSign);
+	float FinalTwistDeg = SignedAngleDeg(ChosenNeutral, ProjIntent);
+	FinalTwistDeg = FMath::Clamp(FinalTwistDeg, -GWristLimitCCWDeg, GWristLimitCWDeg);
+
+	const FVector DesiredPreferred =
+		FQuat(BoneWorldZ, FMath::DegreesToRadians(FinalTwistDeg)).RotateVector(ChosenNeutral).GetSafeNormal();
+
+	// Rate-limit from current projected preferred (for the chosen sign) toward DesiredPreferred.
+	const FVector CurrentWorldAxis =
+		MeshXform.TransformVectorNoScale(FVector::YAxisVector * float(BestSign)).GetSafeNormal();
 	FVector ProjAxis = CurrentWorldAxis - FVector::DotProduct(CurrentWorldAxis, BoneWorldZ) * BoneWorldZ;
-	FVector ProjIntent = Intent - FVector::DotProduct(Intent, BoneWorldZ) * BoneWorldZ;
-
-	if (ProjAxis.SizeSquared() < KINDA_SMALL_NUMBER || ProjIntent.SizeSquared() < KINDA_SMALL_NUMBER)
+	if (ProjAxis.SizeSquared() < KINDA_SMALL_NUMBER)
 	{
-		return;
+		ProjAxis = DesiredPreferred;
+	}
+	else
+	{
+		ProjAxis.Normalize();
 	}
 
-	ProjAxis.Normalize();
-	ProjIntent.Normalize();
-
-	const float Dot = FVector::DotProduct(ProjAxis, ProjIntent);
-	const float CrossZ = FVector::DotProduct(FVector::CrossProduct(ProjAxis, ProjIntent), BoneWorldZ);
+	const float Dot = FVector::DotProduct(ProjAxis, DesiredPreferred);
+	const float CrossZ = FVector::DotProduct(FVector::CrossProduct(ProjAxis, DesiredPreferred), BoneWorldZ);
 	float AngleRad = FMath::Atan2(CrossZ, Dot);
 
 	const float MaxDegPerSec = 3600.f;
 	const float MaxStep = FMath::DegreesToRadians(MaxDegPerSec) * DeltaTime;
 	AngleRad = FMath::Clamp(AngleRad, -MaxStep, MaxStep);
 
-	// Preferred axis after the rate-limited step (still in the bone-Z plane)
-	FVector DesiredPreferred = FQuat(BoneWorldZ, AngleRad).RotateVector(ProjAxis);
-	DesiredPreferred.Normalize();
+	FVector SteppedPreferred = FQuat(BoneWorldZ, AngleRad).RotateVector(ProjAxis);
+	SteppedPreferred.Normalize();
 
-	// Build target with Z locked to WeaponBone Z; only X/Y twist.
-	// MakeFromYZ sets orientation +Y; if preferred is -Y, feed the opposite so mesh -Y aligns.
-	FVector OrientY = DesiredPreferred;
-	if (FVector::DotProduct(LocalAxis, FVector::YAxisVector) < 0.f)
+	// MakeFromYZ aligns mesh +Y; if we are driving with −Y, feed the opposite so mesh −Y lands on SteppedPreferred.
+	FVector OrientY = SteppedPreferred;
+	if (BestSign < 0)
 	{
-		OrientY = -DesiredPreferred;
+		OrientY = -SteppedPreferred;
 	}
 
 	const FQuat DesiredWorldRot = FRotationMatrix::MakeFromYZ(OrientY, BoneWorldZ).ToQuat();

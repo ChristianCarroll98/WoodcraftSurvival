@@ -19,9 +19,10 @@ const bool GbDebugDraw = false;
 /** Minimum impulse required for a collision to deal damage. Tunable later. */
 const float GMinImpulse = 100.f;
 
-/** Minimum linear speed (cm/s) of the item mesh required to deal damage.
+/** Minimum linear speed (cm/s) of the item mesh required to deal damage and 
+ *  before procedural swing orientation activates. Relative to owner velocity.
  *  Prevents continuous contact while pressed into a surface from repeatedly damaging. */
-const float GMinItemSpeed = 80.f;
+const float GMinItemSpeed = 0.f;
 
 /** Accepted half-angle (degrees) from the blade plane for Slash.
  *  Velocity farther off the plane than this (more face-on) is forced to Blunt. */
@@ -34,10 +35,6 @@ const float GSlashMaxAngleDeg = 75.f;
 /** Accepted half-angle (degrees) from tip axis (+Z) for Pierce.
  *  Outside this → Blunt. */
 const float GPierceMaxAngleDeg = 35.f;
-
-/** Min linear speed (cm/s) of a held item before procedural swing orientation activates.
- *  Relative to owner velocity. 80 after testing — 150 was too high for some swings. */
-const float GMinSwingOrientSpeed = 80.f;
 
 /** Angular strength multiplier (× MassScale) at low item speed while orienting. */
 const float GOrientStrengthMin = 5.0f;
@@ -59,6 +56,15 @@ const float GOrientLinearStrengthMax = 5.0f;
 
 /** Baseline linear strength multiplier (× MassScale) on attach and when orient ends. */
 const float GOrientLinearStrengthBaseline = 2.8f;
+
+/** Max wrist twist clockwise from neutral (degrees). Positive Atan2 around WeaponBone +Z. */
+const float GWristLimitCWDeg = 105.f;
+
+/** Max wrist twist counter-clockwise from neutral (degrees). Negative Atan2 around WeaponBone +Z. */
+const float GWristLimitCCWDeg = 135.f;
+
+/** Extra degrees past the relevant limit before a preferred-edge flip is allowed. */
+const float GWristHysteresisDeg = 12.f;
 
 
 // ---------- Enums ----------
