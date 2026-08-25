@@ -836,7 +836,8 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 	if (ProjIntent.SizeSquared() < KINDA_SMALL_NUMBER) return;
 	ProjIntent.Normalize();
 
-	// Signed angle (degrees) from From → To around BoneWorldZ (positive = right-hand rule / CW in our mapping).
+	// Signed angle (degrees) from From → To around BoneWorldZ (positive = right-hand rule).
+	// Playtest: positive maps to CCW, negative maps to CW from the player's view.
 	auto SignedAngleDeg = [&](const FVector& From, const FVector& To) -> float
 	{
 		const float Dot = FVector::DotProduct(From, To);
@@ -846,6 +847,11 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 
 	// Choose preferred edge (±Y) with wrist limits + hysteresis.
 	// Target is never allowed outside the asymmetric legal band.
+	// Right hand (after playtest): negative = CW (90°), positive = CCW (135°).
+	// Left hand is mirrored → opposite mapping so the feel matches.
+	const float LimitPos = (Hand == EHand::Right) ? GWristLimitCCWDeg : GWristLimitCWDeg;
+	const float LimitNeg = (Hand == EHand::Right) ? GWristLimitCWDeg  : GWristLimitCCWDeg;
+
 	const bool bSingle = (EquipFrag->StrikeMode == EItemStrikeMode::SingleEdged);
 	float BestCost = 1.e9f;
 	int8 BestSign = State.OrientEdgeSign;
@@ -854,7 +860,7 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 	{
 		const FVector SideNeutral = NeutralY * float(Sign);
 		const float TwistDeg = SignedAngleDeg(SideNeutral, ProjIntent);
-		const bool bLegal = (TwistDeg >= -GWristLimitCCWDeg && TwistDeg <= GWristLimitCWDeg);
+		const bool bLegal = (TwistDeg >= -LimitNeg && TwistDeg <= LimitPos);
 
 		float Cost = FMath::Abs(TwistDeg);
 		if (!bLegal) Cost += 1000.f;
@@ -878,7 +884,7 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 	// Clamped twist for the chosen side — target always legal.
 	const FVector ChosenNeutral = NeutralY * float(BestSign);
 	float FinalTwistDeg = SignedAngleDeg(ChosenNeutral, ProjIntent);
-	FinalTwistDeg = FMath::Clamp(FinalTwistDeg, -GWristLimitCCWDeg, GWristLimitCWDeg);
+	FinalTwistDeg = FMath::Clamp(FinalTwistDeg, -LimitNeg, LimitPos);
 
 	const FVector DesiredPreferred =
 		FQuat(BoneWorldZ, FMath::DegreesToRadians(FinalTwistDeg)).RotateVector(ChosenNeutral).GetSafeNormal();
@@ -929,6 +935,7 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 		false);
 
 	// Debug: RGB at grip/control point — blue (Z) should stay locked to WeaponBone Z
+	// + wrist-limit arrows: Neutral (green), CW limit (cyan), CCW limit (yellow)
 	if (GbDebugDraw)
 	{
 		if (UWorld* World = GetWorld())
@@ -938,6 +945,23 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 			const FVector ControlPointWorld = BoneXform.TransformPosition(ControlPointLocal);
 			DrawDebugCoordinateSystem(World, ControlPointWorld, DesiredWorldRot.Rotator(),
 				18.f, false, 0.f, SDPG_Foreground, 1.5f);
+
+			const float ArrowLen = 28.f;
+			const float ArrowThickness = 1.2f;
+			// CW / CCW directions use the same per-hand limits as the clamp.
+			const FVector CWDir = FQuat(BoneWorldZ, FMath::DegreesToRadians(
+				(Hand == EHand::Right) ? -GWristLimitCWDeg : GWristLimitCWDeg))
+				.RotateVector(NeutralY);
+			const FVector CCWDir = FQuat(BoneWorldZ, FMath::DegreesToRadians(
+				(Hand == EHand::Right) ? GWristLimitCCWDeg : -GWristLimitCCWDeg))
+				.RotateVector(NeutralY);
+
+			DrawDebugDirectionalArrow(World, ControlPointWorld, ControlPointWorld + NeutralY * ArrowLen,
+				8.f, FColor::Green, false, 0.f, SDPG_Foreground, ArrowThickness);
+			DrawDebugDirectionalArrow(World, ControlPointWorld, ControlPointWorld + CWDir * ArrowLen,
+				8.f, FColor::Cyan, false, 0.f, SDPG_Foreground, ArrowThickness);
+			DrawDebugDirectionalArrow(World, ControlPointWorld, ControlPointWorld + CCWDir * ArrowLen,
+				8.f, FColor::Yellow, false, 0.f, SDPG_Foreground, ArrowThickness);
 		}
 	}
 }
