@@ -9,6 +9,8 @@
 #include "Player/FPArmsAnimInstance.h"
 #include <PhysicsControlComponent.h>
 #include <Engine/AssetManager.h>
+#include <GameFramework/PlayerController.h>
+#include <GameFramework/Pawn.h>
 
 
 // --------------------------------------------
@@ -102,6 +104,12 @@ FVector UHeldItemsComponent::GetLastItemVelocity(EHand Hand) const
 {
 	if (Hand == EHand::None) return FVector::ZeroVector;
 	return GetHandState(Hand).LastItemVelocity;
+}
+
+void UHeldItemsComponent::SetLookDelta(FVector2D RawDelta)
+{
+	LookDelta.X = RawDelta.X;
+	LookDelta.Y = -RawDelta.Y;
 }
 
 EHand UHeldItemsComponent::GetIsHoldingTwoHanded() const
@@ -692,17 +700,17 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 	if (State.ActiveControl.IsNone() || !State.HeldItem) return;
 	if (GetIsUnarmed(Hand)) return;
 
-	// Relative velocity: subtract character velocity so pure walking does not count as a swing
+	// Relative velocity gates on/off (snap back under threshold). Orientation drive uses look delta.
 	FVector RelativeVel = State.LastItemVelocity;
-	if (const AActor* Owner = GetOwner())
+	if (const AActor* OwnerActor = GetOwner())
 	{
-		RelativeVel -= Owner->GetVelocity();
+		RelativeVel -= OwnerActor->GetVelocity();
 	}
 
 	const bool bShouldOrient = State.bExtended
 		&& RelativeVel.Size() >= GMinSwingOrientSpeed;
 
-	// D: only clear target + restore skeletal on the transition off (not every idle frame)
+	// D: only clear target + restore skeletal on the transition off
 	if (!bShouldOrient)
 	{
 		if (State.bProceduralOrientActive)
@@ -721,12 +729,15 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 		return;
 	}
 
-	// A: disable skeletal contribution while procedural is active so pose bias cannot fight the target
+	// A: disable skeletal contribution while procedural is active
 	if (!State.bProceduralOrientActive)
 	{
 		State.bProceduralOrientActive = true;
 		PhysicsControl->SetControlUseSkeletalAnimation(State.ActiveControl, false, 0.f);
 	}
+
+	// Need meaningful screen-space look delta this frame
+	if (LookDelta.SizeSquared() < 0.0001f) return;
 
 	const UItemInstance* Instance = State.HeldItem->GetItemInstance();
 	if (!Instance) return;
@@ -737,8 +748,21 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 	UStaticMeshComponent* Mesh = State.HeldItem->GetItemPrimaryMesh();
 	if (!Mesh) return;
 
-	const FVector VelDir = RelativeVel.GetSafeNormal();
-	if (VelDir.IsNearlyZero()) return;
+	// Camera basis from owning pawn's control rotation (screen right / up)
+	FVector CamRight = FVector::RightVector;
+	FVector CamUp = FVector::UpVector;
+	if (const APawn* Pawn = Cast<APawn>(GetOwner()))
+	{
+		if (const APlayerController* PC = Cast<APlayerController>(Pawn->GetController()))
+		{
+			FVector CamForward;
+			FRotationMatrix(PC->GetControlRotation()).GetScaledAxes(CamForward, CamRight, CamUp);
+		}
+	}
+
+	// Screen-space flick → world intent (as close as bone Z allows after projection)
+	const FVector Intent = (CamRight * LookDelta.X + CamUp * LookDelta.Y).GetSafeNormal();
+	if (Intent.IsNearlyZero()) return;
 
 	const FTransform MeshXform = Mesh->GetComponentTransform();
 
@@ -750,9 +774,8 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 	}
 	else if (EquipFrag->StrikeMode == EItemStrikeMode::DoubleEdged)
 	{
-		// Pick the closer of ±Y to velocity
 		const FVector WorldY = MeshXform.GetUnitAxis(EAxis::Y);
-		if (FVector::DotProduct(VelDir, WorldY) < 0.f)
+		if (FVector::DotProduct(Intent, WorldY) < 0.f)
 		{
 			LocalAxis = -FVector::YAxisVector;
 		}
@@ -761,34 +784,33 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 	const FVector CurrentWorldAxis = MeshXform.TransformVectorNoScale(LocalAxis).GetSafeNormal();
 	if (CurrentWorldAxis.IsNearlyZero()) return;
 
-	// Constrain rotation to the WeaponBone’s Z (grip/wrist up).
+	// Yaw only around WeaponBone Z
 	const FTransform BoneXform = GetWeaponBoneTransform(Hand);
 	const FVector BoneWorldZ = BoneXform.GetUnitAxis(EAxis::Z);
 
 	FVector ProjAxis = CurrentWorldAxis - FVector::DotProduct(CurrentWorldAxis, BoneWorldZ) * BoneWorldZ;
-	FVector ProjVel  = VelDir          - FVector::DotProduct(VelDir,          BoneWorldZ) * BoneWorldZ;
+	FVector ProjIntent = Intent - FVector::DotProduct(Intent, BoneWorldZ) * BoneWorldZ;
 
-	if (ProjAxis.SizeSquared() < KINDA_SMALL_NUMBER || ProjVel.SizeSquared() < KINDA_SMALL_NUMBER)
+	if (ProjAxis.SizeSquared() < KINDA_SMALL_NUMBER || ProjIntent.SizeSquared() < KINDA_SMALL_NUMBER)
 	{
-		return; // nearly parallel to bone Z — no meaningful yaw component
+		return;
 	}
 
 	ProjAxis.Normalize();
-	ProjVel.Normalize();
+	ProjIntent.Normalize();
 
-	const float Dot = FVector::DotProduct(ProjAxis, ProjVel);
-	const float CrossZ = FVector::DotProduct(FVector::CrossProduct(ProjAxis, ProjVel), BoneWorldZ);
+	const float Dot = FVector::DotProduct(ProjAxis, ProjIntent);
+	const float CrossZ = FVector::DotProduct(FVector::CrossProduct(ProjAxis, ProjIntent), BoneWorldZ);
 	float AngleRad = FMath::Atan2(CrossZ, Dot);
 
-	// Rate-limit direction reversals (higher now that skeletal is not fighting)
-	const float MaxDegPerSec = 1800.f;
+	// Fast catch-up so a mid-length swing can align in a fraction of a second
+	const float MaxDegPerSec = 3600.f;
 	const float MaxStep = FMath::DegreesToRadians(MaxDegPerSec) * DeltaTime;
 	AngleRad = FMath::Clamp(AngleRad, -MaxStep, MaxStep);
 
 	const FQuat DeltaRot = FQuat(BoneWorldZ, AngleRad);
 	const FQuat DesiredWorldRot = DeltaRot * MeshXform.GetRotation();
 
-	// Convert to parent-relative (WeaponBone space)
 	const FQuat ParentWorldRot = BoneXform.GetRotation();
 	const FQuat RelativeQuat = ParentWorldRot.Inverse() * DesiredWorldRot;
 	const FRotator RelativeRot = RelativeQuat.Rotator();

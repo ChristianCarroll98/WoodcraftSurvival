@@ -169,6 +169,13 @@ public:
 	UFUNCTION(BlueprintPure, Category = "CoreAPI")
 	FVector GetLastItemVelocity(EHand Hand) const;
 
+	/**
+	 * Raw look delta this frame (X = yaw / screen horizontal, Y = pitch / screen vertical).
+	 * Call from Player BP each tick. Used as screen-space swing intent for procedural orientation.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "CoreAPI")
+	void SetLookDelta(FVector2D RawDelta);
+
 
 protected:
 	
@@ -214,9 +221,9 @@ private:
 
 	/**
 	 * While extended and above GMinSwingOrientSpeed, drives the Physics Control angular
-	 * target so the item’s preferred strike axis (+Y / ±Y / +Z) aligns with velocity.
-	 * Rotation is constrained to WeaponBone Z and rate-limited. Clears the target when
-	 * conditions are not met so pure skeletal orientation resumes.
+	 * target so the preferred strike axis aligns with screen-space look intent (SetLookDelta).
+	 * Rotation is constrained to WeaponBone Z and rate-limited. Snaps back to skeletal when
+	 * relative speed falls under the threshold.
 	 */
 	void UpdateProceduralOrientation(EHand Hand, float DeltaTime);
 
@@ -268,4 +275,10 @@ private:
 	/** Per-hand runtime state (item, control, extended, velocity history, etc.). */
 	FHandState HandLeft;
 	FHandState HandRight;
+
+	/**
+	 * Raw look delta for this frame (X = horizontal, Y = vertical). Set via SetLookDelta from BP.
+	 * Screen-space swing intent for procedural orientation.
+	 */
+	FVector2D LookDelta = FVector2D::ZeroVector;
 };
