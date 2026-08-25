@@ -315,13 +315,16 @@ void AItemActor::OnItemMeshHit(UPrimitiveComponent* HitComp, AActor* OtherActor,
 		IncomingDir = -NormalImpulse.GetSafeNormal();
 	}
 
-	// Preferred strike axis for incidence + debug
+	// Preferred strike axis for incidence + debug.
+	// Always taken from Primary (handle). HitComp is often the Secondary head, which can
+	// flex a few degrees relative to the handle under impact because the constraint is not perfectly rigid.
+	// Orientation also drives Primary, so this keeps IncomingDir / StrikeDir in the same reference frame.
 	FVector StrikeDir = FVector::ZeroVector;
 	const UEquippableItemFragment* EquipFrag = ItemInstance->FindFragment<UEquippableItemFragment>();
 	const EItemStrikeMode Mode = EquipFrag ? EquipFrag->StrikeMode : EItemStrikeMode::None;
-	if (HitComp)
+	if (PrimaryMeshComponent)
 	{
-		const FTransform MeshXform = HitComp->GetComponentTransform();
+		const FTransform MeshXform = PrimaryMeshComponent->GetComponentTransform();
 		if (Mode == EItemStrikeMode::Pierce)
 		{
 			StrikeDir = MeshXform.GetUnitAxis(EAxis::Z);
