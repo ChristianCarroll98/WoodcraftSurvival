@@ -11,6 +11,7 @@
 #include <Engine/AssetManager.h>
 #include <GameFramework/PlayerController.h>
 #include <GameFramework/Pawn.h>
+#include <DrawDebugHelpers.h>
 
 
 // --------------------------------------------
@@ -702,14 +703,23 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 	if (State.ActiveControl.IsNone() || !State.HeldItem) return;
 	if (GetIsUnarmed(Hand)) return;
 
-	// Relative velocity gates on/off (snap back under threshold). Orientation drive uses look delta.
+	// Edged tools only — Pierce / None / Blunt skip procedural orient (damage still from primitives).
+	const UItemInstance* Instance = State.HeldItem->GetItemInstance();
+	const UEquippableItemFragment* EquipFrag =
+		Instance ? Instance->FindFragment<UEquippableItemFragment>() : nullptr;
+	const bool bEdged = EquipFrag
+		&& (EquipFrag->StrikeMode == EItemStrikeMode::SingleEdged
+			|| EquipFrag->StrikeMode == EItemStrikeMode::DoubleEdged);
+
+	// Relative velocity gates on/off. Orientation drive uses look delta.
 	FVector RelativeVel = State.LastItemVelocity;
 	if (const AActor* OwnerActor = GetOwner())
 	{
 		RelativeVel -= OwnerActor->GetVelocity();
 	}
 
-	const bool bShouldOrient = State.bExtended
+	const bool bShouldOrient = bEdged
+		&& State.bExtended
 		&& RelativeVel.Size() >= GMinSwingOrientSpeed;
 
 	// D: only clear target + restore skeletal on the transition off
@@ -758,7 +768,7 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 		PhysicsControl->SetControlUseSkeletalAnimation(State.ActiveControl, false, 0.f);
 	}
 
-	// Scale angular + linear strength by raw item speed (overcome turn lag / centripetal trail)
+	// Scale angular + linear strength by raw item speed
 	{
 		const float Speed = State.LastItemVelocity.Size();
 		const float T = FMath::Clamp(
@@ -791,12 +801,6 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 	// Need meaningful screen-space look delta this frame
 	if (LookDelta.SizeSquared() < 0.0001f) return;
 
-	const UItemInstance* Instance = State.HeldItem->GetItemInstance();
-	if (!Instance) return;
-
-	const UEquippableItemFragment* EquipFrag = Instance->FindFragment<UEquippableItemFragment>();
-	if (!EquipFrag || EquipFrag->StrikeMode == EItemStrikeMode::None) return;
-
 	UStaticMeshComponent* Mesh = State.HeldItem->GetItemPrimaryMesh();
 	if (!Mesh) return;
 
@@ -812,19 +816,16 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 		}
 	}
 
-	// Screen-space flick → world intent (as close as bone Z allows after projection)
 	const FVector Intent = (CamRight * LookDelta.X + CamUp * LookDelta.Y).GetSafeNormal();
 	if (Intent.IsNearlyZero()) return;
 
 	const FTransform MeshXform = Mesh->GetComponentTransform();
+	const FTransform BoneXform = GetWeaponBoneTransform(Hand);
+	const FVector BoneWorldZ = BoneXform.GetUnitAxis(EAxis::Z);
 
-	// Preferred local axis (authoring: Y+ forward for edged, Z+ for pierce tip)
+	// Preferred edge axis in mesh space (+Y, or closer ±Y for DoubleEdged)
 	FVector LocalAxis = FVector::YAxisVector;
-	if (EquipFrag->StrikeMode == EItemStrikeMode::Pierce)
-	{
-		LocalAxis = FVector::ZAxisVector;
-	}
-	else if (EquipFrag->StrikeMode == EItemStrikeMode::DoubleEdged)
+	if (EquipFrag->StrikeMode == EItemStrikeMode::DoubleEdged)
 	{
 		const FVector WorldY = MeshXform.GetUnitAxis(EAxis::Y);
 		if (FVector::DotProduct(Intent, WorldY) < 0.f)
@@ -836,10 +837,7 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 	const FVector CurrentWorldAxis = MeshXform.TransformVectorNoScale(LocalAxis).GetSafeNormal();
 	if (CurrentWorldAxis.IsNearlyZero()) return;
 
-	// Yaw only around WeaponBone Z
-	const FTransform BoneXform = GetWeaponBoneTransform(Hand);
-	const FVector BoneWorldZ = BoneXform.GetUnitAxis(EAxis::Z);
-
+	// Project onto plane perpendicular to WeaponBone Z — twist only around that axis
 	FVector ProjAxis = CurrentWorldAxis - FVector::DotProduct(CurrentWorldAxis, BoneWorldZ) * BoneWorldZ;
 	FVector ProjIntent = Intent - FVector::DotProduct(Intent, BoneWorldZ) * BoneWorldZ;
 
@@ -855,14 +853,23 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 	const float CrossZ = FVector::DotProduct(FVector::CrossProduct(ProjAxis, ProjIntent), BoneWorldZ);
 	float AngleRad = FMath::Atan2(CrossZ, Dot);
 
-	// Fast catch-up so a mid-length swing can align in a fraction of a second
 	const float MaxDegPerSec = 3600.f;
 	const float MaxStep = FMath::DegreesToRadians(MaxDegPerSec) * DeltaTime;
 	AngleRad = FMath::Clamp(AngleRad, -MaxStep, MaxStep);
 
-	const FQuat DeltaRot = FQuat(BoneWorldZ, AngleRad);
-	const FQuat DesiredWorldRot = DeltaRot * MeshXform.GetRotation();
+	// Preferred axis after the rate-limited step (still in the bone-Z plane)
+	FVector DesiredPreferred = FQuat(BoneWorldZ, AngleRad).RotateVector(ProjAxis);
+	DesiredPreferred.Normalize();
 
+	// Build target with Z locked to WeaponBone Z; only X/Y twist.
+	// MakeFromYZ sets orientation +Y; if preferred is -Y, feed the opposite so mesh -Y aligns.
+	FVector OrientY = DesiredPreferred;
+	if (FVector::DotProduct(LocalAxis, FVector::YAxisVector) < 0.f)
+	{
+		OrientY = -DesiredPreferred;
+	}
+
+	const FQuat DesiredWorldRot = FRotationMatrix::MakeFromYZ(OrientY, BoneWorldZ).ToQuat();
 	const FQuat ParentWorldRot = BoneXform.GetRotation();
 	const FQuat RelativeQuat = ParentWorldRot.Inverse() * DesiredWorldRot;
 	const FRotator RelativeRot = RelativeQuat.Rotator();
@@ -875,6 +882,19 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 		true,
 		true,
 		false);
+
+	// Debug: RGB at grip/control point — blue (Z) should stay locked to WeaponBone Z
+	if (GbDebugDraw)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			const FVector ControlPointLocal =
+				GetRelativeTransformBetweenWeaponAndHandBones(Hand).GetLocation();
+			const FVector ControlPointWorld = BoneXform.TransformPosition(ControlPointLocal);
+			DrawDebugCoordinateSystem(World, ControlPointWorld, DesiredWorldRot.Rotator(),
+				18.f, false, 0.f, SDPG_Foreground, 1.5f);
+		}
+	}
 }
 
 #pragma endregion

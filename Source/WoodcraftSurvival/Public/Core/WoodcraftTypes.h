@@ -10,6 +10,12 @@
 /** Error string prefix */
 const FString GErrorPrefix = TEXT("ERROR: ");
 
+/** Master switch for hit / orientation on-screen hit text. */
+const bool GbDebugPrint = true;
+
+/** Master switch for hit / orientation debug draws. */
+const bool GbDebugDraw = false;
+
 /** Minimum impulse required for a collision to deal damage. Tunable later. */
 const float GMinImpulse = 100.f;
 
@@ -17,23 +23,27 @@ const float GMinImpulse = 100.f;
  *  Prevents continuous contact while pressed into a surface from repeatedly damaging. */
 const float GMinItemSpeed = 80.f;
 
-/** Max angle (degrees) between item velocity and preferred strike axis to keep Slash damage.
- *  Outside this cone the hit is forced to Blunt. */
-const float GSlashMaxAngleDeg = 35.f;
+/** Accepted half-angle (degrees) from the blade plane for Slash.
+ *  Velocity farther off the plane than this (more face-on) is forced to Blunt. */
+const float GSlashMaxAngleFromPlaneDeg = 25.f;
 
-/** Max angle (degrees) between item velocity and preferred strike axis to keep Pierce damage.
- *  Outside this cone the hit is forced to Blunt. */
-const float GPierceMaxAngleDeg = 55.f;
+/** Accepted half-angle (degrees) from preferred edge axis (+Y / ±Y) for Slash.
+ *  Outside this → Blunt. Wide so lag / angled cuts still register. */
+const float GSlashMaxAngleDeg = 75.f;
+
+/** Accepted half-angle (degrees) from tip axis (+Z) for Pierce.
+ *  Outside this → Blunt. */
+const float GPierceMaxAngleDeg = 35.f;
 
 /** Min linear speed (cm/s) of a held item before procedural swing orientation activates.
  *  Relative to owner velocity. 80 after testing — 150 was too high for some swings. */
 const float GMinSwingOrientSpeed = 80.f;
 
 /** Angular strength multiplier (× MassScale) at low item speed while orienting. */
-const float GOrientStrengthMin = 8.0f;
+const float GOrientStrengthMin = 5.0f;
 
 /** Angular strength multiplier (× MassScale) at high item speed while orienting. */
-const float GOrientStrengthMax = 20.0f;
+const float GOrientStrengthMax = 10.0f;
 
 /** Raw item speed (cm/s) at which orient angular strength reaches GOrientStrengthMax. */
 const float GOrientStrengthFullSpeed = 300.f;
@@ -42,10 +52,10 @@ const float GOrientStrengthFullSpeed = 300.f;
 const float GOrientStrengthBaseline = 5.5f;
 
 /** Linear strength multiplier (× MassScale) at low item speed while orienting. */
-const float GOrientLinearStrengthMin = 3.5f;
+const float GOrientLinearStrengthMin = 2.5f;
 
 /** Linear strength multiplier (× MassScale) at high item speed while orienting. */
-const float GOrientLinearStrengthMax = 8.0f;
+const float GOrientLinearStrengthMax = 5.0f;
 
 /** Baseline linear strength multiplier (× MassScale) on attach and when orient ends. */
 const float GOrientLinearStrengthBaseline = 2.8f;

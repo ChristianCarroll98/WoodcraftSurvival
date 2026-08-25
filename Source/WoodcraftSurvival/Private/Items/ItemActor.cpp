@@ -335,8 +335,17 @@ void AItemActor::OnItemMeshHit(UPrimitiveComponent* HitComp, AActor* OtherActor,
 		}
 	}
 
-	// Incidence (model B): shape name decides the candidate; StrikeMode decides which local
-	// axis must align with the incoming direction.
+	// Incidence:
+	// - Slash: face rejection (|dot| vs Primary X) + wide along-edge half-cone (StrikeDir = +Y / ±Y).
+	// - Pierce: tight cone around +Z (unchanged).
+	// Shape name still decides the candidate type; only the alignment test can demote to Blunt.
+	FVector FaceNormal = FVector::ZeroVector;
+	if (PrimaryMeshComponent &&
+		(Mode == EItemStrikeMode::SingleEdged || Mode == EItemStrikeMode::DoubleEdged))
+	{
+		FaceNormal = PrimaryMeshComponent->GetComponentTransform().GetUnitAxis(EAxis::X);
+	}
+
 	if (CandidateType == UDamageType_Slash::StaticClass() || CandidateType == UDamageType_Pierce::StaticClass())
 	{
 		bool bKeep = false;
@@ -344,18 +353,27 @@ void AItemActor::OnItemMeshHit(UPrimitiveComponent* HitComp, AActor* OtherActor,
 		{
 			if (CandidateType == UDamageType_Slash::StaticClass())
 			{
+				// 1) Face-on rejection: |dot(vel, face)| = sin(angle from plane)
+				const float FaceDot = FaceNormal.IsNearlyZero()
+					? 0.f
+					: FMath::Abs(FVector::DotProduct(IncomingDir, FaceNormal));
+				const float PlaneMaxDot = FMath::Sin(FMath::DegreesToRadians(GSlashMaxAngleFromPlaneDeg));
+				const bool bFaceOn = (FaceDot > PlaneMaxDot);
+
+				// 2) Along-edge half-cone (wide)
+				float EdgeAngleDeg = 180.f;
 				if (Mode == EItemStrikeMode::SingleEdged)
 				{
-					const float AngleDeg = FMath::RadiansToDegrees(
+					EdgeAngleDeg = FMath::RadiansToDegrees(
 						FMath::Acos(FMath::Clamp(FVector::DotProduct(IncomingDir, StrikeDir), -1.f, 1.f)));
-					bKeep = (AngleDeg <= GSlashMaxAngleDeg);
 				}
 				else if (Mode == EItemStrikeMode::DoubleEdged)
 				{
-					const float AngleDeg = FMath::RadiansToDegrees(
+					EdgeAngleDeg = FMath::RadiansToDegrees(
 						FMath::Acos(FMath::Clamp(FMath::Abs(FVector::DotProduct(IncomingDir, StrikeDir)), -1.f, 1.f)));
-					bKeep = (AngleDeg <= GSlashMaxAngleDeg);
 				}
+
+				bKeep = !bFaceOn && (EdgeAngleDeg <= GSlashMaxAngleDeg);
 			}
 			else // Pierce candidate
 			{
@@ -384,31 +402,62 @@ void AItemActor::OnItemMeshHit(UPrimitiveComponent* HitComp, AActor* OtherActor,
 	Info.HitLocation = Hit.ImpactPoint;
 	Info.Instigator = Holder.IsValid() ? Holder.Get() : this;
 
-	// Debug: incoming swing dir (cyan) vs preferred edge axis (yellow), 5s, foreground
-	if (UWorld* World = GetWorld())
+	// Debug (gated by GbDebug): cyan Incoming, yellow EdgeDir,
+	// green ±edge bounds, orange ±plane bounds.
+	if (GbDebugDraw)
 	{
-		const FVector Loc = Hit.ImpactPoint;
-		const float Len = 40.f;
-		const float ArrowSize = 12.f;
-		const float Life = 5.f;
-		const uint8 DepthPri = SDPG_Foreground;
-		if (!IncomingDir.IsNearlyZero())
+		if (UWorld* World = GetWorld())
 		{
-			DrawDebugDirectionalArrow(World, Loc, Loc + IncomingDir * Len, ArrowSize,
-				FColor::Cyan, false, Life, DepthPri, 2.f);
-		}
-		if (!StrikeDir.IsNearlyZero())
-		{
-			DrawDebugDirectionalArrow(World, Loc, Loc + StrikeDir * Len, ArrowSize,
-				FColor::Yellow, false, Life, DepthPri, 2.f);
+			const FVector Loc = Hit.ImpactPoint;
+			const float Len = 40.f;
+			const float ArrowSize = 10.f;
+			const float Life = 5.f;
+			const uint8 DepthPri = SDPG_Foreground;
+
+			if (!IncomingDir.IsNearlyZero())
+			{
+				DrawDebugDirectionalArrow(World, Loc, Loc + IncomingDir * Len, ArrowSize,
+					FColor::Cyan, false, Life, DepthPri, 2.f);
+			}
+			if (!StrikeDir.IsNearlyZero())
+			{
+				DrawDebugDirectionalArrow(World, Loc, Loc + StrikeDir * Len, ArrowSize,
+					FColor::Yellow, false, Life, DepthPri, 2.f);
+			}
+
+			if ((Mode == EItemStrikeMode::SingleEdged || Mode == EItemStrikeMode::DoubleEdged)
+				&& !StrikeDir.IsNearlyZero() && !FaceNormal.IsNearlyZero())
+			{
+				// Green: ±GSlashMaxAngleDeg from edge axis (around face normal)
+				const FVector EdgeBoundPos = StrikeDir.RotateAngleAxis(GSlashMaxAngleDeg, FaceNormal);
+				const FVector EdgeBoundNeg = StrikeDir.RotateAngleAxis(-GSlashMaxAngleDeg, FaceNormal);
+				DrawDebugDirectionalArrow(World, Loc, Loc + EdgeBoundPos * Len, ArrowSize * 0.7f,
+					FColor::Green, false, Life, DepthPri, 1.f);
+				DrawDebugDirectionalArrow(World, Loc, Loc + EdgeBoundNeg * Len, ArrowSize * 0.7f,
+					FColor::Green, false, Life, DepthPri, 1.f);
+
+				// Orange: ±GSlashMaxAngleFromPlaneDeg out of the blade plane
+				const FVector TiltAxis = FVector::CrossProduct(StrikeDir, FaceNormal).GetSafeNormal();
+				if (!TiltAxis.IsNearlyZero())
+				{
+					const FVector PlaneBoundPos = StrikeDir.RotateAngleAxis(
+						GSlashMaxAngleFromPlaneDeg, TiltAxis);
+					const FVector PlaneBoundNeg = StrikeDir.RotateAngleAxis(
+						-GSlashMaxAngleFromPlaneDeg, TiltAxis);
+					DrawDebugDirectionalArrow(World, Loc, Loc + PlaneBoundPos * Len, ArrowSize * 0.7f,
+						FColor::Orange, false, Life, DepthPri, 1.f);
+					DrawDebugDirectionalArrow(World, Loc, Loc + PlaneBoundNeg * Len, ArrowSize * 0.7f,
+						FColor::Orange, false, Life, DepthPri, 1.f);
+				}
+			}
 		}
 	}
 
-	if (GEngine)
+	if (GbDebugPrint)
 	{
 		const FString TypeName = FinalType ? FinalType->GetName() : TEXT("None");
 		GEngine->AddOnScreenDebugMessage(
-			42, // fixed ID → overwrites previous hit line
+			42,
 			2.5f,
 			FColor::MakeRandomColor(),
 			FString::Printf(TEXT("Hit shape=%s  type=%s  amt=%.1f"),
