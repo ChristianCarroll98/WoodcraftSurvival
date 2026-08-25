@@ -29,6 +29,27 @@ const float GPierceMaxAngleDeg = 55.f;
  *  Relative to owner velocity. 80 after testing — 150 was too high for some swings. */
 const float GMinSwingOrientSpeed = 80.f;
 
+/** Angular strength multiplier (× MassScale) at low item speed while orienting. */
+const float GOrientStrengthMin = 8.0f;
+
+/** Angular strength multiplier (× MassScale) at high item speed while orienting. */
+const float GOrientStrengthMax = 20.0f;
+
+/** Raw item speed (cm/s) at which orient angular strength reaches GOrientStrengthMax. */
+const float GOrientStrengthFullSpeed = 300.f;
+
+/** Baseline angular strength multiplier (× MassScale) used on attach and when orient ends. */
+const float GOrientStrengthBaseline = 5.5f;
+
+/** Linear strength multiplier (× MassScale) at low item speed while orienting. */
+const float GOrientLinearStrengthMin = 3.5f;
+
+/** Linear strength multiplier (× MassScale) at high item speed while orienting. */
+const float GOrientLinearStrengthMax = 8.0f;
+
+/** Baseline linear strength multiplier (× MassScale) on attach and when orient ends. */
+const float GOrientLinearStrengthBaseline = 2.8f;
+
 
 // ---------- Enums ----------
 

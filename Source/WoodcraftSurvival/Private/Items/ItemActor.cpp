@@ -14,6 +14,7 @@
 #include <Components/StaticMeshComponent.h>
 #include <PhysicsEngine/PhysicsConstraintComponent.h>
 #include <PhysicsEngine/BodySetup.h>
+#include <DrawDebugHelpers.h>
 
 AItemActor::AItemActor()
 {
@@ -287,15 +288,10 @@ void AItemActor::OnItemMeshHit(UPrimitiveComponent* HitComp, AActor* OtherActor,
 	const TSubclassOf<UDamageType> CandidateType = ResolveDamageTypeFromShapeName(ShapeName);
 	TSubclassOf<UDamageType> FinalType = CandidateType;
 
-	// Incidence (model B): shape name decides the candidate; StrikeMode decides which local
-	// axis must align with the incoming direction. Prefer previous-tick velocity from
-	// HeldItemsComponent (pre-bounce). Fall back to live velocity, then -NormalImpulse.
-	if (CandidateType == UDamageType_Slash::StaticClass() || CandidateType == UDamageType_Pierce::StaticClass())
+	// Incoming direction for incidence + debug (pre-bounce velocity preferred)
+	FVector IncomingDir = FVector::ZeroVector;
+	if (Holder.IsValid())
 	{
-		const UEquippableItemFragment* EquipFrag = ItemInstance->FindFragment<UEquippableItemFragment>();
-		const EItemStrikeMode Mode = EquipFrag ? EquipFrag->StrikeMode : EItemStrikeMode::None;
-
-		FVector IncomingDir = FVector::ZeroVector;
 		if (UHeldItemsComponent* HeldComp = Holder->FindComponentByClass<UHeldItemsComponent>())
 		{
 			const EHand Hand = HeldComp->GetHandHoldingItem(this);
@@ -305,36 +301,54 @@ void AItemActor::OnItemMeshHit(UPrimitiveComponent* HitComp, AActor* OtherActor,
 				IncomingDir = LastVel.GetSafeNormal();
 			}
 		}
-		if (IncomingDir.IsNearlyZero() && HitComp)
+	}
+	if (IncomingDir.IsNearlyZero() && HitComp)
+	{
+		const FVector LiveVel = HitComp->GetPhysicsLinearVelocity();
+		if (LiveVel.SizeSquared() > KINDA_SMALL_NUMBER)
 		{
-			const FVector LiveVel = HitComp->GetPhysicsLinearVelocity();
-			if (LiveVel.SizeSquared() > KINDA_SMALL_NUMBER)
-			{
-				IncomingDir = LiveVel.GetSafeNormal();
-			}
+			IncomingDir = LiveVel.GetSafeNormal();
 		}
-		if (IncomingDir.IsNearlyZero() && NormalImpulse.Size() > KINDA_SMALL_NUMBER)
-		{
-			IncomingDir = -NormalImpulse.GetSafeNormal();
-		}
+	}
+	if (IncomingDir.IsNearlyZero() && NormalImpulse.Size() > KINDA_SMALL_NUMBER)
+	{
+		IncomingDir = -NormalImpulse.GetSafeNormal();
+	}
 
+	// Preferred strike axis for incidence + debug
+	FVector StrikeDir = FVector::ZeroVector;
+	const UEquippableItemFragment* EquipFrag = ItemInstance->FindFragment<UEquippableItemFragment>();
+	const EItemStrikeMode Mode = EquipFrag ? EquipFrag->StrikeMode : EItemStrikeMode::None;
+	if (HitComp)
+	{
+		const FTransform MeshXform = HitComp->GetComponentTransform();
+		if (Mode == EItemStrikeMode::Pierce)
+		{
+			StrikeDir = MeshXform.GetUnitAxis(EAxis::Z);
+		}
+		else if (Mode == EItemStrikeMode::SingleEdged || Mode == EItemStrikeMode::DoubleEdged)
+		{
+			StrikeDir = MeshXform.GetUnitAxis(EAxis::Y);
+		}
+	}
+
+	// Incidence (model B): shape name decides the candidate; StrikeMode decides which local
+	// axis must align with the incoming direction.
+	if (CandidateType == UDamageType_Slash::StaticClass() || CandidateType == UDamageType_Pierce::StaticClass())
+	{
 		bool bKeep = false;
-		if (!IncomingDir.IsNearlyZero() && HitComp)
+		if (!IncomingDir.IsNearlyZero() && !StrikeDir.IsNearlyZero())
 		{
-			const FTransform MeshXform = HitComp->GetComponentTransform();
-
 			if (CandidateType == UDamageType_Slash::StaticClass())
 			{
 				if (Mode == EItemStrikeMode::SingleEdged)
 				{
-					const FVector StrikeDir = MeshXform.GetUnitAxis(EAxis::Y);
 					const float AngleDeg = FMath::RadiansToDegrees(
 						FMath::Acos(FMath::Clamp(FVector::DotProduct(IncomingDir, StrikeDir), -1.f, 1.f)));
 					bKeep = (AngleDeg <= GSlashMaxAngleDeg);
 				}
 				else if (Mode == EItemStrikeMode::DoubleEdged)
 				{
-					const FVector StrikeDir = MeshXform.GetUnitAxis(EAxis::Y);
 					const float AngleDeg = FMath::RadiansToDegrees(
 						FMath::Acos(FMath::Clamp(FMath::Abs(FVector::DotProduct(IncomingDir, StrikeDir)), -1.f, 1.f)));
 					bKeep = (AngleDeg <= GSlashMaxAngleDeg);
@@ -344,7 +358,6 @@ void AItemActor::OnItemMeshHit(UPrimitiveComponent* HitComp, AActor* OtherActor,
 			{
 				if (Mode == EItemStrikeMode::Pierce)
 				{
-					const FVector StrikeDir = MeshXform.GetUnitAxis(EAxis::Z);
 					const float AngleDeg = FMath::RadiansToDegrees(
 						FMath::Acos(FMath::Clamp(FVector::DotProduct(IncomingDir, StrikeDir), -1.f, 1.f)));
 					bKeep = (AngleDeg <= GPierceMaxAngleDeg);
@@ -368,13 +381,33 @@ void AItemActor::OnItemMeshHit(UPrimitiveComponent* HitComp, AActor* OtherActor,
 	Info.HitLocation = Hit.ImpactPoint;
 	Info.Instigator = Holder.IsValid() ? Holder.Get() : this;
 
+	// Debug: incoming swing dir (cyan) vs preferred edge axis (yellow), 5s, foreground
+	if (UWorld* World = GetWorld())
+	{
+		const FVector Loc = Hit.ImpactPoint;
+		const float Len = 40.f;
+		const float ArrowSize = 12.f;
+		const float Life = 5.f;
+		const uint8 DepthPri = SDPG_Foreground;
+		if (!IncomingDir.IsNearlyZero())
+		{
+			DrawDebugDirectionalArrow(World, Loc, Loc + IncomingDir * Len, ArrowSize,
+				FColor::Cyan, false, Life, DepthPri, 2.f);
+		}
+		if (!StrikeDir.IsNearlyZero())
+		{
+			DrawDebugDirectionalArrow(World, Loc, Loc + StrikeDir * Len, ArrowSize,
+				FColor::Yellow, false, Life, DepthPri, 2.f);
+		}
+	}
+
 	if (GEngine)
 	{
 		const FString TypeName = FinalType ? FinalType->GetName() : TEXT("None");
 		GEngine->AddOnScreenDebugMessage(
 			42, // fixed ID → overwrites previous hit line
 			2.5f,
-			FColor::Cyan,
+			FColor::MakeRandomColor(),
 			FString::Printf(TEXT("Hit shape=%s  type=%s  amt=%.1f"),
 				*ShapeName.ToString(), *TypeName, Amount));
 	}

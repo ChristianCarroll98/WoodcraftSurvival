@@ -58,6 +58,12 @@ struct FHandState
 	 * Used to edge-trigger skeletal-anim disable/restore and target clear (A+D).
 	 */
 	bool bProceduralOrientActive = false;
+
+	/**
+	 * Mass scale computed at attach (clamp EffectiveMass/0.6 to 1–6).
+	 * Used to scale Physics Control strengths including velocity-based orient strength.
+	 */
+	float MassScale = 1.0f;
 };
 
 /**

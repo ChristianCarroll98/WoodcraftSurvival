@@ -108,6 +108,7 @@ FVector UHeldItemsComponent::GetLastItemVelocity(EHand Hand) const
 
 void UHeldItemsComponent::SetLookDelta(FVector2D RawDelta)
 {
+	// Y is negated so screen-up matches intent (raw pitch delta is inverted vs CamUp)
 	LookDelta.X = RawDelta.X;
 	LookDelta.Y = -RawDelta.Y;
 }
@@ -555,9 +556,9 @@ bool UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand, FStr
 	const float MassScale = FMath::Clamp(EffectiveMass / 0.6f, 1.0f, 6.0f);
 
 	FPhysicsControlData ControlData;
-	ControlData.LinearStrength = 2.8f * MassScale;
+	ControlData.LinearStrength = GOrientLinearStrengthBaseline * MassScale;
 	ControlData.LinearDampingRatio = 1.4f + 0.3f * (MassScale - 1.0f);
-	ControlData.AngularStrength = 5.5f * MassScale;
+	ControlData.AngularStrength = GOrientStrengthBaseline * MassScale;
 	ControlData.AngularDampingRatio = 1.3f + 0.3f * (MassScale - 1.0f);
 	ControlData.bUseSkeletalAnimation = true;
 	ControlData.bDisableCollision = true;
@@ -605,6 +606,7 @@ bool UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand, FStr
 	FHandState& State = GetHandState(Hand);
 	State.HeldItem = Item;
 	State.ActiveControl = NewControlName;
+	State.MassScale = MassScale;
 	State.LastItemVelocity = FVector::ZeroVector; // reset until next tick samples
 	return true;
 }
@@ -717,6 +719,26 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 		{
 			State.bProceduralOrientActive = false;
 			PhysicsControl->SetControlUseSkeletalAnimation(State.ActiveControl, true, 1.f);
+			const float DampA = 1.3f + 0.3f * (State.MassScale - 1.0f);
+			const float DampL = 1.4f + 0.3f * (State.MassScale - 1.0f);
+			PhysicsControl->SetControlAngularData(
+				State.ActiveControl,
+				GOrientStrengthBaseline * State.MassScale,
+				DampA,
+				0.f,
+				0.f,
+				true,
+				true,
+				false);
+			PhysicsControl->SetControlLinearData(
+				State.ActiveControl,
+				GOrientLinearStrengthBaseline * State.MassScale,
+				DampL,
+				0.f,
+				0.f,
+				true,
+				true,
+				false);
 			PhysicsControl->SetControlTargetOrientation(
 				State.ActiveControl,
 				FRotator::ZeroRotator,
@@ -734,6 +756,36 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 	{
 		State.bProceduralOrientActive = true;
 		PhysicsControl->SetControlUseSkeletalAnimation(State.ActiveControl, false, 0.f);
+	}
+
+	// Scale angular + linear strength by raw item speed (overcome turn lag / centripetal trail)
+	{
+		const float Speed = State.LastItemVelocity.Size();
+		const float T = FMath::Clamp(
+			(Speed - GMinSwingOrientSpeed) / FMath::Max(GOrientStrengthFullSpeed - GMinSwingOrientSpeed, 1.f),
+			0.f, 1.f);
+		const float AngMul = FMath::Lerp(GOrientStrengthMin, GOrientStrengthMax, T);
+		const float LinMul = FMath::Lerp(GOrientLinearStrengthMin, GOrientLinearStrengthMax, T);
+		const float DampA = 1.3f + 0.3f * (State.MassScale - 1.0f);
+		const float DampL = 1.4f + 0.3f * (State.MassScale - 1.0f);
+		PhysicsControl->SetControlAngularData(
+			State.ActiveControl,
+			AngMul * State.MassScale,
+			DampA,
+			0.f,
+			0.f,
+			true,
+			true,
+			false);
+		PhysicsControl->SetControlLinearData(
+			State.ActiveControl,
+			LinMul * State.MassScale,
+			DampL,
+			0.f,
+			0.f,
+			true,
+			true,
+			false);
 	}
 
 	// Need meaningful screen-space look delta this frame
