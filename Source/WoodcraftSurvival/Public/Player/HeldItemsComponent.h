@@ -61,13 +61,13 @@ struct FHandState
 
 	/**
 	 * Angular mass scale computed at attach:
-	 * Clamp(EffectiveMass / GPhysControlMassRef, GPhysControlMassScaleMin, GPhysControlMassScaleMax).
+	 * Clamp(EffectiveMass / GControlMassRef, GControlMassScaleMin, GControlMassScaleMax).
 	 */
 	float MassScale = 1.0f;
 
 	/**
 	 * Linear mass scale computed at attach:
-	 * Clamp(EffectiveMass / GPhysControlLinearMassRef, GPhysControlLinearMassScaleMin, GPhysControlLinearMassScaleMax).
+	 * Clamp(EffectiveMass / GControlLinearMassRef, GControlLinearMassScaleMin, GControlLinearMassScaleMax).
 	 * Flatter than MassScale so compact items trail without softening long tools' rotation.
 	 */
 	float MassScaleLinear = 1.0f;

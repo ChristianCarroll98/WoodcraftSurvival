@@ -49,22 +49,22 @@ const float GControlStrengthFullLookSpeed = 240.f;
 const float GControlStrengthCurveExp = 3.f;
 
 /** Angular mass (kg) at which MassScale == 1 before clamp. Hatchet ~1.67 → ~2.78. */
-const float GPhysControlMassRef = 0.6f;
+const float GControlMassRef = 0.6f;
 
 /** Floor on angular MassScale. */
-const float GPhysControlMassScaleMin = 0.35f;
+const float GControlMassScaleMin = 0.35f;
 
 /** Cap on angular MassScale so very heavy items do not over-stiffen rotation. */
-const float GPhysControlMassScaleMax = 6.0f;
+const float GControlMassScaleMax = 6.0f;
 
 /** Linear mass (kg) at which MassScaleLinear == 1 before clamp. Higher than angular so compact items stay sloppy. */
-const float GPhysControlLinearMassRef = 1.2f;
+const float GControlLinearMassRef = 1.2f;
 
 /** Floor on MassScaleLinear so very light items (fists) are not soggy. */
-const float GPhysControlLinearMassScaleMin = 0.85f;
+const float GControlLinearMassScaleMin = 0.85f;
 
 /** Cap on MassScaleLinear. */
-const float GPhysControlLinearMassScaleMax = 2.5f;
+const float GControlLinearMassScaleMax = 2.5f;
 
 /** Angular strength multiplier (× MassScale) while not extended — planted by the body, slight give. */
 const float GControlAngularStrengthNeutral = 6.f;

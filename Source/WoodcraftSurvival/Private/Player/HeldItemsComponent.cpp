@@ -623,13 +623,13 @@ bool UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand, FStr
 
 	// Softer strengths with reduced gravity; damping still rises with mass.
 	const float MassScale = FMath::Clamp(
-		EffectiveMass / GPhysControlMassRef,
-		GPhysControlMassScaleMin,
-		GPhysControlMassScaleMax);
+		EffectiveMass / GControlMassRef,
+		GControlMassScaleMin,
+		GControlMassScaleMax);
 	const float MassScaleLinear = FMath::Clamp(
-		EffectiveMass / GPhysControlLinearMassRef,
-		GPhysControlLinearMassScaleMin,
-		GPhysControlLinearMassScaleMax);
+		EffectiveMass / GControlLinearMassRef,
+		GControlLinearMassScaleMin,
+		GControlLinearMassScaleMax);
 
 	FPhysicsControlData ControlData;
 	ControlData.LinearStrength = GControlLinearStrengthNeutral * MassScaleLinear;
