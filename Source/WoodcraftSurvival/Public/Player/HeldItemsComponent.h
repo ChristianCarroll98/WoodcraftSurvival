@@ -27,6 +27,52 @@ struct FPendingPickupData
 };
 
 /**
+ * Per-hand runtime state owned by UHeldItemsComponent.
+ * Keeps Left/Right data in one place and makes adding new per-hand fields (velocity history, etc.) clean.
+ */
+struct FHandState
+{
+	/** Item currently held in this hand (never null after BeginPlay — Unarmed fills empty hands). */
+	TObjectPtr<AItemActor> HeldItem = nullptr;
+
+	/** Temporary data for an in-progress pickup animation. */
+	FPendingPickupData PendingPickup;
+
+	/** Currently active Physics Control name for this hand. */
+	FName ActiveControl = NAME_None;
+
+	/** Whether the held item is currently treated as stuck (too far from the control parent). */
+	bool bItemStuck = false;
+
+	/** Whether this hand is in the extended (strike-ready) pose. */
+	bool bExtended = false;
+
+	/**
+	 * Linear velocity of the held item’s primary mesh from the previous tick.
+	 * Used by incidence so we measure the pre-bounce swing direction instead of the rebound.
+	 */
+	FVector LastItemVelocity = FVector::ZeroVector;
+
+	/**
+	 * True while procedural swing orientation is actively driving this hand’s control.
+	 * Used to edge-trigger skeletal-anim disable/restore and target clear (A+D).
+	 */
+	bool bProceduralOrientActive = false;
+
+	/**
+	 * Mass scale computed at attach (clamp EffectiveMass/0.6 to 1–6).
+	 * Used to scale Physics Control strengths including velocity-based orient strength.
+	 */
+	float MassScale = 1.0f;
+
+	/**
+	 * Preferred edge side for procedural orientation: +1 = mesh +Y, −1 = mesh −Y.
+	 * Persists across frames for hysteresis; reset when orient deactivates or item detaches.
+	 */
+	int8 OrientEdgeSign = 1;
+};
+
+/**
  * Manages items held in both hands.
  * A single component owns both the left and right hand state.
  * Empty hands always hold the Unarmed item so the system never has a null hand.
@@ -107,6 +153,45 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "CoreAPI")
 	void CompletePickup(EHand Hand);
 
+	/** Sets whether the given hand is in the extended (ready to strike) state.
+	 *  Call from Player BP alongside the anim extend bool. Gates damage and procedural orientation. */
+	UFUNCTION(BlueprintCallable, Category = "CoreAPI")
+	void SetExtended(EHand Hand, bool bExtended);
+
+	/** Returns whether the given hand is currently extended. */
+	UFUNCTION(BlueprintPure, Category = "CoreAPI")
+	bool GetIsExtended(EHand Hand) const;
+
+	/** Returns which hand is holding the given item, or EHand::None. */
+	UFUNCTION(BlueprintPure, Category = "CoreAPI")
+	EHand GetHandHoldingItem(const AItemActor* Item) const;
+
+	/** Returns the active Physics Control name for the hand, or NAME_None. */
+	UFUNCTION(BlueprintPure, Category = "CoreAPI")
+	FName GetActiveControlName(EHand Hand) const;
+
+	/** Returns the Body Modifier set name used for the held item in this hand (HeldItemLeft / HeldItemRight). */
+	UFUNCTION(BlueprintPure, Category = "CoreAPI")
+	FName GetHeldItemModifierSet(EHand Hand) const;
+
+	/**
+	 * Linear velocity of the held item’s primary mesh from the previous tick.
+	 * Used by incidence angle checks so we measure pre-bounce swing direction.
+	 */
+	UFUNCTION(BlueprintPure, Category = "CoreAPI")
+	FVector GetLastItemVelocity(EHand Hand) const;
+
+	/**
+	 * Raw look delta this frame (X = yaw / screen horizontal, Y = pitch / screen vertical).
+	 * Call from Player BP each tick. Used as screen-space swing intent for procedural orientation.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "CoreAPI")
+	void SetLookDelta(FVector2D RawDelta);
+
+	/** Look-delta rate this frame (LookDelta.Size() / DeltaTime). Used to gate orient snap and damage. */
+	UFUNCTION(BlueprintPure, Category = "CoreAPI")
+	float GetLookSpeed() const;
+
 
 protected:
 	
@@ -119,6 +204,12 @@ protected:
 private:
 
 	// ---------- private methods ----------
+
+	/** Returns a mutable reference to the per-hand state. */
+	FHandState& GetHandState(EHand Hand);
+
+	/** Returns a const reference to the per-hand state. */
+	const FHandState& GetHandState(EHand Hand) const;
 
 	/** Attempts to pick up the given item into the specified hand. */
 	bool TryPickup(AItemActor* Item, EHand Hand, FString& OutResult);
@@ -143,6 +234,20 @@ private:
 
 	/** Updates collision based on the distance an item is from the control parent to prevent items getting stuck. */
 	void PreventItemStuck(EHand Hand);
+
+	/**
+	 * While extended and above GMinItemSpeed, drives the Physics Control angular
+	 * target so the preferred strike axis aligns with screen-space look intent (SetLookDelta).
+	 * Rotation is constrained to WeaponBone Z and rate-limited. Snaps back to skeletal when
+	 * relative speed falls under the threshold.
+	 */
+	void UpdateProceduralOrientation(EHand Hand, float DeltaTime);
+
+	/**
+	 * Applies mass-scaled linear + angular strengths (and the matching damping) to the
+	 * active Physics Control for this hand. Multipliers are the GOrient* values (baseline or speed-lerped).
+	 */
+	void ApplyControlStrengths(EHand Hand, float AngularMultiplier, float LinearMultiplier);
 
 	/** Returns a reference to the pending pickup data for the given hand. */
 	FPendingPickupData& GetPendingPickup(EHand Hand);
@@ -174,17 +279,11 @@ private:
 	/** Returns the item actor that the player is currently looking at, within the specified max distance. */
 	AItemActor* FindLookedAtItem(float Radius = 5.f, float MaxDistance = 250.f) const;
 
-	// Returns all equippable items currently in range (for the gray highlight)
-	//void GetItemsInPickupRange(TArray<AItemActor*>& OutItems, float Radius = 120.f) const;
-
 	/** Returns true if the item in the given hand is the Unarmed item. */
 	const bool GetIsUnarmed(EHand Hand) const;
 
 	/** Plays pickup montage for the specified hand */
 	bool PlayPickupMontage(EHand Hand, FString& OutResult) const;
-
-	/** Plays drop montage for the specified hand */
-	//bool PlayDropMontage(EHand Hand, FString& OutResult) const;
 
 
 	// ---------- private class variables ----------
@@ -195,27 +294,22 @@ private:
 	/** The animation instance for the first-person arms mesh. */
 	TObjectPtr<UFPArmsAnimInstance> AnimInstance;
 
-	/** Item currently held in the left hand. */
-	TObjectPtr<AItemActor> HeldItemLeft;
+	/** Per-hand runtime state (item, control, extended, velocity history, etc.). */
+	FHandState HandLeft;
+	FHandState HandRight;
 
-	/** Item currently held in the right hand. */
-	TObjectPtr<AItemActor> HeldItemRight;
+	/**
+	 * Raw look delta for this frame (X = horizontal, Y = vertical). Set via SetLookDelta from BP.
+	 * Screen-space swing intent for procedural orientation.
+	 */
+	FVector2D LookDelta = FVector2D::ZeroVector;
 
-	/** Temporary data for an in-progress pickup animation on the left hand. */
-	FPendingPickupData PendingPickupLeft;
+	/** LookDelta.Size() / DeltaTime, updated each tick. */
+	float LookSpeed = 0.f;
 
-	/** Temporary data for an in-progress pickup animation on the right hand. */
-	FPendingPickupData PendingPickupRight;
-
-	/** Currently active control name for the left hand. */
-	FName ActiveControlLeft;
-
-	/** Currently active control name for the right hand. */
-	FName ActiveControlRight;
-
-	/** Whether the item in the left hand is currently stuck (too far from the control parent). */
-	bool bLeftItemStuck = false;
-
-	/** Whether the item in the right hand is currently stuck (too far from the control parent). */
-	bool bRightItemStuck = false;
+	/** Rolling 2s peaks for on-screen debug (look rate + right-hand relative item speed). */
+	float DebugPeakLookSpeed = 0.f;
+	float DebugPeakLookSpeedTime = 0.f;
+	float DebugPeakSwingSpeed = 0.f;
+	float DebugPeakSwingSpeedTime = 0.f;
 };

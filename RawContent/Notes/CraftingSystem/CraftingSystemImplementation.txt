@@ -1,0 +1,28 @@
+**Crafting System – Implementation Notes**  
+*(Stub – 2026-08-25. Full design to be expanded in a later session.)*
+
+### High-Level Goals (from ProjectVision)
+
+- Player crafts items using resources gathered from the world.
+- Primary interaction: both hands extended and holding items that form a valid recipe → crafting minigame activates (locks view/movement, mouse controls arms).
+- All crafting actions are minigames (even simple ones). Exact minigame designs are determined per recipe/station later.
+- Some crafts require a specific workstation (workbench, leatherworking bench, woodworking station, forge, anvil, grindstone, etc.). Stations provide an additional item slot so three-item-type crafts become possible.
+- Some crafts use multiple items of the same type or are staged so more than three total items can still be handled without exceeding three types.
+- Tools required for a craft must be held; other ingredients may be in hands or on the workstation slot.
+- Recipe selection UI appears under the progress bar (A/D cycles available recipes). Most crafts can be cancelled by releasing the activation buttons; certain crafts (flint knapping, forging) lock the recipe after 50 % progress.
+- Failure states exist (e.g. hitting too hard while forging produces scrap that can be melted down and retried).
+
+### Sharpening (locked interaction with Item durability)
+
+Sharpening is implemented entirely as crafting recipes rather than a special one-off action.
+
+- Multiple recipes can target the same tool (crude stone sharpening vs higher-quality grindstone).
+- Each recipe restores some `CurrentHeadHealth` and permanently lowers `MaxHeadHealth` by an amount authored on that recipe (crude = higher Max loss, grindstone = lower Max loss).
+- Grindstone is a workstation; its associated recipes are minigames like every other craft.
+- The item durability system (see `ItemSystem/ItemSystemImplementation.txt` §10) consumes the results: visual/mechanical dulling is driven by the Current/Max ratio; final scrap occurs when Current reaches 0 **and** Max has fallen to ≤ 25 % of the original seeded Max.
+
+Exact recipe data, station definitions, and minigame implementations are left for a future expansion of this document.
+
+### Status
+
+This is a minimal stub only. The full crafting architecture (recipe assets, station actors, minigame framework, failure handling, progression tiers, etc.) will be designed in detail in a later session.

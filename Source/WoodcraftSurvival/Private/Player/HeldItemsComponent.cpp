@@ -9,6 +9,9 @@
 #include "Player/FPArmsAnimInstance.h"
 #include <PhysicsControlComponent.h>
 #include <Engine/AssetManager.h>
+#include <GameFramework/PlayerController.h>
+#include <GameFramework/Pawn.h>
+#include <DrawDebugHelpers.h>
 
 
 // --------------------------------------------
@@ -61,9 +64,59 @@ bool UHeldItemsComponent::TryPickupOrDrop(EHand Hand, FString& OutResult)
 
 AItemActor* UHeldItemsComponent::GetHeldItem(EHand Hand) const
 {
-	if (Hand == EHand::Left) return HeldItemLeft;
-	if (Hand == EHand::Right) return HeldItemRight;
-	return nullptr;
+	if (Hand == EHand::None) return nullptr;
+	return GetHandState(Hand).HeldItem;
+}
+
+void UHeldItemsComponent::SetExtended(EHand Hand, bool bExtended)
+{
+	if (Hand == EHand::None) return;
+	GetHandState(Hand).bExtended = bExtended;
+}
+
+bool UHeldItemsComponent::GetIsExtended(EHand Hand) const
+{
+	if (Hand == EHand::None) return false;
+	return GetHandState(Hand).bExtended;
+}
+
+EHand UHeldItemsComponent::GetHandHoldingItem(const AItemActor* Item) const
+{
+	if (!Item) return EHand::None;
+	if (HandLeft.HeldItem == Item) return EHand::Left;
+	if (HandRight.HeldItem == Item) return EHand::Right;
+	return EHand::None;
+}
+
+FName UHeldItemsComponent::GetActiveControlName(EHand Hand) const
+{
+	if (Hand == EHand::None) return NAME_None;
+	return GetHandState(Hand).ActiveControl;
+}
+
+FName UHeldItemsComponent::GetHeldItemModifierSet(EHand Hand) const
+{
+	if (Hand == EHand::Left) return TEXT("HeldItemLeft");
+	if (Hand == EHand::Right) return TEXT("HeldItemRight");
+	return NAME_None;
+}
+
+FVector UHeldItemsComponent::GetLastItemVelocity(EHand Hand) const
+{
+	if (Hand == EHand::None) return FVector::ZeroVector;
+	return GetHandState(Hand).LastItemVelocity;
+}
+
+void UHeldItemsComponent::SetLookDelta(FVector2D RawDelta)
+{
+	// Y is negated so screen-up matches intent (raw pitch delta is inverted vs CamUp)
+	LookDelta.X = RawDelta.X;
+	LookDelta.Y = -RawDelta.Y;
+}
+
+float UHeldItemsComponent::GetLookSpeed() const
+{
+	return LookSpeed;
 }
 
 EHand UHeldItemsComponent::GetIsHoldingTwoHanded() const
@@ -71,20 +124,26 @@ EHand UHeldItemsComponent::GetIsHoldingTwoHanded() const
 	AItemActor* LeftItem = GetHeldItem(EHand::Left);
 	if (LeftItem)
 	{
-		if (const UEquippableItemFragment* LeftEquippable
-			= LeftItem->GetItemInstance()->FindFragment<UEquippableItemFragment>())
+		if (const UItemInstance* LeftInstance = LeftItem->GetItemInstance())
 		{
-			if (LeftEquippable && LeftEquippable->bTwoHanded) return EHand::Left;
+			if (const UEquippableItemFragment* LeftEquippable
+				= LeftInstance->FindFragment<UEquippableItemFragment>())
+			{
+				if (LeftEquippable->bTwoHanded) return EHand::Left;
+			}
 		}
 	}
 
 	AItemActor* RightItem = GetHeldItem(EHand::Right);
 	if (RightItem)
 	{
-		if (const UEquippableItemFragment* RightEquippable
-			= RightItem->GetItemInstance()->FindFragment<UEquippableItemFragment>())
+		if (const UItemInstance* RightInstance = RightItem->GetItemInstance())
 		{
-			if (RightEquippable && RightEquippable->bTwoHanded) return EHand::Right;
+			if (const UEquippableItemFragment* RightEquippable
+				= RightInstance->FindFragment<UEquippableItemFragment>())
+			{
+				if (RightEquippable->bTwoHanded) return EHand::Right;
+			}
 		}
 	}
 
@@ -167,8 +226,81 @@ void UHeldItemsComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
+	// Sample held-item velocity *before* collision responses for this frame are fully applied.
+	// Used by incidence so we measure pre-bounce swing direction.
+	auto SampleVelocity = [](FHandState& State)
+	{
+		if (!State.HeldItem) return;
+		if (UStaticMeshComponent* Mesh = State.HeldItem->GetItemPrimaryMesh())
+		{
+			State.LastItemVelocity = Mesh->GetPhysicsLinearVelocity();
+		}
+	};
+	SampleVelocity(HandLeft);
+	SampleVelocity(HandRight);
+
+	LookSpeed = LookDelta.Size() / FMath::Max(DeltaTime, 0.0001f);
+
+	if (GbDebugPrint && GEngine)
+	{
+		FVector RelativeVel = HandRight.LastItemVelocity;
+		if (const AActor* OwnerActor = GetOwner())
+		{
+			RelativeVel -= OwnerActor->GetVelocity();
+		}
+
+		const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+		const float SwingSpeed = RelativeVel.Size();
+		const float PeakWindow = 2.f;
+
+		if (LookSpeed >= DebugPeakLookSpeed || (Now - DebugPeakLookSpeedTime) > PeakWindow)
+		{
+			DebugPeakLookSpeed = LookSpeed;
+			DebugPeakLookSpeedTime = Now;
+		}
+		if (SwingSpeed >= DebugPeakSwingSpeed || (Now - DebugPeakSwingSpeedTime) > PeakWindow)
+		{
+			DebugPeakSwingSpeed = SwingSpeed;
+			DebugPeakSwingSpeedTime = Now;
+		}
+
+		GEngine->AddOnScreenDebugMessage(101, 1.f, FColor::Magenta,
+			FString::Printf(TEXT("R swing speed: %.1f  max2s: %.1f"), SwingSpeed, DebugPeakSwingSpeed));
+
+		float Mass = 0.f;
+		if (HandRight.HeldItem)
+		{
+			if (UStaticMeshComponent* Primary = HandRight.HeldItem->GetItemPrimaryMesh())
+			{
+				Mass = Primary->GetMass();
+			}
+			if (UStaticMeshComponent* Secondary = HandRight.HeldItem->GetItemSecondaryMesh())
+			{
+				Mass += Secondary->GetMass();
+			}
+		}
+		GEngine->AddOnScreenDebugMessage(102, 1.f, FColor::Orange,
+			FString::Printf(TEXT("R item mass: %.2f"), Mass));
+
+		GEngine->AddOnScreenDebugMessage(103, 1.f, FColor::Cyan,
+			FString::Printf(TEXT("Look speed: %.2f  max2s: %.2f"), LookSpeed, DebugPeakLookSpeed));
+	}
+
 	PreventItemStuck(EHand::Left);
 	PreventItemStuck(EHand::Right);
+
+	UpdateProceduralOrientation(EHand::Left, DeltaTime);
+	UpdateProceduralOrientation(EHand::Right, DeltaTime);
+}
+
+FHandState& UHeldItemsComponent::GetHandState(EHand Hand)
+{
+	return (Hand == EHand::Left) ? HandLeft : HandRight;
+}
+
+const FHandState& UHeldItemsComponent::GetHandState(EHand Hand) const
+{
+	return (Hand == EHand::Left) ? HandLeft : HandRight;
 }
 
 #pragma endregion
@@ -244,7 +376,14 @@ bool UHeldItemsComponent::BeginPickupAnimation(AItemActor* Item, EHand Hand, FSt
 		return false;
 	}
 
-	const UEquippableItemFragment* EquipFrag = Item->GetItemInstance()->FindFragment<UEquippableItemFragment>();
+	const UItemInstance* Instance = Item->GetItemInstance();
+	if (!Instance)
+	{
+		OutResult += TEXT("ItemInstance invalid");
+		return false;
+	}
+
+	const UEquippableItemFragment* EquipFrag = Instance->FindFragment<UEquippableItemFragment>();
 	if (!EquipFrag)
 	{
 		OutResult += TEXT("Could not find EquippableItemFragment for Item: " + Item->GetName());
@@ -472,16 +611,35 @@ bool UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand, FStr
 
 	const FName WeaponBoneName = GetWeaponBoneName(Hand);
 
+	// Effective mass = Primary + Secondary (constraint does not merge BodyInstances).
+	float EffectiveMass = ItemMesh->GetMass();
+	if (UStaticMeshComponent* Secondary = Item->GetItemSecondaryMesh())
+	{
+		EffectiveMass += Secondary->GetMass();
+	}
+
+	// Softer strengths with reduced gravity; damping still rises with mass.
+	const float MassScale = FMath::Clamp(EffectiveMass / 0.6f, 1.0f, 6.0f);
+
 	FPhysicsControlData ControlData;
-	ControlData.LinearStrength = 3.0f;
-	ControlData.LinearDampingRatio = 1.3f;
-	ControlData.AngularStrength = 5.0f;
-	ControlData.AngularDampingRatio = 1.2f;
+	ControlData.LinearStrength = GOrientLinearStrengthBaseline * MassScale;
+	ControlData.LinearDampingRatio = 1.4f + 0.3f * (MassScale - 1.0f);
+	ControlData.AngularStrength = GOrientStrengthBaseline * MassScale;
+	ControlData.AngularDampingRatio = 1.3f + 0.3f * (MassScale - 1.0f);
 	ControlData.bUseSkeletalAnimation = true;
 	ControlData.bDisableCollision = true;
 	ControlData.bUseCustomControlPoint = true;
 	// --- Get the wrist offset from the weapon bone for the custom control point so the item bends at the wrist
 	ControlData.CustomControlPoint = GetRelativeTransformBetweenWeaponAndHandBones(Hand).GetLocation();
+
+	if (GbDebugPrint && GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Cyan,
+			FString::Printf(TEXT("PhysControl mass=%.2f scale=%.2f  L=%.1f A=%.1f  dampL=%.2f dampA=%.2f"),
+				EffectiveMass, MassScale,
+				ControlData.LinearStrength, ControlData.AngularStrength,
+				ControlData.LinearDampingRatio, ControlData.AngularDampingRatio));
+	}
 
 	FPhysicsControlTarget ControlTarget;
 
@@ -497,16 +655,25 @@ bool UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand, FStr
 		"WSPC_"
 	);
 
-	if (Hand == EHand::Left)
+	// Reduced gravity via Physics Control Body Modifier (one set per hand).
+	const FName ModifierSet = GetHeldItemModifierSet(Hand);
+	PhysicsControl->DestroyBodyModifiersInSet(ModifierSet);
+
+	FPhysicsControlModifierData ModData;
+	ModData.MovementType = EPhysicsMovementType::Simulated;
+	ModData.GravityMultiplier = 0.2f;
+
+	PhysicsControl->CreateBodyModifier(ItemMesh, NAME_None, ModifierSet, ModData);
+	if (UStaticMeshComponent* Secondary = Item->GetItemSecondaryMesh())
 	{
-		HeldItemLeft = Item;
-		ActiveControlLeft = NewControlName;
+		PhysicsControl->CreateBodyModifier(Secondary, NAME_None, ModifierSet, ModData);
 	}
-	else if (Hand == EHand::Right)
-	{
-		HeldItemRight = Item;
-		ActiveControlRight = NewControlName;
-	}
+
+	FHandState& State = GetHandState(Hand);
+	State.HeldItem = Item;
+	State.ActiveControl = NewControlName;
+	State.MassScale = MassScale;
+	State.LastItemVelocity = FVector::ZeroVector; // reset until next tick samples
 	return true;
 }
 
@@ -514,17 +681,19 @@ void UHeldItemsComponent::DetachItemFromControl(EHand Hand)
 {
 	if (Hand == EHand::None || !PhysicsControl) return;
 
-	FName& ActiveControl = (Hand == EHand::Left) ? ActiveControlLeft : ActiveControlRight;
+	FHandState& State = GetHandState(Hand);
 
-	if (!ActiveControl.IsNone())
+	if (!State.ActiveControl.IsNone())
 	{
-		PhysicsControl->DestroyControl(ActiveControl);
-		ActiveControl = NAME_None;
+		PhysicsControl->DestroyControl(State.ActiveControl);
+		State.ActiveControl = NAME_None;
 	}
 
+	// Remove reduced-gravity body modifiers for this hand
+	PhysicsControl->DestroyBodyModifiersInSet(GetHeldItemModifierSet(Hand));
 
 	// Restore collision and scale for the item mesh
-	AItemActor* Item = GetHeldItem(Hand);
+	AItemActor* Item = State.HeldItem;
 
 	if (Item)
 	{
@@ -541,6 +710,10 @@ void UHeldItemsComponent::DetachItemFromControl(EHand Hand)
 			ItemMesh->SetCollisionResponseToChannel(COLLISION_PLAYER, ECollisionResponse::ECR_Block);
 		}
 	}
+
+	State.LastItemVelocity = FVector::ZeroVector;
+	State.bProceduralOrientActive = false;
+	State.OrientEdgeSign = 1;
 }
 
 void UHeldItemsComponent::PreventItemStuck(EHand Hand)
@@ -561,10 +734,10 @@ void UHeldItemsComponent::PreventItemStuck(EHand Hand)
 	const float Distance = FVector::Dist(HandBoneLocation, GripLocation);
 
 	// Hysteresis to prevent flickering - TODO: tune later
-	const float EnterUnsafeDistance = 55.0f;
+	const float EnterUnsafeDistance = 70.0f;
 	const float ExitUnsafeDistance = 40.0f;
 
-	bool& bItemStuck = (Hand == EHand::Left) ? bLeftItemStuck : bRightItemStuck;
+	bool& bItemStuck = GetHandState(Hand).bItemStuck;
 
 	if (Distance > EnterUnsafeDistance && !bItemStuck)
 	{
@@ -585,6 +758,283 @@ void UHeldItemsComponent::PreventItemStuck(EHand Hand)
 		//Mesh->SetCollisionResponseToChannel(COLLISION_CREATURE, ECR_Block);
 		Mesh->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
 		Mesh->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
+	}
+}
+
+void UHeldItemsComponent::ApplyControlStrengths(EHand Hand, float AngularMultiplier, float LinearMultiplier)
+{
+	if (Hand == EHand::None || !PhysicsControl) return;
+
+	const FHandState& State = GetHandState(Hand);
+	if (State.ActiveControl.IsNone()) return;
+
+	const float DampingAngular = 1.3f + 0.3f * (State.MassScale - 1.0f);
+	const float DampingLinear  = 1.4f + 0.3f * (State.MassScale - 1.0f);
+
+	PhysicsControl->SetControlAngularData(
+		State.ActiveControl,
+		AngularMultiplier * State.MassScale,
+		DampingAngular,
+		0.f,
+		0.f,
+		true,
+		true,
+		false);
+	PhysicsControl->SetControlLinearData(
+		State.ActiveControl,
+		LinearMultiplier * State.MassScale,
+		DampingLinear,
+		0.f,
+		0.f,
+		true,
+		true,
+		false);
+}
+
+void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTime)
+{
+	if (Hand == EHand::None || !PhysicsControl) return;
+
+	FHandState& State = GetHandState(Hand);
+	if (State.ActiveControl.IsNone() || !State.HeldItem) return;
+	if (GetIsUnarmed(Hand)) return;
+
+	// Edged tools only — Pierce / None / Blunt skip procedural orient (damage still from primitives).
+	const UItemInstance* Instance = State.HeldItem->GetItemInstance();
+	const UEquippableItemFragment* EquipFrag =
+		Instance ? Instance->FindFragment<UEquippableItemFragment>() : nullptr;
+	const bool bEdged = EquipFrag
+		&& (EquipFrag->StrikeMode == EItemStrikeMode::SingleEdged
+			|| EquipFrag->StrikeMode == EItemStrikeMode::DoubleEdged);
+
+	// Relative velocity gates on/off. Orientation drive uses look delta.
+	FVector RelativeVel = State.LastItemVelocity;
+	if (const AActor* OwnerActor = GetOwner())
+	{
+		RelativeVel -= OwnerActor->GetVelocity();
+	}
+
+	const bool bShouldOrient = bEdged
+		&& State.bExtended
+		&& RelativeVel.Size() >= GMinItemSpeed;
+
+	// D: only clear target + restore skeletal on the transition off
+	if (!bShouldOrient)
+	{
+		if (State.bProceduralOrientActive)
+		{
+			State.bProceduralOrientActive = false;
+			State.OrientEdgeSign = 1;
+			PhysicsControl->SetControlUseSkeletalAnimation(State.ActiveControl, true, 1.f);
+			ApplyControlStrengths(Hand, GOrientStrengthBaseline, GOrientLinearStrengthBaseline);
+			PhysicsControl->SetControlTargetOrientation(
+				State.ActiveControl,
+				FRotator::ZeroRotator,
+				0.f,
+				true,
+				true,
+				true,
+				false);
+		}
+		return;
+	}
+
+	// A: disable skeletal contribution while procedural is active
+	if (!State.bProceduralOrientActive)
+	{
+		State.bProceduralOrientActive = true;
+		PhysicsControl->SetControlUseSkeletalAnimation(State.ActiveControl, false, 0.f);
+	}
+
+	// Strength follows camera/look rate, not leftover item speed.
+	// No look this frame → baseline so the item keeps momentum instead of hard-stopping.
+	if (LookSpeed < GMinLookSpeed)
+	{
+		ApplyControlStrengths(Hand, GOrientStrengthBaseline, GOrientLinearStrengthBaseline);
+		return;
+	}
+
+	{
+		const float LinearT = FMath::Clamp(LookSpeed / FMath::Max(GOrientStrengthFullLookSpeed, 1.f), 0.f, 1.f);
+		const float T = FMath::Pow(LinearT, GOrientStrengthCurveExp);
+		const float AngMul = FMath::Lerp(GOrientStrengthBaseline, GOrientStrengthMax, T);
+		const float LinMul = FMath::Lerp(GOrientLinearStrengthBaseline, GOrientLinearStrengthMax, T);
+		ApplyControlStrengths(Hand, AngMul, LinMul);
+	}
+
+	UStaticMeshComponent* Mesh = State.HeldItem->GetItemPrimaryMesh();
+	if (!Mesh) return;
+
+	// Camera basis from owning pawn's control rotation (screen right / up)
+	FVector CamRight = FVector::RightVector;
+	FVector CamUp = FVector::UpVector;
+	if (const APawn* Pawn = Cast<APawn>(GetOwner()))
+	{
+		if (const APlayerController* PC = Cast<APlayerController>(Pawn->GetController()))
+		{
+			FVector CamForward;
+			FRotationMatrix(PC->GetControlRotation()).GetScaledAxes(CamForward, CamRight, CamUp);
+		}
+	}
+
+	const FVector Intent = (CamRight * LookDelta.X + CamUp * LookDelta.Y).GetSafeNormal();
+	if (Intent.IsNearlyZero()) return;
+
+	const FTransform MeshXform = Mesh->GetComponentTransform();
+	const FTransform BoneXform = GetWeaponBoneTransform(Hand);
+	const FVector BoneWorldZ = BoneXform.GetUnitAxis(EAxis::Z);
+
+	// Neutral preferred for mesh +Y = projected WeaponBone +Y (base rotation around Z).
+	FVector NeutralY = BoneXform.GetUnitAxis(EAxis::Y);
+	NeutralY = NeutralY - FVector::DotProduct(NeutralY, BoneWorldZ) * BoneWorldZ;
+	if (NeutralY.SizeSquared() < KINDA_SMALL_NUMBER) return;
+	NeutralY.Normalize();
+
+	// Project screen intent into the twist plane.
+	FVector ProjIntent = Intent - FVector::DotProduct(Intent, BoneWorldZ) * BoneWorldZ;
+	if (ProjIntent.SizeSquared() < KINDA_SMALL_NUMBER) return;
+	ProjIntent.Normalize();
+
+	// Signed angle (degrees) from From → To around BoneWorldZ (positive = right-hand rule).
+	// Playtest: positive maps to CCW, negative maps to CW from the player's view.
+	auto SignedAngleDeg = [&](const FVector& From, const FVector& To) -> float
+	{
+		const float Dot = FVector::DotProduct(From, To);
+		const float CrossZ = FVector::DotProduct(FVector::CrossProduct(From, To), BoneWorldZ);
+		return FMath::RadiansToDegrees(FMath::Atan2(CrossZ, Dot));
+	};
+
+	// Choose preferred edge (±Y) with wrist limits + hysteresis.
+	// Target is never allowed outside the asymmetric legal band.
+	// Right hand (after playtest): negative = CW, positive = CCW.
+	// Left hand is mirrored → opposite mapping so the feel matches.
+	const float LimitPos = (Hand == EHand::Right) ? GWristLimitCCWDeg : GWristLimitCWDeg;
+	const float LimitNeg = (Hand == EHand::Right) ? GWristLimitCWDeg  : GWristLimitCCWDeg;
+
+	const bool bSingle = (EquipFrag->StrikeMode == EItemStrikeMode::SingleEdged);
+	const int8 PrevSign = State.OrientEdgeSign;
+
+	const float TwistPlus  = SignedAngleDeg( NeutralY, ProjIntent);
+	const float TwistMinus = SignedAngleDeg(-NeutralY, ProjIntent);
+
+	auto IsLegal = [&](float TwistDeg)
+	{
+		return TwistDeg >= -LimitNeg && TwistDeg <= LimitPos;
+	};
+	auto IsLegalWithHysteresis = [&](float TwistDeg)
+	{
+		return TwistDeg >= -(LimitNeg + GWristHysteresisDeg)
+			&& TwistDeg <= (LimitPos + GWristHysteresisDeg);
+	};
+
+	const bool bPlusLegal = IsLegal(TwistPlus);
+	const bool bMinusLegal = IsLegal(TwistMinus);
+
+	int8 BestSign = PrevSign;
+	if (bSingle)
+	{
+		// Stay on +Y until past the limit by hysteresis; return to +Y as soon as it is strictly legal.
+		if (PrevSign == 1)
+		{
+			BestSign = IsLegalWithHysteresis(TwistPlus) ? 1 : -1;
+		}
+		else
+		{
+			BestSign = bPlusLegal ? 1 : -1;
+		}
+	}
+	else if (PrevSign == 1 && (IsLegalWithHysteresis(TwistPlus) || !bMinusLegal))
+	{
+		BestSign = 1;
+	}
+	else if (PrevSign == -1 && (IsLegalWithHysteresis(TwistMinus) || !bPlusLegal))
+	{
+		BestSign = -1;
+	}
+	else
+	{
+		BestSign = (FMath::Abs(TwistMinus) < FMath::Abs(TwistPlus)) ? -1 : 1;
+	}
+
+	State.OrientEdgeSign = BestSign;
+
+	// Scalar twist relative to the chosen edge's neutral — always stays inside the legal band.
+	const FVector ChosenNeutral = NeutralY * float(BestSign);
+	float DesiredTwistDeg = SignedAngleDeg(ChosenNeutral, ProjIntent);
+	DesiredTwistDeg = FMath::Clamp(DesiredTwistDeg, -LimitNeg, LimitPos);
+
+	// Current twist from the live mesh preferred axis (projected).
+	const FVector CurrentWorldAxis =
+		MeshXform.TransformVectorNoScale(FVector::YAxisVector * float(BestSign)).GetSafeNormal();
+	FVector ProjAxis = CurrentWorldAxis - FVector::DotProduct(CurrentWorldAxis, BoneWorldZ) * BoneWorldZ;
+	float CurrentTwistDeg = 0.f;
+	if (ProjAxis.SizeSquared() > KINDA_SMALL_NUMBER)
+	{
+		ProjAxis.Normalize();
+		CurrentTwistDeg = SignedAngleDeg(ChosenNeutral, ProjAxis);
+	}
+	// If the mesh is still outside the legal band (lagging through a flip), pull the target to the edge.
+	CurrentTwistDeg = FMath::Clamp(CurrentTwistDeg, -LimitNeg, LimitPos);
+
+	// 1D rate-limit within the band only — no absolute-plane path that can cross the forbidden zone.
+	const float MaxDegPerSec = 3600.f;
+	const float MaxStepDeg = MaxDegPerSec * DeltaTime;
+	const float StepTwistDeg = FMath::Clamp(DesiredTwistDeg - CurrentTwistDeg, -MaxStepDeg, MaxStepDeg);
+	const float FinalTwistDeg = CurrentTwistDeg + StepTwistDeg;
+
+	const FVector SteppedPreferred =
+		FQuat(BoneWorldZ, FMath::DegreesToRadians(FinalTwistDeg)).RotateVector(ChosenNeutral).GetSafeNormal();
+
+	// MakeFromYZ aligns mesh +Y; if we are driving with −Y, feed the opposite so mesh −Y lands on SteppedPreferred.
+	FVector OrientY = SteppedPreferred;
+	if (BestSign < 0)
+	{
+		OrientY = -SteppedPreferred;
+	}
+
+	const FQuat DesiredWorldRot = FRotationMatrix::MakeFromYZ(OrientY, BoneWorldZ).ToQuat();
+	const FQuat ParentWorldRot = BoneXform.GetRotation();
+	const FQuat RelativeQuat = ParentWorldRot.Inverse() * DesiredWorldRot;
+	const FRotator RelativeRot = RelativeQuat.Rotator();
+
+	PhysicsControl->SetControlTargetOrientation(
+		State.ActiveControl,
+		RelativeRot,
+		0.f,
+		true,
+		true,
+		true,
+		false);
+
+	// Debug: RGB at grip/control point — blue (Z) should stay locked to WeaponBone Z
+	// + wrist-limit arrows: Neutral (green), CW limit (cyan), CCW limit (yellow)
+	if (GbDebugDraw)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			const FVector ControlPointLocal =
+				GetRelativeTransformBetweenWeaponAndHandBones(Hand).GetLocation();
+			const FVector ControlPointWorld = BoneXform.TransformPosition(ControlPointLocal);
+			DrawDebugCoordinateSystem(World, ControlPointWorld, DesiredWorldRot.Rotator(),
+				18.f, false, 0.f, SDPG_Foreground, 1.5f);
+
+			const float ArrowLen = 28.f;
+			const float ArrowThickness = 1.2f;
+			// CW / CCW directions use the same per-hand limits as the clamp.
+			const FVector CWDir = FQuat(BoneWorldZ, FMath::DegreesToRadians(
+				(Hand == EHand::Right) ? -GWristLimitCWDeg : GWristLimitCWDeg))
+				.RotateVector(NeutralY);
+			const FVector CCWDir = FQuat(BoneWorldZ, FMath::DegreesToRadians(
+				(Hand == EHand::Right) ? GWristLimitCCWDeg : -GWristLimitCCWDeg))
+				.RotateVector(NeutralY);
+
+			DrawDebugDirectionalArrow(World, ControlPointWorld, ControlPointWorld + NeutralY * ArrowLen,
+				8.f, FColor::Green, false, 0.f, SDPG_Foreground, ArrowThickness);
+			DrawDebugDirectionalArrow(World, ControlPointWorld, ControlPointWorld + CWDir * ArrowLen,
+				8.f, FColor::Cyan, false, 0.f, SDPG_Foreground, ArrowThickness);
+			DrawDebugDirectionalArrow(World, ControlPointWorld, ControlPointWorld + CCWDir * ArrowLen,
+				8.f, FColor::Yellow, false, 0.f, SDPG_Foreground, ArrowThickness);
+		}
 	}
 }
 
@@ -711,7 +1161,7 @@ FPendingPickupData& UHeldItemsComponent::GetPendingPickup(EHand Hand)
 		return Empty;
 	}
 
-	return (Hand == EHand::Left) ? PendingPickupLeft : PendingPickupRight;
+	return GetHandState(Hand).PendingPickup;
 }
 
 #pragma endregion

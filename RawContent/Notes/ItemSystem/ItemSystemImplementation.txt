@@ -1,5 +1,5 @@
 **Full Description of the Intended Item System**  
-*(Updated 2026-08-20 – Held Stacks + Stab/Extend activation design locked; fragment naming convention remains <Capability>ItemFragment)*
+*(Updated 2026-08-26 – Procedural swing orientation + incidence live; SetExtended live; Stab impulse still TODO; part durability / break results remain designed-not-implemented)*
 
 ### 1. High-Level Goals
 - Fully data-driven item definitions using Primary Data Assets + Fragments.
@@ -80,8 +80,8 @@ enum class EHand : uint8
 ### 3. Equippable System & Collision (Finalized 2026-08-15)
 
 **UEquippableItemFragment**  
-Currently minimal (`bTwoHanded`).  
-In `OnItemSpawned` it applies the specialized equippable response (see below).
+Holds `bTwoHanded`, `StrikeMode` (`EItemStrikeMode`), and Neutral/Extended pose soft refs.  
+In `OnItemSpawned` it applies `TRACE_EQUIPPABLE = Block` on Primary and Secondary (if present).
 
 **Naming convention (locked 2026-08-19)**  
 Concrete Item fragments use the form `<Capability>ItemFragment` (e.g. `UEquippableItemFragment`, `UDurabilityItemFragment`).  
@@ -255,12 +255,13 @@ Hand-held stacks are a lightweight, same-type-only special case managed entirely
 
 Activation (LMB/RMB without Q-mode) for supported items switches the hand between Neutral and Extended poses. The poses themselves are already authored as soft object references on `UEquippableItemFragment` (`NeutralPose` / `ExtendedPose`). Unarmed uses the same path.
 
-**Call site**
-- Input calls a single function on `UHeldItemsComponent` (preferred name: `SetExtended(EHand Hand, bool bExtended)` or the more semantic `OnExtended` / `OnRetracted` pair).
-- The component:
-  1. Updates the `UFPArmsAnimInstance` extended state flags and pushes the correct pose (Neutral ↔ Extended). This is the visual “punch / thrust” transfer (currently 2-frame poses).
-  2. When transitioning *to* Extended, looks up a `UStabItemFragment` on the currently held item’s Definition.
-  3. If the fragment exists, applies a linear impulse to the item’s PrimaryMesh.
+**Call site (partially live)**
+- Player BP currently calls `SetExtended(EHand Hand, bool bExtended)` on `UHeldItemsComponent` alongside the AnimBP extend bool.
+- `SetExtended` only stores `FHandState.bExtended`. That flag gates collision damage and procedural orientation.
+- Still TODO when transitioning *to* Extended:
+  1. Optionally push Neutral ↔ Extended from C++ instead of BP (poses already live on the fragment).
+  2. Look up a `UStabItemFragment` on the held item’s Definition.
+  3. If the fragment exists, apply a linear impulse to the item’s PrimaryMesh.
 
 **UStabItemFragment** (pure data, follows `<Capability>ItemFragment` naming)
 - `float ImpulseStrength` — primary tunable value. Applied as a world-space linear impulse (direction starts as camera / look forward; can later gain a bias toward item-local forward).
@@ -272,10 +273,30 @@ Current control strengths are intentionally soft (Linear ~3, Angular ~5). A shor
 
 **Damage remains 100% collision-driven**
 All damage (Unarmed punch, spear tip, thrown rock, arrow, dropped item, etc.) uses the single shared path:
-- Collision occurs
-- Named primitive (`Blunt`, `Point`, `Sharp`, `Head`, …)
-- Relative velocity + incidence angle (and any per-name falloff)
-- Physical Material for impact sound / VFX
+- Collision occurs on a held, extended item
+- Named primitive (`Blunt`, `Point`, `Sharp`, `Head`, …) → candidate type
+- World mesh speed ≥ `GMinItemSpeed` and impulse ≥ `GMinImpulse`
+- Incidence can demote Slash/Pierce → Blunt (`EItemStrikeMode` + cones in `WoodcraftTypes.h`)
+- Amount from impulse; Physical Material later for impact sound / VFX
+
+### 9.1 Collision Damage, Incidence & Procedural Orientation (Live 2026-08-26)
+
+**Incidence (AItemActor::OnItemMeshHit)**
+- Candidate type from named simple-collision primitive (closest Box/Sphere/Sphyl to ImpactPoint).
+- Strike axes always from Primary (handle), not the Secondary head — constraint flex under impact would otherwise skew the test.
+- Incoming dir = `FHandState.LastItemVelocity` → live velocity → `-NormalImpulse`.
+- Slash: face rejection vs Primary X + along-edge half-cone around +Y (Single) or ±Y (Double).
+- Pierce: cone around Primary +Z. `StrikeMode == None` never keeps Slash/Pierce.
+
+**Procedural orientation (UHeldItemsComponent::UpdateProceduralOrientation)**
+- Edged tools only (`SingleEdged` / `DoubleEdged`). Pierce / None skip.
+- Gate: hand extended AND owner-relative primary speed ≥ `GMinItemSpeed`.
+- Intent: `SetLookDelta` (Player BP each tick) → camera right/up → projected onto WeaponBone Z plane.
+- Writes only `SetControlTargetOrientation` on the existing Physics Control. Parent WeaponBone still carries position. Skeletal-anim contribution is disabled while active and restored on the falling edge.
+- Strength (angular + linear) scales with look speed × `FHandState.MassScale`. Constants live only in `WoodcraftTypes.h`.
+- Wrist: asymmetric CW/CCW limits around projected WeaponBone +Y. Right vs left sign mapping so both hands feel the same. 1D twist is rate-limited and never leaves the legal band.
+- Preferred edge (`OrientEdgeSign`) flips with `GWristHysteresisDeg`. SingleEdged stays on +Y until forced; DoubleEdged stays on the current sign while it remains legal.
+- Arm follow is Control Rig only (pole lerp toward grip). Hold pose does not twist with the item; wrist pinch on extreme side swings is accepted.
 
 No activation flag or special-case damage path is required. Higher velocity from the impulse naturally increases impact severity.
 
@@ -285,7 +306,98 @@ No activation flag or special-case damage path is required. Higher velocity from
 
 Future polish (not required for first version): direction bias enum, impulse application point (COM vs tip socket), temporary Physics Control strength modulation during the activation window, stamina cost.
 
-### 10. Current Status (2026-08-20)
+### 10. Part Durability & Tool Break (Design Locked 2026-08-25)
+
+Tools with a Secondary mesh (handle + head) track durability independently for each part. Simple items continue to use the single `CurrentHealth` path.
+
+**Runtime state on `UItemInstance`**
+- `CurrentHealth` — Primary / handle durability (existing field).
+- `CurrentHeadHealth` / `MaxHeadHealth` — Secondary / head durability.  
+  `CurrentHeadHealth = -1` means the item has no secondary part (or the head has already been removed).
+
+**Seeding at craft / assembly time**  
+When a composite tool is created the crafting system identifies the two source Instances by role (Primary/handle and Secondary/head) and copies their remaining durability values into the new Instance. Max values are taken from the sources (or a fraction of them). Non-composite items ignore the head fields.
+
+**Break definition lives on `UDurabilityItemFragment`**  
+Any item that has durability can break. The fragment now also carries the replacement data and a sharpen flag:
+
+```cpp
+UENUM()
+enum class EBreakPartBehavior : uint8
+{
+	KeepHolding,      // new item stays in the same hand
+	DetachAndSpawn,   // new item(s) appear in world with velocity
+	Destroy           // nothing left of this part
+};
+
+USTRUCT()
+struct FToolPartBreakResult
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditDefaultsOnly)
+	TSoftObjectPtr<UItemDefinition> ItemDefinition;
+
+	UPROPERTY(EditDefaultsOnly)
+	EBreakPartBehavior Behavior = EBreakPartBehavior::DetachAndSpawn;
+
+	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "1"))
+	int32 Count = 1;
+
+	/** If true, the new Instance receives the remaining durability of the broken part.
+	 *  Only set true on the main remaining/broken piece (e.g. Broken Handle or Broken Head).
+	 *  Extra scraps / kindling leave this false and receive full durability from their own Definition. */
+	UPROPERTY(EditDefaultsOnly)
+	bool bTransferDurability = false;
+};
+
+// On UDurabilityItemFragment
+/** When true the 25 % Max-Head scrap threshold applies (sharpenable tools).
+ *  When false the part simply breaks as soon as its Current reaches 0 (ignore Max). */
+UPROPERTY(EditDefaultsOnly, Category = "Durability")
+bool bCanBeSharpened = false;
+
+UPROPERTY(EditDefaultsOnly, Category = "Break")
+TArray<FToolPartBreakResult> PrimaryBreakResults;   // handle / Primary breaks
+
+UPROPERTY(EditDefaultsOnly, Category = "Break")
+TArray<FToolPartBreakResult> SecondaryBreakResults; // head / Secondary breaks
+```
+
+**Break execution**  
+When a part’s Current durability reaches ≤ 0 (and, for the head, the Max has also fallen to the scrap threshold — see below):
+
+1. Cache hand, remaining durability of the surviving part, Secondary mesh world transform + linear/angular velocity, and any other needed state.
+2. Clear the hand and destroy the old composite Instance (and its Actor if still present).
+3. Iterate the relevant break-result array:
+   - Create a new Instance from each `ItemDefinition` via the normal factory path.
+   - If `bTransferDurability` is true, overwrite `CurrentHealth` (or head values) with the cached remaining value.
+   - If Behavior == KeepHolding, equip the new Actor into the same hand.
+   - If Behavior == DetachAndSpawn, spawn the Actor in the world at the cached transform with the cached velocity so it flies off naturally.
+4. The old tool is fully gone; only the new ordinary Instances remain.
+
+Example (copper hatchet):
+- SecondaryBreakResults → one entry: CopperScrap, DetachAndSpawn, Count=1, bTransferDurability=false.
+- PrimaryBreakResults → BrokenHandle (KeepHolding, bTransferDurability=true) + 2–3 kindling (DetachAndSpawn, bTransferDurability=false).
+
+Broken Handle and scrap items are ordinary Definitions that use the normal single-durability path, FuelItemFragment, etc.
+
+**Sharpening interaction points**  
+Sharpening is implemented as crafting recipes (see CraftingSystem). A recipe restores some `CurrentHeadHealth` and permanently lowers `MaxHeadHealth` by an amount authored on that recipe (crude stone = higher loss, grindstone = lower loss).  
+
+Visual and mechanical dulling are driven by the `CurrentHeadHealth / MaxHeadHealth` ratio (shape key or material parameter, damage multiplier, incidence bias toward Blunt).  
+
+**Scrap threshold (global starting constant)**  
+Only checked when `bCanBeSharpened == true` on the Durability fragment.  
+A head is treated as final scrap when `CurrentHeadHealth ≤ 0` **and** `MaxHeadHealth ≤ 0.25 × OriginalMaxHeadHealth` (the Max that was seeded at craft time). 25 % is the initial hard cutoff; it can later be moved to a CVar or per-fragment value if needed.
+
+When `bCanBeSharpened == false` the Max check is ignored and the part simply breaks as soon as its Current reaches 0.
+
+Until the relevant break condition is met the head stays attached and simply becomes progressively worse (when sharpenable).
+
+---
+
+### 11. Current Status (2026-08-26)
 
 **Working / Implemented**
 - `UItemFactorySubsystem` (World Subsystem) with the three creation methods
@@ -302,19 +414,23 @@ Future polish (not required for first version): direction bias enum, impulse app
 - Pickup and drop fully functional end-to-end (including left-hand mirroring)
 - Held Stacks design locked
 - EquippableItemFragment already carries NeutralPose / ExtendedPose soft refs
+- Collision damage + incidence + procedural swing orientation (live)
+- `SetExtended` / `GetIsExtended` live (BP still owns the anim extend bool)
+- EquippableItemFragment applies `TRACE_EQUIPPABLE` on Primary and Secondary
 
 **Designed (not yet implemented)**
-- Stab / Extend activation path (`UStabItemFragment` + `SetExtended` / `OnExtended` on `UHeldItemsComponent`)
-- Pure collision-driven damage (primitive name + velocity + angle) — confirmed as the single path for punches, stabs, throws, projectiles
+- `UStabItemFragment` impulse on extend
+- Part durability + tool break results on `UDurabilityItemFragment` (this section)
+- Sharpening as crafting recipes (see CraftingSystem stub)
 
 **In progress / Next**
 1. Animation hooks between `UHeldItemsComponent` and AnimBP (hold poses / item-specific anims based on held items).
-2. 12-frame reach montage + AnimNotify finalization (replace immediate attach) — largely complete; polish remains.
+2. 12-frame reach montage + AnimNotify finalization — largely complete; polish remains.
 3. Dual item highlight (nearby gray + targeted stronger) driven by PickUpMode / FindLookedAtItem.
 4. Move input binding + Q-mode / PickUpMode state into C++.
-5. Basic Extend (Neutral ↔ Extended) + `UStabItemFragment` impulse on extend.
-6. Later: swinging, inventory/storage (Actor destroy/recreate from Instance), two-handed rules, full impact/damage system, mass-based Physics Control strength, etc.
+5. `UStabItemFragment` impulse on extend.
+6. Later: inventory/storage (Actor destroy/recreate from Instance), two-handed rules, impact audio/VFX, part durability runtime, etc.
 
 ---
 
-This document reflects the design state as of 2026-08-20. Core pickup/drop, collision hybrid, Unarmed, Held Stacks, and the Stab/Extend activation design are locked. Implementation of the Stab fragment and `SetExtended` path is next when activation work begins.
+This document reflects the design state as of 2026-08-26. Core pickup/drop, collision hybrid (Primary + Secondary `TRACE_EQUIPPABLE`), Unarmed, Held Stacks, `SetExtended`, collision damage/incidence, and procedural swing orientation are live. Stab impulse, part-durability runtime, and sharpening remain future work.

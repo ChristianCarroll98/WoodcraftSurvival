@@ -4,6 +4,7 @@
 #include "Harvestables/HarvestableDefinition.h"
 #include "Harvestables/HarvestableInstance.h"
 #include "Harvestables/Fragments/HarvestableFragment.h"
+#include "Harvestables/Fragments/HealthHarvestableFragment.h"
 #include "Harvestables/Fragments/YieldHarvestableFragment.h"
 #include "Harvestables/HarvestableFactorySubsystem.h"
 #include "Items/ItemFactorySubsystem.h"
@@ -125,7 +126,10 @@ void AHarvestableActor::ApplyDamage(const FDamageInfo& DamageInfo)
 
 	if (!Instance) return; // promote failed (no Definition or no World)
 
-	Instance->CurrentHealth -= DamageInfo.Amount;
+	const float FinalAmount = DamageInfo.Amount * Instance->GetDamageMultiplier(DamageInfo.DamageType);
+	if (FinalAmount <= 0.f) return;
+
+	Instance->CurrentHealth -= FinalAmount;
 
 	if (GEngine)
 	{
@@ -134,7 +138,8 @@ void AHarvestableActor::ApplyDamage(const FDamageInfo& DamageInfo)
 			-1,
 			3.0f,
 			FColor::Orange,
-			FString::Printf(TEXT("%s health: %.1f"), *GetNameSafe(this), Instance->CurrentHealth)
+			FString::Printf(TEXT("%s health: %.1f (raw %.1f → final %.1f)"),
+				*GetNameSafe(this), Instance->CurrentHealth, DamageInfo.Amount, FinalAmount)
 		);
 	}
 

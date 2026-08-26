@@ -226,3 +226,22 @@ This document is the authoritative implementation plan for the Harvestable syste
 It deliberately stays parallel to `ItemSystemImplementation.txt`.  
 Core lifetime, lazy promotion, Factory, collision hybrid, and `IDamageable` are locked.  
 First concrete target is a damageable tree that produces sticks + a stump.
+
+### 11. Resistance / Damage Modifiers (locked 2026-08-22)
+
+Shape (same pattern intended for Creatures and Player later):
+
+- `TMap<TSubclassOf<UDamageType>, int32> DamageModifiers`
+  - Positive = more resistant, Negative = more weak
+  - Missing or 0 → multiplier 1.0
+  - Final multiplier = `FMath::Pow(0.5f, Modifier)`
+    (+1 → ×0.5, +2 → ×0.25, -1 → ×2, etc.)
+
+- `TArray` (or `TSet`) `<TSubclassOf<UDamageType>> DamageImmunities`
+  - Completely ignore these types (multiplier 0)
+
+Lives on `HealthHarvestableFragment` for now (or a thin `ResistanceHarvestableFragment` if it grows).
+Status effects later simply ++ / -- the integer counts.
+Helpers will add the type if missing.
+
+For the immediate Tree MVP: set Blunt to a high positive modifier (or put it in Immunities) so sticks/unarmed do nothing meaningful; only Slash damages trees.

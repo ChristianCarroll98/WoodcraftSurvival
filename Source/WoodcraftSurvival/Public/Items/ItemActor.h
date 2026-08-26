@@ -85,10 +85,6 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Item|PrimaryMesh")
 	TObjectPtr<UStaticMeshComponent> SecondaryMeshComponent;
 
-	/** Minimum relative speed (cm/s) required for a collision to deal damage. Tunable later. */
-	UPROPERTY(EditDefaultsOnly, Category = "Item|Damage")
-	float MinDamageSpeed = 50.f;
-
 
 	// ---------- Collision Damage ----------
 
@@ -99,5 +95,14 @@ protected:
 
 	/** The time that this Item last damaged something */
 	float LastDamageTime = -1000.f;
+
+	/**
+	 * Resolves a collision primitive name (author-set on the Static Mesh) to a DamageType class.
+	 * Multiple descriptive names can map to the same type:
+	 *   Slash / Sharp / Blade → UDamageType_Slash
+	 *   Pierce / Point        → UDamageType_Pierce
+	 *   everything else       → UDamageType_Blunt (incl. Blunt, Head, Handle, empty)
+	 */
+	static TSubclassOf<UDamageType> ResolveDamageTypeFromShapeName(FName ShapeName);
 
 };
