@@ -22,7 +22,7 @@ const float GMinImpulse = 100.f;
 /** Minimum linear speed (cm/s) of the item mesh required to deal damage and 
  *  before procedural swing orientation activates. Relative to owner velocity.
  *  Prevents continuous contact while pressed into a surface from repeatedly damaging. */
-const float GMinItemSpeed = 0.f;
+const float GMinItemSpeed = 80.f;
 
 /** Accepted half-angle (degrees) from the blade plane for Slash.
  *  Velocity farther off the plane than this (more face-on) is forced to Blunt. */

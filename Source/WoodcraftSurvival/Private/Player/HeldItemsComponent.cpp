@@ -853,8 +853,9 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 	const float LimitNeg = (Hand == EHand::Right) ? GWristLimitCWDeg  : GWristLimitCCWDeg;
 
 	const bool bSingle = (EquipFrag->StrikeMode == EItemStrikeMode::SingleEdged);
+	const int8 PrevSign = State.OrientEdgeSign;
 	float BestCost = 1.e9f;
-	int8 BestSign = State.OrientEdgeSign;
+	int8 BestSign = PrevSign;
 
 	for (int8 Sign : {int8(1), int8(-1)})
 	{
@@ -864,7 +865,7 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 
 		float Cost = FMath::Abs(TwistDeg);
 		if (!bLegal) Cost += 1000.f;
-		if (Sign != State.OrientEdgeSign) Cost += GWristHysteresisDeg;
+		if (Sign != PrevSign) Cost += GWristHysteresisDeg;
 
 		// SingleEdged: strong bias to stay on +Y; only leave when +Y would be illegal.
 		if (bSingle && Sign == -1)
@@ -881,37 +882,32 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 
 	State.OrientEdgeSign = BestSign;
 
-	// Clamped twist for the chosen side — target always legal.
+	// Scalar twist relative to the chosen edge's neutral — always stays inside the legal band.
 	const FVector ChosenNeutral = NeutralY * float(BestSign);
-	float FinalTwistDeg = SignedAngleDeg(ChosenNeutral, ProjIntent);
-	FinalTwistDeg = FMath::Clamp(FinalTwistDeg, -LimitNeg, LimitPos);
+	float DesiredTwistDeg = SignedAngleDeg(ChosenNeutral, ProjIntent);
+	DesiredTwistDeg = FMath::Clamp(DesiredTwistDeg, -LimitNeg, LimitPos);
 
-	const FVector DesiredPreferred =
-		FQuat(BoneWorldZ, FMath::DegreesToRadians(FinalTwistDeg)).RotateVector(ChosenNeutral).GetSafeNormal();
-
-	// Rate-limit from current projected preferred (for the chosen sign) toward DesiredPreferred.
+	// Current twist from the live mesh preferred axis (projected).
 	const FVector CurrentWorldAxis =
 		MeshXform.TransformVectorNoScale(FVector::YAxisVector * float(BestSign)).GetSafeNormal();
 	FVector ProjAxis = CurrentWorldAxis - FVector::DotProduct(CurrentWorldAxis, BoneWorldZ) * BoneWorldZ;
-	if (ProjAxis.SizeSquared() < KINDA_SMALL_NUMBER)
-	{
-		ProjAxis = DesiredPreferred;
-	}
-	else
+	float CurrentTwistDeg = 0.f;
+	if (ProjAxis.SizeSquared() > KINDA_SMALL_NUMBER)
 	{
 		ProjAxis.Normalize();
+		CurrentTwistDeg = SignedAngleDeg(ChosenNeutral, ProjAxis);
 	}
+	// If the mesh is still outside the legal band (lagging through a flip), pull the target to the edge.
+	CurrentTwistDeg = FMath::Clamp(CurrentTwistDeg, -LimitNeg, LimitPos);
 
-	const float Dot = FVector::DotProduct(ProjAxis, DesiredPreferred);
-	const float CrossZ = FVector::DotProduct(FVector::CrossProduct(ProjAxis, DesiredPreferred), BoneWorldZ);
-	float AngleRad = FMath::Atan2(CrossZ, Dot);
-
+	// 1D rate-limit within the band only — no absolute-plane path that can cross the forbidden zone.
 	const float MaxDegPerSec = 3600.f;
-	const float MaxStep = FMath::DegreesToRadians(MaxDegPerSec) * DeltaTime;
-	AngleRad = FMath::Clamp(AngleRad, -MaxStep, MaxStep);
+	const float MaxStepDeg = MaxDegPerSec * DeltaTime;
+	const float StepTwistDeg = FMath::Clamp(DesiredTwistDeg - CurrentTwistDeg, -MaxStepDeg, MaxStepDeg);
+	const float FinalTwistDeg = CurrentTwistDeg + StepTwistDeg;
 
-	FVector SteppedPreferred = FQuat(BoneWorldZ, AngleRad).RotateVector(ProjAxis);
-	SteppedPreferred.Normalize();
+	const FVector SteppedPreferred =
+		FQuat(BoneWorldZ, FMath::DegreesToRadians(FinalTwistDeg)).RotateVector(ChosenNeutral).GetSafeNormal();
 
 	// MakeFromYZ aligns mesh +Y; if we are driving with −Y, feed the opposite so mesh −Y lands on SteppedPreferred.
 	FVector OrientY = SteppedPreferred;
