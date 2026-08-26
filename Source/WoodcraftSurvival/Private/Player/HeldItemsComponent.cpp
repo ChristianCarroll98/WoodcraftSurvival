@@ -903,20 +903,38 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 
 	const float TwistPlus  = SignedAngleDeg( NeutralY, ProjIntent);
 	const float TwistMinus = SignedAngleDeg(-NeutralY, ProjIntent);
-	const bool bPlusLegal  = (TwistPlus  >= -LimitNeg && TwistPlus  <= LimitPos);
-	const bool bMinusLegal = (TwistMinus >= -LimitNeg && TwistMinus <= LimitPos);
+
+	auto IsLegal = [&](float TwistDeg)
+	{
+		return TwistDeg >= -LimitNeg && TwistDeg <= LimitPos;
+	};
+	auto IsLegalWithHysteresis = [&](float TwistDeg)
+	{
+		return TwistDeg >= -(LimitNeg + GWristHysteresisDeg)
+			&& TwistDeg <= (LimitPos + GWristHysteresisDeg);
+	};
+
+	const bool bPlusLegal = IsLegal(TwistPlus);
+	const bool bMinusLegal = IsLegal(TwistMinus);
 
 	int8 BestSign = PrevSign;
 	if (bSingle)
 	{
-		// Blade (+Y) unless that twist would be illegal.
-		BestSign = bPlusLegal ? 1 : -1;
+		// Stay on +Y until past the limit by hysteresis; return to +Y as soon as it is strictly legal.
+		if (PrevSign == 1)
+		{
+			BestSign = IsLegalWithHysteresis(TwistPlus) ? 1 : -1;
+		}
+		else
+		{
+			BestSign = bPlusLegal ? 1 : -1;
+		}
 	}
-	else if (PrevSign == 1 && (bPlusLegal || !bMinusLegal))
+	else if (PrevSign == 1 && (IsLegalWithHysteresis(TwistPlus) || !bMinusLegal))
 	{
 		BestSign = 1;
 	}
-	else if (PrevSign == -1 && (bMinusLegal || !bPlusLegal))
+	else if (PrevSign == -1 && (IsLegalWithHysteresis(TwistMinus) || !bPlusLegal))
 	{
 		BestSign = -1;
 	}
