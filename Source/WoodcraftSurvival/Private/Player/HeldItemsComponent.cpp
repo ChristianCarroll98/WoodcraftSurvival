@@ -124,20 +124,26 @@ EHand UHeldItemsComponent::GetIsHoldingTwoHanded() const
 	AItemActor* LeftItem = GetHeldItem(EHand::Left);
 	if (LeftItem)
 	{
-		if (const UEquippableItemFragment* LeftEquippable
-			= LeftItem->GetItemInstance()->FindFragment<UEquippableItemFragment>())
+		if (const UItemInstance* LeftInstance = LeftItem->GetItemInstance())
 		{
-			if (LeftEquippable && LeftEquippable->bTwoHanded) return EHand::Left;
+			if (const UEquippableItemFragment* LeftEquippable
+				= LeftInstance->FindFragment<UEquippableItemFragment>())
+			{
+				if (LeftEquippable->bTwoHanded) return EHand::Left;
+			}
 		}
 	}
 
 	AItemActor* RightItem = GetHeldItem(EHand::Right);
 	if (RightItem)
 	{
-		if (const UEquippableItemFragment* RightEquippable
-			= RightItem->GetItemInstance()->FindFragment<UEquippableItemFragment>())
+		if (const UItemInstance* RightInstance = RightItem->GetItemInstance())
 		{
-			if (RightEquippable && RightEquippable->bTwoHanded) return EHand::Right;
+			if (const UEquippableItemFragment* RightEquippable
+				= RightInstance->FindFragment<UEquippableItemFragment>())
+			{
+				if (RightEquippable->bTwoHanded) return EHand::Right;
+			}
 		}
 	}
 
@@ -370,7 +376,14 @@ bool UHeldItemsComponent::BeginPickupAnimation(AItemActor* Item, EHand Hand, FSt
 		return false;
 	}
 
-	const UEquippableItemFragment* EquipFrag = Item->GetItemInstance()->FindFragment<UEquippableItemFragment>();
+	const UItemInstance* Instance = Item->GetItemInstance();
+	if (!Instance)
+	{
+		OutResult += TEXT("ItemInstance invalid");
+		return false;
+	}
+
+	const UEquippableItemFragment* EquipFrag = Instance->FindFragment<UEquippableItemFragment>();
 	if (!EquipFrag)
 	{
 		OutResult += TEXT("Could not find EquippableItemFragment for Item: " + Item->GetName());
@@ -619,7 +632,7 @@ bool UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand, FStr
 	// --- Get the wrist offset from the weapon bone for the custom control point so the item bends at the wrist
 	ControlData.CustomControlPoint = GetRelativeTransformBetweenWeaponAndHandBones(Hand).GetLocation();
 
-	if (GEngine)
+	if (GbDebugPrint && GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Cyan,
 			FString::Printf(TEXT("PhysControl mass=%.2f scale=%.2f  L=%.1f A=%.1f  dampL=%.2f dampA=%.2f"),
@@ -893,7 +906,7 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 
 	// Choose preferred edge (±Y) with wrist limits + hysteresis.
 	// Target is never allowed outside the asymmetric legal band.
-	// Right hand (after playtest): negative = CW (90°), positive = CCW (135°).
+	// Right hand (after playtest): negative = CW, positive = CCW.
 	// Left hand is mirrored → opposite mapping so the feel matches.
 	const float LimitPos = (Hand == EHand::Right) ? GWristLimitCCWDeg : GWristLimitCWDeg;
 	const float LimitNeg = (Hand == EHand::Right) ? GWristLimitCWDeg  : GWristLimitCCWDeg;

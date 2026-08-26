@@ -154,7 +154,7 @@ public:
 	void CompletePickup(EHand Hand);
 
 	/** Sets whether the given hand is in the extended (ready to strike) state.
-	 *  Call from Player BP alongside the anim extend bool. Gates damage and future orientation. */
+	 *  Call from Player BP alongside the anim extend bool. Gates damage and procedural orientation. */
 	UFUNCTION(BlueprintCallable, Category = "CoreAPI")
 	void SetExtended(EHand Hand, bool bExtended);
 

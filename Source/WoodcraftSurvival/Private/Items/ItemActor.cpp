@@ -111,6 +111,7 @@ UStaticMeshComponent* AItemActor::GetItemSecondaryMesh() const
 
 FTransform AItemActor::GetSecondaryRelativeTransform() const
 {
+	if (!ItemInstance || !ItemInstance->ItemDefinition) return FTransform::Identity;
 	return ItemInstance->ItemDefinition->SecondaryRelativeTransform;
 }
 

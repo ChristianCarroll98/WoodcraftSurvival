@@ -18,21 +18,21 @@ if (GEngine) GEngine->AddOnScreenDebugMessage
 
 current issues/working task list:
 
-- Collision damage path is live (held-only, GMinImpulse, short cooldown). Stick works on TestTree.
+- Collision damage path is live (held-only, impulse + speed gates, short cooldown). Stick works on TestTree.
 - DONE: Resistance data lives on HealthHarvestableFragment (defaults) → copied to UHarvestableInstance at creation. ApplyDamage multiplies by Instance->GetDamageMultiplier. Tree data asset: put Blunt in Immunities (or high positive modifier) so sticks stop killing trees.
 - DONE: Copper Hatchet dual-mesh via fixed UPhysicsConstraintComponent (Chaos WeldTo unreliable for runtime NewObject secondaries). Both meshes simulate; constraint locks all 6 DOF + SetDisableCollision(true). Feels heavier, hits register, head stays attached.
 - DONE: DamageItemFragment is pure “enable hit events” marker. DamageType from named collision primitives (Slash/Sharp/Blade → Slash, Pierce/Point → Pierce, else Blunt). Amount from impulse only (mass already in physics). Softness multipliers later on Physical Material.
 - DONE: Named shape extraction — ResolveShapeNameFromHit uses closest Box/Sphere/Sphyl to ImpactPoint.
-- DONE: Mass-scaled Physics Control + reduced gravity via Body Modifier (GravityMultiplier 0.2 on Primary+Secondary, sets HeldItemLeft/Right). EffMass = Primary+Secondary; Scale = clamp(EffMass/0.6, 1–6); L=2.8× A=4.5× with rising damping. Modifiers destroyed on detach.
-- DONE: Damage also gated by GMinItemSpeed (80 cm/s) so continuous contact while pressed does not keep dealing damage.
-- DONE: Extended state on HeldItemsComponent (SetExtended / GetIsExtended per hand). Damage gated on extended.
-- DONE: FHandState on HeldItemsComponent (HeldItem, PendingPickup, ActiveControl, bItemStuck, bExtended, LastItemVelocity). Tick samples primary-mesh velocity for pre-bounce incidence.
-- DONE: Incidence / angle → type conversion (model B). EItemStrikeMode on EquippableItemFragment (None, SingleEdged +Y, DoubleEdged ±Y, Pierce +Z). Cones: GSlashMaxAngleDeg=35, GPierceMaxAngleDeg=55. Outside cone → force Blunt. Incoming dir = LastItemVelocity → live vel → -NormalImpulse.
-- DONE: Procedural swing orientation (screen intent). Gate: extended + relative speed ≥ 80. Drive: SetLookDelta → screen intent → bone Z. Rate-limit 3600°/s. A/D skeletal. Strength ×MassScale: ang 5→10, lin 2.5→5 (full by 300); baseline 5.5 / 2.8. Incidence cones live (FromPlane 25°, edge 75°, pierce 35°).
-- DONE: Wrist limits on procedural orient. Asymmetric (CW 90° / CCW 135°) around neutral (projected WeaponBone +Y). Per-hand sign mapping (right vs left). Target stays in legal band via 1D scalar twist rate-limit. Flip preferred edge (±Y) with hysteresis. SingleEdged prefers +Y until forced; DoubleEdged closest legal. OrientEdgeSign on FHandState. Globals for now (per-item later).
-- DONE: Arm follow in Control Rig (not C++): lerp animated pole toward Midpoint + RotateVector((0,-50,0), GripRotation); PoleShare ≈ 0.4. Wrist pinch on extreme side swings accepted (hold pose does not twist with the item).
-- Later polish: audio per resolved damage type; Valheim-style floating damage numbers (gray resist / white neutral / pale yellow weak / gray 0 immunity); optional camera-delta bias for orientation intent; tune cones/thresholds / GMinSwingOrientSpeed; expose wrist limits to data asset (esp. two-handed); optional small post-IK wrist twist if pinch bothers later.
-- Explicitly deferred: separate head/handle durability / dual Instances. Hatchet just breaks into wood + CopperScrap like any other item.
+- DONE: Mass-scaled Physics Control + reduced gravity via Body Modifier on Primary+Secondary (HeldItemLeft/Right sets). Effective mass = Primary+Secondary. Modifiers destroyed on detach. Live strength/damping constants live in WoodcraftTypes.h.
+- DONE: Damage gated by GMinItemSpeed (world speed of hitting mesh) so continuous contact while pressed does not keep dealing damage. Sprinting into a target while extended can still hit.
+- DONE: Extended state on HeldItemsComponent (SetExtended / GetIsExtended per hand). Damage + procedural orient gated on extended. Anim extend flag still driven from Player BP. Stab impulse (UStabItemFragment) still needs work.
+- DONE: FHandState on HeldItemsComponent (HeldItem, PendingPickup, ActiveControl, bItemStuck, bExtended, LastItemVelocity, bProceduralOrientActive, MassScale, OrientEdgeSign). Tick samples primary-mesh velocity for pre-bounce incidence.
+- DONE: Incidence / angle → type conversion (model B). EItemStrikeMode on EquippableItemFragment (None, SingleEdged +Y, DoubleEdged ±Y, Pierce +Z). Outside cone → force Blunt. Incoming dir = LastItemVelocity → live vel → -NormalImpulse. Cone constants live in WoodcraftTypes.h.
+- DONE: Procedural swing orientation (screen intent). Edged only. Gate: extended + owner-relative speed ≥ GMinItemSpeed. Drive: SetLookDelta → screen intent → WeaponBone Z. A/D skeletal. Strength follows look speed × MassScale. Constants live in WoodcraftTypes.h.
+- DONE: Wrist limits on procedural orient. Asymmetric CW/CCW around neutral (projected WeaponBone +Y). Per-hand sign mapping (right vs left). Target stays in legal band via 1D scalar twist rate-limit. Flip preferred edge (±Y) with hysteresis (GWristHysteresisDeg). SingleEdged prefers +Y until forced; DoubleEdged stays on current while legal. OrientEdgeSign on FHandState. Globals for now (per-item later).
+- DONE: Arm follow in Control Rig (not C++): lerp animated pole toward Midpoint + RotateVector((0,-50,0), GripRotation). Wrist pinch on extreme side swings accepted (hold pose does not twist with the item).
+- Later polish: audio per resolved damage type; Valheim-style floating damage numbers (gray resist / white neutral / pale yellow weak / gray 0 immunity); optional camera-delta bias for orientation intent; tune cones/thresholds in WoodcraftTypes.h; expose wrist limits to data asset (esp. two-handed); optional small post-IK wrist twist if pinch bothers later; UStabItemFragment impulse on extend.
+- Explicitly deferred: separate head/handle Instances at runtime. Break results on DurabilityItemFragment are designed (see ItemSystemImplementation §10) but not implemented yet.
 
 Architecture reminder:
 - Fragments = data + minimal spawn/init hooks. No runtime work in fragments.

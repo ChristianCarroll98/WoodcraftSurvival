@@ -19,8 +19,9 @@ const bool GbDebugDraw = false;
 /** Minimum impulse required for a collision to deal damage. Tunable later. */
 const float GMinImpulse = 100.f;
 
-/** Minimum linear speed (cm/s) of the item mesh required to deal damage and 
- *  before procedural swing orientation activates. Relative to owner velocity.
+/** Minimum linear speed (cm/s) of the item mesh.
+ *  Damage uses world speed of the hitting mesh (sprinting into something while extended can hit).
+ *  Procedural orientation uses owner-relative primary-mesh velocity as its on/off gate.
  *  Prevents continuous contact while pressed into a surface from repeatedly damaging. */
 const float GMinItemSpeed = 80.f;
 
@@ -59,10 +60,12 @@ const float GOrientLinearStrengthMax = 10.0f;
 /** Linear strength multiplier (× MassScale) at rest, on attach, and at the low end of the orient lerp. */
 const float GOrientLinearStrengthBaseline = 2.f;
 
-/** Max wrist twist clockwise from neutral (degrees). Positive Atan2 around WeaponBone +Z. */
+/** Max wrist twist clockwise from neutral (degrees).
+ *  From the player's view: negative Atan2 around WeaponBone +Z. */
 const float GWristLimitCWDeg = 105.f;
 
-/** Max wrist twist counter-clockwise from neutral (degrees). Negative Atan2 around WeaponBone +Z. */
+/** Max wrist twist counter-clockwise from neutral (degrees).
+ *  From the player's view: positive Atan2 around WeaponBone +Z. */
 const float GWristLimitCCWDeg = 135.f;
 
 /** Extra degrees past the relevant limit before a preferred-edge flip is allowed. */
@@ -82,7 +85,7 @@ enum class EHand : uint8
 
 /**
  * Preferred strike axis / orientation mode for equippable items.
- * Used by incidence (angle → type conversion) and later by procedural swing orientation.
+ * Used by incidence (angle → type conversion) and procedural swing orientation.
  * - None / Blunt: no dynamic rotation, Slash/Pierce candidates demoted to Blunt.
  * - SingleEdged: local +Y only.
  * - DoubleEdged: local ±Y (closer / Abs).

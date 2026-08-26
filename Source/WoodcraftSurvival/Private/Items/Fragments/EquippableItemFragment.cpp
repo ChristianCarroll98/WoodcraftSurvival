@@ -8,8 +8,13 @@ void UEquippableItemFragment::OnItemSpawned(AItemActor* ItemActor)
 {	
 	if (!ItemActor) return;
 
-	UStaticMeshComponent* Mesh = ItemActor->GetItemPrimaryMesh();
-	if (!Mesh) return;
+	if (UStaticMeshComponent* Primary = ItemActor->GetItemPrimaryMesh())
+	{
+		Primary->SetCollisionResponseToChannel(TRACE_EQUIPPABLE, ECollisionResponse::ECR_Block);
+	}
 
-	Mesh->SetCollisionResponseToChannel(TRACE_EQUIPPABLE, ECollisionResponse::ECR_Block);
+	if (UStaticMeshComponent* Secondary = ItemActor->GetItemSecondaryMesh())
+	{
+		Secondary->SetCollisionResponseToChannel(TRACE_EQUIPPABLE, ECollisionResponse::ECR_Block);
+	}
 }
