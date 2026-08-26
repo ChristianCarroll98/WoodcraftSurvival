@@ -114,6 +114,11 @@ void UHeldItemsComponent::SetLookDelta(FVector2D RawDelta)
 	LookDelta.Y = -RawDelta.Y;
 }
 
+float UHeldItemsComponent::GetLookSpeed() const
+{
+	return LookSpeed;
+}
+
 EHand UHeldItemsComponent::GetIsHoldingTwoHanded() const
 {
 	AItemActor* LeftItem = GetHeldItem(EHand::Left);
@@ -228,6 +233,8 @@ void UHeldItemsComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 	SampleVelocity(HandLeft);
 	SampleVelocity(HandRight);
 
+	LookSpeed = LookDelta.Size() / FMath::Max(DeltaTime, 0.0001f);
+
 	if (GbDebugPrint && GEngine)
 	{
 		FVector RelativeVel = HandRight.LastItemVelocity;
@@ -236,8 +243,23 @@ void UHeldItemsComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 			RelativeVel -= OwnerActor->GetVelocity();
 		}
 
+		const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+		const float SwingSpeed = RelativeVel.Size();
+		const float PeakWindow = 2.f;
+
+		if (LookSpeed >= DebugPeakLookSpeed || (Now - DebugPeakLookSpeedTime) > PeakWindow)
+		{
+			DebugPeakLookSpeed = LookSpeed;
+			DebugPeakLookSpeedTime = Now;
+		}
+		if (SwingSpeed >= DebugPeakSwingSpeed || (Now - DebugPeakSwingSpeedTime) > PeakWindow)
+		{
+			DebugPeakSwingSpeed = SwingSpeed;
+			DebugPeakSwingSpeedTime = Now;
+		}
+
 		GEngine->AddOnScreenDebugMessage(101, 1.f, FColor::Magenta,
-			FString::Printf(TEXT("R swing speed: %.1f cm/s"), RelativeVel.Size()));
+			FString::Printf(TEXT("R swing speed: %.1f  max2s: %.1f"), SwingSpeed, DebugPeakSwingSpeed));
 
 		float Mass = 0.f;
 		if (HandRight.HeldItem)
@@ -253,6 +275,9 @@ void UHeldItemsComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 		}
 		GEngine->AddOnScreenDebugMessage(102, 1.f, FColor::Orange,
 			FString::Printf(TEXT("R item mass: %.2f"), Mass));
+
+		GEngine->AddOnScreenDebugMessage(103, 1.f, FColor::Cyan,
+			FString::Printf(TEXT("Look speed: %.2f  max2s: %.2f"), LookSpeed, DebugPeakLookSpeed));
 	}
 
 	PreventItemStuck(EHand::Left);
@@ -808,19 +833,21 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 		PhysicsControl->SetControlUseSkeletalAnimation(State.ActiveControl, false, 0.f);
 	}
 
-	// Scale angular + linear strength by raw item speed
+	// Strength follows camera/look rate, not leftover item speed.
+	// No look this frame → baseline so the item keeps momentum instead of hard-stopping.
+	if (LookSpeed < GMinLookSpeed)
 	{
-		const float Speed = State.LastItemVelocity.Size();
-		const float T = FMath::Clamp(
-			(Speed - GMinItemSpeed) / FMath::Max(GOrientStrengthFullSpeed - GMinItemSpeed, 1.f),
-			0.f, 1.f);
-		const float AngMul = FMath::Lerp(GOrientStrengthMin, GOrientStrengthMax, T);
-		const float LinMul = FMath::Lerp(GOrientLinearStrengthMin, GOrientLinearStrengthMax, T);
-		ApplyControlStrengths(Hand, AngMul, LinMul);
+		ApplyControlStrengths(Hand, GOrientStrengthBaseline, GOrientLinearStrengthBaseline);
+		return;
 	}
 
-	// Need meaningful screen-space look delta this frame
-	if (LookDelta.SizeSquared() < 0.0001f) return;
+	{
+		const float LinearT = FMath::Clamp(LookSpeed / FMath::Max(GOrientStrengthFullLookSpeed, 1.f), 0.f, 1.f);
+		const float T = FMath::Pow(LinearT, GOrientStrengthCurveExp);
+		const float AngMul = FMath::Lerp(GOrientStrengthBaseline, GOrientStrengthMax, T);
+		const float LinMul = FMath::Lerp(GOrientLinearStrengthBaseline, GOrientLinearStrengthMax, T);
+		ApplyControlStrengths(Hand, AngMul, LinMul);
+	}
 
 	UStaticMeshComponent* Mesh = State.HeldItem->GetItemPrimaryMesh();
 	if (!Mesh) return;

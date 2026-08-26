@@ -24,38 +24,40 @@ const float GMinImpulse = 100.f;
  *  Prevents continuous contact while pressed into a surface from repeatedly damaging. */
 const float GMinItemSpeed = 80.f;
 
+/** Minimum look-delta rate (LookDelta.Size() / DeltaTime) to snap-orient.
+ *  Tune from the cyan “look speed” print. Damage still uses GMinItemSpeed / GMinImpulse. */
+const float GMinLookSpeed = 100.f;
+
 /** Accepted half-angle (degrees) from the blade plane for Slash.
  *  Velocity farther off the plane than this (more face-on) is forced to Blunt. */
 const float GSlashMaxAngleFromPlaneDeg = 25.f;
 
 /** Accepted half-angle (degrees) from preferred edge axis (+Y / ±Y) for Slash.
  *  Outside this → Blunt. Wide so lag / angled cuts still register. */
-const float GSlashMaxAngleDeg = 75.f;
+const float GSlashMaxAngleDeg = 85.f;
 
 /** Accepted half-angle (degrees) from tip axis (+Z) for Pierce.
  *  Outside this → Blunt. */
 const float GPierceMaxAngleDeg = 35.f;
 
-/** Angular strength multiplier (× MassScale) at low item speed while orienting. */
-const float GOrientStrengthMin = 5.0f;
+/** Angular strength multiplier (× MassScale) at high look speed while orienting. */
+const float GOrientStrengthMax = 36.0f;
 
-/** Angular strength multiplier (× MassScale) at high item speed while orienting. */
-const float GOrientStrengthMax = 10.0f;
+/** Look-delta rate (LookDelta.Size() / DeltaTime) at which orient strength reaches max.
+ *  Tune from the on-screen “look speed max2s” print. Not item cm/s. */
+const float GOrientStrengthFullLookSpeed = 240.f;
 
-/** Raw item speed (cm/s) at which orient angular strength reaches GOrientStrengthMax. */
-const float GOrientStrengthFullSpeed = 300.f;
+/** Exponent on the 0–1 look-speed factor before lerping strength. 1 = linear, 2+ = ease-in (slow start, kicks in near max). */
+const float GOrientStrengthCurveExp = 3.f;
 
-/** Baseline angular strength multiplier (× MassScale) used on attach and when orient ends. */
-const float GOrientStrengthBaseline = 5.5f;
+/** Angular strength multiplier (× MassScale) at rest, on attach, and at the low end of the orient lerp. */
+const float GOrientStrengthBaseline = 3.f;
 
-/** Linear strength multiplier (× MassScale) at low item speed while orienting. */
-const float GOrientLinearStrengthMin = 2.5f;
+/** Linear strength multiplier (× MassScale) at high look speed while orienting. */
+const float GOrientLinearStrengthMax = 10.0f;
 
-/** Linear strength multiplier (× MassScale) at high item speed while orienting. */
-const float GOrientLinearStrengthMax = 5.0f;
-
-/** Baseline linear strength multiplier (× MassScale) on attach and when orient ends. */
-const float GOrientLinearStrengthBaseline = 2.8f;
+/** Linear strength multiplier (× MassScale) at rest, on attach, and at the low end of the orient lerp. */
+const float GOrientLinearStrengthBaseline = 2.f;
 
 /** Max wrist twist clockwise from neutral (degrees). Positive Atan2 around WeaponBone +Z. */
 const float GWristLimitCWDeg = 105.f;

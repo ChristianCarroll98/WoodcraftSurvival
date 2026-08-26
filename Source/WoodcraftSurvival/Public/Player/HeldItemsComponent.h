@@ -188,6 +188,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "CoreAPI")
 	void SetLookDelta(FVector2D RawDelta);
 
+	/** Look-delta rate this frame (LookDelta.Size() / DeltaTime). Used to gate orient snap and damage. */
+	UFUNCTION(BlueprintPure, Category = "CoreAPI")
+	float GetLookSpeed() const;
+
 
 protected:
 	
@@ -299,4 +303,13 @@ private:
 	 * Screen-space swing intent for procedural orientation.
 	 */
 	FVector2D LookDelta = FVector2D::ZeroVector;
+
+	/** LookDelta.Size() / DeltaTime, updated each tick. */
+	float LookSpeed = 0.f;
+
+	/** Rolling 2s peaks for on-screen debug (look rate + right-hand relative item speed). */
+	float DebugPeakLookSpeed = 0.f;
+	float DebugPeakLookSpeedTime = 0.f;
+	float DebugPeakSwingSpeed = 0.f;
+	float DebugPeakSwingSpeedTime = 0.f;
 };
