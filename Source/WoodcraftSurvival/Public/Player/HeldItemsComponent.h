@@ -60,10 +60,17 @@ struct FHandState
 	bool bProceduralOrientActive = false;
 
 	/**
-	 * Mass scale computed at attach (clamp EffectiveMass/0.6 to 1–6).
-	 * Used to scale Physics Control strengths including velocity-based orient strength.
+	 * Angular mass scale computed at attach:
+	 * Clamp(EffectiveMass / GPhysControlMassRef, GPhysControlMassScaleMin, GPhysControlMassScaleMax).
 	 */
 	float MassScale = 1.0f;
+
+	/**
+	 * Linear mass scale computed at attach:
+	 * Clamp(EffectiveMass / GPhysControlLinearMassRef, GPhysControlLinearMassScaleMin, GPhysControlLinearMassScaleMax).
+	 * Flatter than MassScale so compact items trail without softening long tools' rotation.
+	 */
+	float MassScaleLinear = 1.0f;
 
 	/**
 	 * Preferred edge side for procedural orientation: +1 = mesh +Y, −1 = mesh −Y.
@@ -238,14 +245,19 @@ private:
 	/**
 	 * While extended and above GMinItemSpeed, drives the Physics Control angular
 	 * target so the preferred strike axis aligns with screen-space look intent (SetLookDelta).
-	 * Rotation is constrained to WeaponBone Z and rate-limited. Snaps back to skeletal when
-	 * relative speed falls under the threshold.
+	 * Rotation only — strengths live in UpdateControlStrengths.
 	 */
 	void UpdateProceduralOrientation(EHand Hand, float DeltaTime);
 
 	/**
+	 * Neutral / extended-idle / look-speed swipe strengths for this hand.
+	 * Runs for every held item (including Unarmed and StrikeMode None). Not gated on edge orient.
+	 */
+	void UpdateControlStrengths(EHand Hand);
+
+	/**
 	 * Applies mass-scaled linear + angular strengths (and the matching damping) to the
-	 * active Physics Control for this hand. Multipliers are the GOrient* values (baseline or speed-lerped).
+	 * active Physics Control for this hand. Multipliers are the GControl* values.
 	 */
 	void ApplyControlStrengths(EHand Hand, float AngularMultiplier, float LinearMultiplier);
 

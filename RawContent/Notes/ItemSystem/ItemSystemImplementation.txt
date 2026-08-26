@@ -308,12 +308,16 @@ All damage (Unarmed punch, spear tip, thrown rock, arrow, dropped item, etc.) us
 - Slash: face rejection vs Primary X + along-edge half-cone around +Y (Single) or ±Y (Double).
 - Pierce: cone around Primary +Z. `StrikeMode == None` never keeps Slash/Pierce.
 
+**Physics Control strengths (UHeldItemsComponent::UpdateControlStrengths)**
+- Runs every tick for every held item, including Unarmed and `StrikeMode None`. Not gated on edge orientation.
+- Three tiers (constants in `WoodcraftTypes.h`, `GControlAngularStrength*` / `GControlLinearStrength*`): Neutral (`!bExtended`, planted), Baseline (extended + slow/no look), Max (extended + flick). Look-speed lerp uses `GControlStrengthFullLookSpeed` + `GControlStrengthCurveExp`.
+- Angular × `FHandState.MassScale` (`GPhysControlMassRef` 0.6). Linear × `FHandState.MassScaleLinear` (flatter `GPhysControlLinearMassRef` 1.2) so compact items trail without softening tool rotation.
+
 **Procedural orientation (UHeldItemsComponent::UpdateProceduralOrientation)**
-- Edged tools only (`SingleEdged` / `DoubleEdged`). Pierce / None skip.
+- Edged tools only (`SingleEdged` / `DoubleEdged`). Pierce / None skip. Rotation only — does not write strengths.
 - Gate: hand extended AND owner-relative primary speed ≥ `GMinItemSpeed`.
 - Intent: `SetLookDelta` (Player BP each tick) → camera right/up → projected onto WeaponBone Z plane.
 - Writes only `SetControlTargetOrientation` on the existing Physics Control. Parent WeaponBone still carries position. Skeletal-anim contribution is disabled while active and restored on the falling edge.
-- Strength (angular + linear) scales with look speed × `FHandState.MassScale`. Constants live only in `WoodcraftTypes.h`.
 - Wrist: asymmetric CW/CCW limits around projected WeaponBone +Y. Right vs left sign mapping so both hands feel the same. 1D twist is rate-limited and never leaves the legal band.
 - Preferred edge (`OrientEdgeSign`) flips with `GWristHysteresisDeg`. SingleEdged stays on +Y until forced; DoubleEdged stays on the current sign while it remains legal.
 - Arm follow is Control Rig only (pole lerp toward grip). Hold pose does not twist with the item; wrist pinch on extreme side swings is accepted.

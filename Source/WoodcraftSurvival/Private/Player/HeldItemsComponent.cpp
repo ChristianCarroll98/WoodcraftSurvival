@@ -289,6 +289,9 @@ void UHeldItemsComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 	PreventItemStuck(EHand::Left);
 	PreventItemStuck(EHand::Right);
 
+	UpdateControlStrengths(EHand::Left);
+	UpdateControlStrengths(EHand::Right);
+
 	UpdateProceduralOrientation(EHand::Left, DeltaTime);
 	UpdateProceduralOrientation(EHand::Right, DeltaTime);
 }
@@ -619,13 +622,20 @@ bool UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand, FStr
 	}
 
 	// Softer strengths with reduced gravity; damping still rises with mass.
-	const float MassScale = FMath::Clamp(EffectiveMass / 0.6f, 1.0f, 6.0f);
+	const float MassScale = FMath::Clamp(
+		EffectiveMass / GPhysControlMassRef,
+		GPhysControlMassScaleMin,
+		GPhysControlMassScaleMax);
+	const float MassScaleLinear = FMath::Clamp(
+		EffectiveMass / GPhysControlLinearMassRef,
+		GPhysControlLinearMassScaleMin,
+		GPhysControlLinearMassScaleMax);
 
 	FPhysicsControlData ControlData;
-	ControlData.LinearStrength = GOrientLinearStrengthBaseline * MassScale;
-	ControlData.LinearDampingRatio = 1.4f + 0.3f * (MassScale - 1.0f);
-	ControlData.AngularStrength = GOrientStrengthBaseline * MassScale;
-	ControlData.AngularDampingRatio = 1.3f + 0.3f * (MassScale - 1.0f);
+	ControlData.LinearStrength = GControlLinearStrengthNeutral * MassScaleLinear;
+	ControlData.LinearDampingRatio = FMath::Max(1.0f, 1.4f + 0.3f * (MassScaleLinear - 1.0f));
+	ControlData.AngularStrength = GControlAngularStrengthNeutral * MassScale;
+	ControlData.AngularDampingRatio = FMath::Max(1.0f, 1.3f + 0.3f * (MassScale - 1.0f));
 	ControlData.bUseSkeletalAnimation = true;
 	ControlData.bDisableCollision = true;
 	ControlData.bUseCustomControlPoint = true;
@@ -635,8 +645,8 @@ bool UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand, FStr
 	if (GbDebugPrint && GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Cyan,
-			FString::Printf(TEXT("PhysControl mass=%.2f scale=%.2f  L=%.1f A=%.1f  dampL=%.2f dampA=%.2f"),
-				EffectiveMass, MassScale,
+			FString::Printf(TEXT("PhysControl mass=%.2f angS=%.2f linS=%.2f  L=%.1f A=%.1f  dampL=%.2f dampA=%.2f"),
+				EffectiveMass, MassScale, MassScaleLinear,
 				ControlData.LinearStrength, ControlData.AngularStrength,
 				ControlData.LinearDampingRatio, ControlData.AngularDampingRatio));
 	}
@@ -673,6 +683,7 @@ bool UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand, FStr
 	State.HeldItem = Item;
 	State.ActiveControl = NewControlName;
 	State.MassScale = MassScale;
+	State.MassScaleLinear = MassScaleLinear;
 	State.LastItemVelocity = FVector::ZeroVector; // reset until next tick samples
 	return true;
 }
@@ -768,8 +779,8 @@ void UHeldItemsComponent::ApplyControlStrengths(EHand Hand, float AngularMultipl
 	const FHandState& State = GetHandState(Hand);
 	if (State.ActiveControl.IsNone()) return;
 
-	const float DampingAngular = 1.3f + 0.3f * (State.MassScale - 1.0f);
-	const float DampingLinear  = 1.4f + 0.3f * (State.MassScale - 1.0f);
+	const float DampingAngular = FMath::Max(1.0f, 1.3f + 0.3f * (State.MassScale - 1.0f));
+	const float DampingLinear  = FMath::Max(1.0f, 1.4f + 0.3f * (State.MassScaleLinear - 1.0f));
 
 	PhysicsControl->SetControlAngularData(
 		State.ActiveControl,
@@ -782,13 +793,43 @@ void UHeldItemsComponent::ApplyControlStrengths(EHand Hand, float AngularMultipl
 		false);
 	PhysicsControl->SetControlLinearData(
 		State.ActiveControl,
-		LinearMultiplier * State.MassScale,
+		LinearMultiplier * State.MassScaleLinear,
 		DampingLinear,
 		0.f,
 		0.f,
 		true,
 		true,
 		false);
+}
+
+void UHeldItemsComponent::UpdateControlStrengths(EHand Hand)
+{
+	if (Hand == EHand::None || !PhysicsControl) return;
+
+	const FHandState& State = GetHandState(Hand);
+	if (State.ActiveControl.IsNone() || !State.HeldItem) return;
+
+	float AngMul = GControlAngularStrengthNeutral;
+	float LinMul = GControlLinearStrengthNeutral;
+
+	if (State.bExtended)
+	{
+		if (LookSpeed < GMinLookSpeed)
+		{
+			AngMul = GControlAngularStrengthBaseline;
+			LinMul = GControlLinearStrengthBaseline;
+		}
+		else
+		{
+			const float LinearT = FMath::Clamp(
+				LookSpeed / FMath::Max(GControlStrengthFullLookSpeed, 1.f), 0.f, 1.f);
+			const float T = FMath::Pow(LinearT, GControlStrengthCurveExp);
+			AngMul = FMath::Lerp(GControlAngularStrengthBaseline, GControlAngularStrengthMax, T);
+			LinMul = FMath::Lerp(GControlLinearStrengthBaseline, GControlLinearStrengthMax, T);
+		}
+	}
+
+	ApplyControlStrengths(Hand, AngMul, LinMul);
 }
 
 void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTime)
@@ -826,7 +867,6 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 			State.bProceduralOrientActive = false;
 			State.OrientEdgeSign = 1;
 			PhysicsControl->SetControlUseSkeletalAnimation(State.ActiveControl, true, 1.f);
-			ApplyControlStrengths(Hand, GOrientStrengthBaseline, GOrientLinearStrengthBaseline);
 			PhysicsControl->SetControlTargetOrientation(
 				State.ActiveControl,
 				FRotator::ZeroRotator,
@@ -846,20 +886,10 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 		PhysicsControl->SetControlUseSkeletalAnimation(State.ActiveControl, false, 0.f);
 	}
 
-	// Strength follows camera/look rate, not leftover item speed.
-	// No look this frame → baseline so the item keeps momentum instead of hard-stopping.
+	// No look this frame → leave the last target so the item keeps momentum instead of hard-stopping.
 	if (LookSpeed < GMinLookSpeed)
 	{
-		ApplyControlStrengths(Hand, GOrientStrengthBaseline, GOrientLinearStrengthBaseline);
 		return;
-	}
-
-	{
-		const float LinearT = FMath::Clamp(LookSpeed / FMath::Max(GOrientStrengthFullLookSpeed, 1.f), 0.f, 1.f);
-		const float T = FMath::Pow(LinearT, GOrientStrengthCurveExp);
-		const float AngMul = FMath::Lerp(GOrientStrengthBaseline, GOrientStrengthMax, T);
-		const float LinMul = FMath::Lerp(GOrientLinearStrengthBaseline, GOrientLinearStrengthMax, T);
-		ApplyControlStrengths(Hand, AngMul, LinMul);
 	}
 
 	UStaticMeshComponent* Mesh = State.HeldItem->GetItemPrimaryMesh();

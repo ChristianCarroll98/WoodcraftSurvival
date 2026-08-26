@@ -41,24 +41,48 @@ const float GSlashMaxAngleDeg = 85.f;
  *  Outside this → Blunt. */
 const float GPierceMaxAngleDeg = 35.f;
 
-/** Angular strength multiplier (× MassScale) at high look speed while orienting. */
-const float GOrientStrengthMax = 36.0f;
-
-/** Look-delta rate (LookDelta.Size() / DeltaTime) at which orient strength reaches max.
+/** Look-delta rate (LookDelta.Size() / DeltaTime) at which swipe strength reaches max.
  *  Tune from the on-screen “look speed max2s” print. Not item cm/s. */
-const float GOrientStrengthFullLookSpeed = 240.f;
+const float GControlStrengthFullLookSpeed = 240.f;
 
-/** Exponent on the 0–1 look-speed factor before lerping strength. 1 = linear, 2+ = ease-in (slow start, kicks in near max). */
-const float GOrientStrengthCurveExp = 3.f;
+/** Exponent on the 0–1 look-speed factor before lerping swipe strength. 1 = linear, 2+ = ease-in. */
+const float GControlStrengthCurveExp = 3.f;
 
-/** Angular strength multiplier (× MassScale) at rest, on attach, and at the low end of the orient lerp. */
-const float GOrientStrengthBaseline = 3.f;
+/** Angular mass (kg) at which MassScale == 1 before clamp. Hatchet ~1.67 → ~2.78. */
+const float GPhysControlMassRef = 0.6f;
 
-/** Linear strength multiplier (× MassScale) at high look speed while orienting. */
-const float GOrientLinearStrengthMax = 10.0f;
+/** Floor on angular MassScale. */
+const float GPhysControlMassScaleMin = 0.35f;
 
-/** Linear strength multiplier (× MassScale) at rest, on attach, and at the low end of the orient lerp. */
-const float GOrientLinearStrengthBaseline = 2.f;
+/** Cap on angular MassScale so very heavy items do not over-stiffen rotation. */
+const float GPhysControlMassScaleMax = 6.0f;
+
+/** Linear mass (kg) at which MassScaleLinear == 1 before clamp. Higher than angular so compact items stay sloppy. */
+const float GPhysControlLinearMassRef = 1.2f;
+
+/** Floor on MassScaleLinear so very light items (fists) are not soggy. */
+const float GPhysControlLinearMassScaleMin = 0.85f;
+
+/** Cap on MassScaleLinear. */
+const float GPhysControlLinearMassScaleMax = 2.5f;
+
+/** Angular strength multiplier (× MassScale) while not extended — planted by the body, slight give. */
+const float GControlAngularStrengthNeutral = 6.f;
+
+/** Angular strength multiplier (× MassScale) while extended with no / slow look. Combat lag floor. */
+const float GControlAngularStrengthBaseline = 3.f;
+
+/** Angular strength multiplier (× MassScale) at high look speed while extended. */
+const float GControlAngularStrengthMax = 36.0f;
+
+/** Linear strength multiplier (× MassScaleLinear) while not extended. */
+const float GControlLinearStrengthNeutral = 3.f;
+
+/** Linear strength multiplier (× MassScaleLinear) while extended with no / slow look. */
+const float GControlLinearStrengthBaseline = 2.f;
+
+/** Linear strength multiplier (× MassScaleLinear) at high look speed while extended. */
+const float GControlLinearStrengthMax = 10.0f;
 
 /** Max wrist twist clockwise from neutral (degrees).
  *  From the player's view: negative Atan2 around WeaponBone +Z. */
