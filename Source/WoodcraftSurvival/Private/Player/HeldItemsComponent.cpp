@@ -720,11 +720,33 @@ void UHeldItemsComponent::DetachItemFromControl(EHand Hand)
 			}
 			ItemMesh->SetCollisionResponseToChannel(COLLISION_PLAYER, ECollisionResponse::ECR_Block);
 		}
+		SetHeldItemStuckResponses(Item, false);
 	}
 
 	State.LastItemVelocity = FVector::ZeroVector;
 	State.bProceduralOrientActive = false;
 	State.OrientEdgeSign = 1;
+	State.bItemStuck = false;
+}
+
+void UHeldItemsComponent::SetHeldItemStuckResponses(AItemActor* Item, bool bStuck)
+{
+	if (!Item) return;
+
+	const ECollisionResponse Response = bStuck ? ECR_Ignore : ECR_Block;
+
+	auto Apply = [Response](UStaticMeshComponent* Mesh)
+	{
+		if (!Mesh) return;
+		Mesh->SetCollisionResponseToChannel(COLLISION_ITEM, Response);
+		Mesh->SetCollisionResponseToChannel(COLLISION_HARVESTABLE, Response);
+		Mesh->SetCollisionResponseToChannel(ECC_WorldStatic, Response);
+		Mesh->SetCollisionResponseToChannel(ECC_WorldDynamic, Response);
+		Mesh->WakeRigidBody();
+	};
+
+	Apply(Item->GetItemPrimaryMesh());
+	Apply(Item->GetItemSecondaryMesh());
 }
 
 void UHeldItemsComponent::PreventItemStuck(EHand Hand)
@@ -753,22 +775,12 @@ void UHeldItemsComponent::PreventItemStuck(EHand Hand)
 	if (Distance > EnterUnsafeDistance && !bItemStuck)
 	{
 		bItemStuck = true;
-		Mesh->SetCollisionResponseToChannel(COLLISION_ITEM, ECR_Ignore);
-		Mesh->SetCollisionResponseToChannel(COLLISION_HARVESTABLE, ECR_Ignore);
-		//Mesh->SetCollisionResponseToChannel(COLLISION_STRUCTURE, ECR_Ignore);
-		//Mesh->SetCollisionResponseToChannel(COLLISION_CREATURE, ECR_Ignore);
-		Mesh->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Ignore);
-		Mesh->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Ignore);
+		SetHeldItemStuckResponses(Item, true);
 	}
 	else if (Distance < ExitUnsafeDistance && bItemStuck)
 	{
 		bItemStuck = false;
-		Mesh->SetCollisionResponseToChannel(COLLISION_ITEM, ECR_Block);
-		Mesh->SetCollisionResponseToChannel(COLLISION_HARVESTABLE, ECR_Block);
-		//Mesh->SetCollisionResponseToChannel(COLLISION_STRUCTURE, ECR_Block);
-		//Mesh->SetCollisionResponseToChannel(COLLISION_CREATURE, ECR_Block);
-		Mesh->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
-		Mesh->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
+		SetHeldItemStuckResponses(Item, false);
 	}
 }
 

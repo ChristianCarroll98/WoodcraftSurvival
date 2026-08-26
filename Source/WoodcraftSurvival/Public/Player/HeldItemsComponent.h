@@ -243,6 +243,12 @@ private:
 	void PreventItemStuck(EHand Hand);
 
 	/**
+	 * Ignore (stuck) or Block (free) world/item/harvestable responses on Primary and Secondary.
+	 * Secondary must be included — a dual-mesh head will hold the whole tool in a wall otherwise.
+	 */
+	void SetHeldItemStuckResponses(AItemActor* Item, bool bStuck);
+
+	/**
 	 * While extended and above GMinItemSpeed, drives the Physics Control angular
 	 * target so the preferred strike axis aligns with screen-space look intent (SetLookDelta).
 	 * Rotation only — strengths live in UpdateControlStrengths.

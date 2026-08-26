@@ -70,25 +70,25 @@ const float GControlLinearMassExp = 3.0f;
 const float GControlLinearMassScaleMin = 0.25f;
 
 /** Cap on MassScaleLinear. */
-const float GControlLinearMassScaleMax = 4.0f;
+const float GControlLinearMassScaleMax = 10.0f;
 
 /** Angular strength multiplier (× MassScale) while not extended — planted by the body, slight give. */
-const float GControlAngularStrengthNeutral = 4.f;
+const float GControlAngularStrengthNeutral = 6.f;
 
 /** Angular strength multiplier (× MassScale) while extended with no / slow look. Combat lag floor. */
-const float GControlAngularStrengthBaseline = 3.f;
+const float GControlAngularStrengthBaseline = 2.f;
 
 /** Angular strength multiplier (× MassScale) at high look speed while extended. */
 const float GControlAngularStrengthMax = 24.0f;
 
 /** Linear strength multiplier (× MassScaleLinear) while not extended. */
-const float GControlLinearStrengthNeutral = 6.5f;
+const float GControlLinearStrengthNeutral = 8.f;
 
 /** Linear strength multiplier (× MassScaleLinear) while extended with no / slow look. */
-const float GControlLinearStrengthBaseline = 5.5f;
+const float GControlLinearStrengthBaseline = 5.f;
 
 /** Linear strength multiplier (× MassScaleLinear) at high look speed while extended. */
-const float GControlLinearStrengthMax = 10.0f;
+const float GControlLinearStrengthMax = 16.0f;
 
 /** Max wrist twist clockwise from neutral (degrees).
  *  From the player's view: negative Atan2 around WeaponBone +Z. */
