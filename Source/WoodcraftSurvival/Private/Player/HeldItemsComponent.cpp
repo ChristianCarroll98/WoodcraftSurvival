@@ -821,24 +821,23 @@ void UHeldItemsComponent::UpdateControlStrengths(EHand Hand)
 	const FHandState& State = GetHandState(Hand);
 	if (State.ActiveControl.IsNone() || !State.HeldItem) return;
 
-	float AngMul = GControlAngularStrengthNeutral;
-	float LinMul = GControlLinearStrengthNeutral;
+	const float AngLo = State.bExtended
+		? GControlAngularStrengthBaseline
+		: GControlAngularStrengthNeutral;
+	const float LinLo = State.bExtended
+		? GControlLinearStrengthBaseline
+		: GControlLinearStrengthNeutral;
 
-	if (State.bExtended)
+	float AngMul = AngLo;
+	float LinMul = LinLo;
+
+	if (LookSpeed >= GMinLookSpeed)
 	{
-		if (LookSpeed < GMinLookSpeed)
-		{
-			AngMul = GControlAngularStrengthBaseline;
-			LinMul = GControlLinearStrengthBaseline;
-		}
-		else
-		{
-			const float LinearT = FMath::Clamp(
-				LookSpeed / FMath::Max(GControlStrengthFullLookSpeed, 1.f), 0.f, 1.f);
-			const float T = FMath::Pow(LinearT, GControlStrengthCurveExp);
-			AngMul = FMath::Lerp(GControlAngularStrengthBaseline, GControlAngularStrengthMax, T);
-			LinMul = FMath::Lerp(GControlLinearStrengthBaseline, GControlLinearStrengthMax, T);
-		}
+		const float LinearT = FMath::Clamp(
+			LookSpeed / FMath::Max(GControlStrengthFullLookSpeed, 1.f), 0.f, 1.f);
+		const float T = FMath::Pow(LinearT, GControlStrengthCurveExp);
+		AngMul = FMath::Lerp(AngLo, GControlAngularStrengthMax, T);
+		LinMul = FMath::Lerp(LinLo, GControlLinearStrengthMax, T);
 	}
 
 	ApplyControlStrengths(Hand, AngMul, LinMul);
