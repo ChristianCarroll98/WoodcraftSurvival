@@ -244,16 +244,12 @@ void AItemActor::OnItemMeshHit(UPrimitiveComponent* HitComp, AActor* OtherActor,
 	// Only do damage if this item is held (for now)
 	if (!Holder.IsValid()) return;
 
+	UHeldItemsComponent* HeldComp = Holder->FindComponentByClass<UHeldItemsComponent>();
+	if (!HeldComp) return;
+
 	// Must be extended (strike-ready) on the hand that holds this item
-	if (UHeldItemsComponent* HeldComp = Holder->FindComponentByClass<UHeldItemsComponent>())
-	{
-		const EHand Hand = HeldComp->GetHandHoldingItem(this);
-		if (Hand == EHand::None || !HeldComp->GetIsExtended(Hand)) return;
-	}
-	else
-	{
-		return;
-	}
+	const EHand Hand = HeldComp->GetHandHoldingItem(this);
+	if (Hand == EHand::None || !HeldComp->GetIsExtended(Hand)) return;
 
 	if (!OtherActor || OtherActor == this) return;
 
@@ -290,16 +286,11 @@ void AItemActor::OnItemMeshHit(UPrimitiveComponent* HitComp, AActor* OtherActor,
 
 	// Incoming direction for incidence + debug (pre-bounce velocity preferred)
 	FVector IncomingDir = FVector::ZeroVector;
-	if (Holder.IsValid())
 	{
-		if (UHeldItemsComponent* HeldComp = Holder->FindComponentByClass<UHeldItemsComponent>())
+		const FVector LastVel = HeldComp->GetLastItemVelocity(Hand);
+		if (LastVel.SizeSquared() > KINDA_SMALL_NUMBER)
 		{
-			const EHand Hand = HeldComp->GetHandHoldingItem(this);
-			const FVector LastVel = HeldComp->GetLastItemVelocity(Hand);
-			if (LastVel.SizeSquared() > KINDA_SMALL_NUMBER)
-			{
-				IncomingDir = LastVel.GetSafeNormal();
-			}
+			IncomingDir = LastVel.GetSafeNormal();
 		}
 	}
 	if (IncomingDir.IsNearlyZero() && HitComp)

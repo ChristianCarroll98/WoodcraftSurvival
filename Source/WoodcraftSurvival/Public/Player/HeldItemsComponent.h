@@ -239,6 +239,12 @@ private:
 	 */
 	void UpdateProceduralOrientation(EHand Hand, float DeltaTime);
 
+	/**
+	 * Applies mass-scaled linear + angular strengths (and the matching damping) to the
+	 * active Physics Control for this hand. Multipliers are the GOrient* values (baseline or speed-lerped).
+	 */
+	void ApplyControlStrengths(EHand Hand, float AngularMultiplier, float LinearMultiplier);
+
 	/** Returns a reference to the pending pickup data for the given hand. */
 	FPendingPickupData& GetPendingPickup(EHand Hand);
 

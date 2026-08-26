@@ -228,6 +228,33 @@ void UHeldItemsComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 	SampleVelocity(HandLeft);
 	SampleVelocity(HandRight);
 
+	if (GbDebugPrint && GEngine)
+	{
+		FVector RelativeVel = HandRight.LastItemVelocity;
+		if (const AActor* OwnerActor = GetOwner())
+		{
+			RelativeVel -= OwnerActor->GetVelocity();
+		}
+
+		GEngine->AddOnScreenDebugMessage(101, 1.f, FColor::Magenta,
+			FString::Printf(TEXT("R swing speed: %.1f cm/s"), RelativeVel.Size()));
+
+		float Mass = 0.f;
+		if (HandRight.HeldItem)
+		{
+			if (UStaticMeshComponent* Primary = HandRight.HeldItem->GetItemPrimaryMesh())
+			{
+				Mass = Primary->GetMass();
+			}
+			if (UStaticMeshComponent* Secondary = HandRight.HeldItem->GetItemSecondaryMesh())
+			{
+				Mass += Secondary->GetMass();
+			}
+		}
+		GEngine->AddOnScreenDebugMessage(102, 1.f, FColor::Orange,
+			FString::Printf(TEXT("R item mass: %.2f"), Mass));
+	}
+
 	PreventItemStuck(EHand::Left);
 	PreventItemStuck(EHand::Right);
 
@@ -696,6 +723,36 @@ void UHeldItemsComponent::PreventItemStuck(EHand Hand)
 	}
 }
 
+void UHeldItemsComponent::ApplyControlStrengths(EHand Hand, float AngularMultiplier, float LinearMultiplier)
+{
+	if (Hand == EHand::None || !PhysicsControl) return;
+
+	const FHandState& State = GetHandState(Hand);
+	if (State.ActiveControl.IsNone()) return;
+
+	const float DampingAngular = 1.3f + 0.3f * (State.MassScale - 1.0f);
+	const float DampingLinear  = 1.4f + 0.3f * (State.MassScale - 1.0f);
+
+	PhysicsControl->SetControlAngularData(
+		State.ActiveControl,
+		AngularMultiplier * State.MassScale,
+		DampingAngular,
+		0.f,
+		0.f,
+		true,
+		true,
+		false);
+	PhysicsControl->SetControlLinearData(
+		State.ActiveControl,
+		LinearMultiplier * State.MassScale,
+		DampingLinear,
+		0.f,
+		0.f,
+		true,
+		true,
+		false);
+}
+
 void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTime)
 {
 	if (Hand == EHand::None || !PhysicsControl) return;
@@ -731,26 +788,7 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 			State.bProceduralOrientActive = false;
 			State.OrientEdgeSign = 1;
 			PhysicsControl->SetControlUseSkeletalAnimation(State.ActiveControl, true, 1.f);
-			const float DampA = 1.3f + 0.3f * (State.MassScale - 1.0f);
-			const float DampL = 1.4f + 0.3f * (State.MassScale - 1.0f);
-			PhysicsControl->SetControlAngularData(
-				State.ActiveControl,
-				GOrientStrengthBaseline * State.MassScale,
-				DampA,
-				0.f,
-				0.f,
-				true,
-				true,
-				false);
-			PhysicsControl->SetControlLinearData(
-				State.ActiveControl,
-				GOrientLinearStrengthBaseline * State.MassScale,
-				DampL,
-				0.f,
-				0.f,
-				true,
-				true,
-				false);
+			ApplyControlStrengths(Hand, GOrientStrengthBaseline, GOrientLinearStrengthBaseline);
 			PhysicsControl->SetControlTargetOrientation(
 				State.ActiveControl,
 				FRotator::ZeroRotator,
@@ -778,26 +816,7 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 			0.f, 1.f);
 		const float AngMul = FMath::Lerp(GOrientStrengthMin, GOrientStrengthMax, T);
 		const float LinMul = FMath::Lerp(GOrientLinearStrengthMin, GOrientLinearStrengthMax, T);
-		const float DampA = 1.3f + 0.3f * (State.MassScale - 1.0f);
-		const float DampL = 1.4f + 0.3f * (State.MassScale - 1.0f);
-		PhysicsControl->SetControlAngularData(
-			State.ActiveControl,
-			AngMul * State.MassScale,
-			DampA,
-			0.f,
-			0.f,
-			true,
-			true,
-			false);
-		PhysicsControl->SetControlLinearData(
-			State.ActiveControl,
-			LinMul * State.MassScale,
-			DampL,
-			0.f,
-			0.f,
-			true,
-			true,
-			false);
+		ApplyControlStrengths(Hand, AngMul, LinMul);
 	}
 
 	// Need meaningful screen-space look delta this frame
@@ -854,30 +873,29 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 
 	const bool bSingle = (EquipFrag->StrikeMode == EItemStrikeMode::SingleEdged);
 	const int8 PrevSign = State.OrientEdgeSign;
-	float BestCost = 1.e9f;
+
+	const float TwistPlus  = SignedAngleDeg( NeutralY, ProjIntent);
+	const float TwistMinus = SignedAngleDeg(-NeutralY, ProjIntent);
+	const bool bPlusLegal  = (TwistPlus  >= -LimitNeg && TwistPlus  <= LimitPos);
+	const bool bMinusLegal = (TwistMinus >= -LimitNeg && TwistMinus <= LimitPos);
+
 	int8 BestSign = PrevSign;
-
-	for (int8 Sign : {int8(1), int8(-1)})
+	if (bSingle)
 	{
-		const FVector SideNeutral = NeutralY * float(Sign);
-		const float TwistDeg = SignedAngleDeg(SideNeutral, ProjIntent);
-		const bool bLegal = (TwistDeg >= -LimitNeg && TwistDeg <= LimitPos);
-
-		float Cost = FMath::Abs(TwistDeg);
-		if (!bLegal) Cost += 1000.f;
-		if (Sign != PrevSign) Cost += GWristHysteresisDeg;
-
-		// SingleEdged: strong bias to stay on +Y; only leave when +Y would be illegal.
-		if (bSingle && Sign == -1)
-		{
-			Cost += 500.f;
-		}
-
-		if (Cost < BestCost)
-		{
-			BestCost = Cost;
-			BestSign = Sign;
-		}
+		// Blade (+Y) unless that twist would be illegal.
+		BestSign = bPlusLegal ? 1 : -1;
+	}
+	else if (PrevSign == 1 && (bPlusLegal || !bMinusLegal))
+	{
+		BestSign = 1;
+	}
+	else if (PrevSign == -1 && (bMinusLegal || !bPlusLegal))
+	{
+		BestSign = -1;
+	}
+	else
+	{
+		BestSign = (FMath::Abs(TwistMinus) < FMath::Abs(TwistPlus)) ? -1 : 1;
 	}
 
 	State.OrientEdgeSign = BestSign;
