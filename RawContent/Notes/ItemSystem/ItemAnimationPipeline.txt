@@ -26,10 +26,12 @@ Replaces earlier experimental approaches (per-arm sub-AnimBPs, large animation s
 | HoldPose                      | `UEquippableItemFragment`         | `TSoftObjectPtr<UAnimSequence>` | Item-specific. Usually a short/static 1–2 frame pose. |
 | Default Pickup Montage        | `UHeldItemsComponent`             | `TObjectPtr<UAnimMontage>`    | Single shared asset (right-arm authored). Hard ref. |
 | Default Drop Montage          | `UHeldItemsComponent`             | `TObjectPtr<UAnimMontage>`    | Same pattern. Hard ref. |
+| ReleasePose (pre-drop snap)   | `UHeldItemsComponent`             | `TSoftObjectPtr<UAnimSequence>` | Shared. Palm-away / letting go. Not per-item. |
 | Current runtime HoldPoses     | `UFPArmsAnimInstance`             | `TObjectPtr<UAnimSequence>`   | Hard references after load. |
 
 HoldPose lives on the EquippableItemFragment because it is part of how the item is held.  
-The generic 12-frame reach lives on the component as a hard reference because it is fixed and shared by all one-handed items.
+The generic 12-frame reach lives on the component as a hard reference because it is fixed and shared by all one-handed items.  
+ReleasePose is also component-owned and shared: one palm-away place pose for every item while preview-snapped to a socket.
 
 Unarmed also carries an EquippableItemFragment with its own HoldPose (neutral fists / rest pose).
 
@@ -148,11 +150,26 @@ Exact blend timings remain open for tuning by the user on the montage assets.
 
 ---
 
+### 6.1 Pre-drop socket snap pose (locked 2026-08-26)
+
+While Q + mouse is held and the item is preview-snapped to a station socket, that arm does **not** keep the item’s Neutral/Extended HoldPose.
+
+- Push one shared **ReleasePose** from `UHeldItemsComponent` (palm facing away from the item, hand opening as if placing it down). Not authored per item.
+- Visible-arm Control Rig still reaches toward the item so the hand stays in the neighborhood of the placed mesh.
+- **Location only, and loose** — do not exact-snap the hand to the dynamic grip target. Do **not** copy item rotation into the hand (no `AnimRef Hand relative to WeaponBone` rotation × item world rot). Full grip rotation is what mangles the wrist when the socket orientation disagrees with a hold pose.
+- The item itself stays at `SocketTransform × PlacementOffsetTransform`. The arm yields to the item, not the other way around.
+- When the preview snap is lost (still holding Q + mouse, no socket in range): restore that hand’s Extended HoldPose and the normal full grip (position + rotation).
+- On release commit (socket attach or world drop): existing drop montage / EquipUnarmed path.
+
+This pose is presentation only. It does not change pickup, place, or stack rules.
+
+---
+
 ### 7. Open Points
 
 - Exact frame for the FinalizePickup notify (currently ~9–10 of 12). Needs feel testing.
 - Drop montage length and feel relative to pickup.
-- Future Extended pose (neutral vs extended).
+- Future Extended pose (neutral vs extended) for normal activation. Pre-drop socket snap uses the shared ReleasePose instead.
 - Two-handed support.
 - Optional item-specific EquipMontage override.
 - Future polish: temporarily override the Control Rig IK target to the world item being reached for during the pickup montage (so the hand homes toward the real object instead of the current held/Unarmed grip). Requires a short-lived “reach target override” that is cleared on FinalizePickup or MontageEnded. Not required for the first working version.
@@ -172,4 +189,4 @@ Exact blend timings remain open for tuning by the user on the montage assets.
 
 ---
 
-*Locked 2026-08-15. Updated same day with mirror-after-slot clarification, hard montage refs, per-hand pending data, Physics Control wording, and HoldPose push-on-load preference. Fragment renamed to UEquippableItemFragment 2026-08-19. Update when open points are resolved or when two-handed / swing support is designed.*
+*Locked 2026-08-15. Updated 2026-08-26 with pre-drop socket-snap ReleasePose (shared, location-only loose IK, no grip rotation). Fragment renamed to UEquippableItemFragment 2026-08-19. Update when open points are resolved or when two-handed / swing support is designed.*

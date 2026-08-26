@@ -1,0 +1,85 @@
+Woodcraft Survival – Project Roadmap
+(Created 2026-08-26. Living document. High level only.)
+
+Purpose
+- This file is the high-level sequence of milestones. Look here when a task finishes and you need to choose the next slice.
+- System implementation docs (ItemSystem/, HarvestableSystem/, CraftingSystem/, later StructureSystem/, CreatureSystem/) own locked architecture and small tasks for that system.
+- ProjectNotes.txt owns the immediate working list only. Do not delete DONE lines from it without confirmation.
+
+Core loop
+Find loose resources → hold and swing a physical tool → harvest a standing resource into items → combine items into a better tool (hands, then a station) → harvest something the previous tool could not → repeat.
+
+Food, fire, shelter, creatures, seasons, and the guidebook press on that loop. They are not the loop itself.
+
+Current milestone: Core Loop Playable
+A short session that starts nearly empty and completes gather → first ground craft → harvest → station craft → better harvest, using the live physics swing / incidence / orientation path.
+
+In
+- T0 item set as real data: Stone, Stick, SharpenedStone, PlantFiber, Cordage, StoneHatchet (dual-mesh: StickHandle Primary + stone head Secondary). Copper Hatchet stays a T3 preview.
+- Harvestables that feed the set: existing TestTree (sticks + stump), loose stones, FibrousPlant (low HP, Slash only — Blunt and Pierce in Immunities).
+- Pickup / drop / extend / physics swing / incidence / orientation / damage + resistance (already live).
+- Ground crafting: Stone+Stone → SharpenedStone; Fiber+Fiber → Cordage.
+- Structure scaffolding (Definition / Instance / Actor + fragments), parallel to Items and Harvestables.
+- Thin Workbench: one slot socket, placed in the test level first. Hatchet recipe is bench-only.
+- StoneHatchet recipe: SharpenedStone + Stick + Cordage at Workbench.
+- Building + two-handed log carry as the last stage of this milestone, after ground craft and the placed bench are proven. That is how the player obtains a bench in a real run.
+
+Out of this milestone
+- Stab impulse, throw, shoot.
+- Part-break execution (designed in ItemSystemImplementation §10; StickHandle → BrokenStick / head detach is not Core Loop).
+- Fire, cooking, food modes, spoilage, survival needs.
+- Containers / stacking gameplay.
+- Creature encounters (wolf weight paint is a parallel track).
+- Flint knapping, forging, grindstone, leather, metals.
+
+Art rule for this milestone
+Flat readable color. Shared Wood / Stone Physical Materials. Correct scale, named collision primitives, HoldPose + ExtendedPose per item (authoring is cheap enough to do with the mesh). Unique ORM / detail normals wait for a polish pass. One stone + one wood mesh may run through the full import + sRGB-off ORM / Masks path once so the pipeline is locked.
+
+Locked decisions (2026-08-26)
+- Item grip sockets are gone. Hold is HoldPose + item origin + dynamic grip (AnimRef Hand relative to WeaponBone × item world transform). Left-hand mesh scale X=-1 still applies.
+- Station / placement sockets are allowed. Workbench has one slot socket.
+- PlacementOffsetTransform lives on UItemDefinition (default Identity). Every station socket uses the same frame: origin on the surface, +Z up, +X forward. The item actor is placed at SocketTransform × PlacementOffsetTransform. Per-station special offsets are out until something actually needs them.
+- Place onto a socket: Q + mouse hold extends the item (no swing) and preview-snaps; commit on RELEASE. Retrieve from a socket uses the same pickup path as a ground item. Held stacks never place onto sockets — Q + mouse release drops the whole stack.
+- Cordage and other non-weapon resources: Equippable, StrikeMode None, no Damage fragment.
+- StoneHatchet Primary mesh is StickHandle (static mesh only), not a live Stick instance. Constraint path is the existing dual-mesh Physics Constraint.
+- Recipes list allowed crafting locations (Hands / Ground and station ids). Station fragments carry a station id. Detection uses looked-at station or the item already in its slot. Recipe assets own the recipe list; stations do not duplicate it.
+- Fragments stay data + spawn/init hooks on Structures, same as Items and Harvestables.
+- Sharpened stone can cut trees and the fibrous plant. Stone hatchet is gated on the workbench.
+
+Slices (do in order; each should be playable before the next starts)
+
+A1. T0 content
+- Model + data-author the T0 items and FibrousPlant placeholder.
+- Neutral + extended HoldPoses per basic item.
+- Drop in the test level. Confirm pickup, swing, tree cut with sharpened stone, plant harvest Slash-only.
+
+A2. Ground crafting
+- Expand CraftingSystemImplementation.txt for the MVP only, then implement.
+- Recipe data asset, session owner, consume via ItemFactory, spawn result, cancel by release.
+- First two recipes: Stone+Stone → SharpenedStone; Fiber+Fiber → Cordage.
+- One minigame class, two tunings (grind / twist). No knapping or forging.
+
+A3. Structure scaffolding + placed Workbench
+- Structure Definition / Instance / Actor + fragment base.
+- Workbench definition: station id + one slot.
+- Slot uses the shared socket frame + item PlacementOffsetTransform.
+- Place = Q + mouse hold (extend, no swing, preview snap) → release attach. Retrieve = same as ground pickup. Stacks cannot occupy the slot.
+- Third recipe: SharpenedStone + Stick + Cordage → StoneHatchet.
+
+A4. Building + logs (final Core Loop stage)
+- Player-facing way to get a workbench (logs / blueprint / piece place — design in Structure implementation when this slice starts).
+- Two-handed log carry as needed for that recipe only.
+- Still not the full shelter / degradation / decorative structure set.
+
+After Core Loop Playable
+B. Tool wear that matters — durability drain live; break results + first sharpening recipe.
+C. Fire + one cook.
+D. One living creature (wolf). Rig / weight paint can happen any time as a change of pace.
+E. Needs + day cycle (stamina on swing/sprint, simple hunger, 24-min day).
+F. Combat verbs that expand the loop rather than close it: stab, throw, two-hand weapons beyond logs.
+G. Next progression tier (flint / leather), then copper.
+
+Parallel / anytime
+- Wolf weight paint and remaining creature art.
+- Polish materials / ORM / audio / floating damage numbers.
+- Input move from Player BP into C++ when it starts to get in the way.

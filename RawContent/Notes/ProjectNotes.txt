@@ -33,6 +33,14 @@ current issues/working task list:
 - DONE: Arm follow in Control Rig (not C++): lerp animated pole toward Midpoint + RotateVector((0,-50,0), GripRotation). Wrist pinch on extreme side swings accepted (hold pose does not twist with the item).
 - Later polish: audio per resolved damage type; Valheim-style floating damage numbers (gray resist / white neutral / pale yellow weak / gray 0 immunity); optional camera-delta bias for orientation intent; tune cones/thresholds in WoodcraftTypes.h; expose wrist limits to data asset (esp. two-handed); optional small post-IK wrist twist if pinch bothers later; UStabItemFragment impulse on extend.
 - Explicitly deferred: separate head/handle Instances at runtime. Break results on DurabilityItemFragment are designed (see ItemSystemImplementation §10) but not implemented yet.
+- NEXT: T0 content for Core Loop Playable (see Notes/Roadmap.txt). Flat color only. Per-item Neutral + Extended HoldPoses with the mesh.
+  - Items: Stone, Stick (update mesh), SharpenedStone, PlantFiber, Cordage, StoneHatchet (Primary = StickHandle static mesh, Secondary = stone head, existing dual-mesh constraint).
+  - Resources (fiber, cordage, stone): Equippable, StrikeMode None, no Damage fragment.
+  - Harvestable: FibrousPlant placeholder, low HP, Slash only (Blunt + Pierce in Immunities).
+  - After T0 is in-level: expand CraftingSystemImplementation.txt for ground-craft MVP, then Structure scaffolding + placed Workbench. Building + two-hand logs are the last Core Loop stage, not the first.
+- PlacementOffsetTransform planned on UItemDefinition (default Identity) against a shared station-socket frame. Item grip sockets are retired.
+- Q-mode place/drop locked (2026-08-26): drop commits on Q + mouse RELEASE. Hold Q + mouse extends (no swing) and preview-snaps to nearby station sockets. Release near a socket attaches the existing actor at SocketTransform × PlacementOffsetTransform. Pickup from a socket uses the same path as a ground item. Held stacks always drop the entire stack on release and never place onto sockets (stacks exist only in a hand). Implement with Roadmap A3 workbench, not before T0.
+- Pre-drop socket snap pose locked (2026-08-26): shared ReleasePose on HeldItemsComponent (not per-item). Palm away / letting go. Loose location-only IK toward the item — no exact grip snap, no item rotation copied onto the hand. Lost snap restores Extended + full grip. See ItemAnimationPipeline §6.1.
 
 Architecture reminder:
 - Fragments = data + minimal spawn/init hooks. No runtime work in fragments.
@@ -45,3 +53,5 @@ Architecture reminder:
 - EItemStrikeMode on EquippableItemFragment drives both incidence axes and procedural orientation.
 - Per-hand state lives in FHandState on HeldItemsComponent (including LastItemVelocity for pre-bounce incidence + orientation).
 - Procedural orientation writes only TargetOrientation on the existing Physics Control (position stays skeletal + linear). Grip transform / arm IK continues to follow the live item.
+- Q-mode suppresses swing / procedural orient / collision damage. Place-on-socket is Q-hold preview + release commit; stacks never leave the hand except as a world drop.
+- Socket preview snap uses a shared ReleasePose + loose location-only IK (no grip rotation) so the FP wrist is not twisted to the socket.

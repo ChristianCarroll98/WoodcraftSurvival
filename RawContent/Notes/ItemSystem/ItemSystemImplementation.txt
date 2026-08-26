@@ -1,5 +1,5 @@
 **Full Description of the Intended Item System**  
-*(Updated 2026-08-26 – Procedural swing orientation + incidence live; SetExtended live; Stab impulse still TODO; part durability / break results remain designed-not-implemented)*
+*(Updated 2026-08-26 – Q-mode drop/place on mouse release + station socket snap locked; procedural swing orientation + incidence live; SetExtended live; Stab impulse still TODO; part durability / break results remain designed-not-implemented)*
 
 ### 1. High-Level Goals
 - Fully data-driven item definitions using Primary Data Assets + Fragments.
@@ -18,7 +18,8 @@
 
 **UItemDefinition** (Primary Data Asset)  
 Contains an array of `UItemFragment*` instances.  
-This is the pure data definition of an item type (Stick, Axe, Unarmed, etc.).
+This is the pure data definition of an item type (Stick, Axe, Unarmed, etc.).  
+Also carries `PlacementOffsetTransform` (default Identity) used when attaching an item actor to a station socket. Every station socket shares one frame: origin on the surface, +Z up, +X forward. Placed transform = `SocketTransform × PlacementOffsetTransform`.
 
 **UItemFragment** (abstract base)  
 Lightweight, instanced, edit-inline objects that add specific capabilities.  
@@ -165,33 +166,51 @@ Left-hand IK works without extra transform mirroring.
 - Owns one UInstancedStaticMeshComponent per hand (created once, enabled only while that hand holds a stack. Owns? Components created on player. Maybe created from BeginPlay in HeldItemsComponent to get the references easily, or can create from engine and assign to EditDefaultsOnly class variable. TBD).
 - Exposes TryStartStack(EHand TargetHand) for intentional stack creation (called from player input, tentatively [R] + mouse click).
 
-**Pickup / Drop API (implemented 2026-08-15)**
+**Pickup / Drop / Place API (pickup/drop implemented 2026-08-15; place-on-socket designed 2026-08-26)**
 
 ```cpp
 // Low-level
 bool TryPickup(AItemActor* Item, EHand Hand);
 bool TryDrop(EHand Hand);
 
-// Q-mode entry point
-bool TryPickupOrDrop(EHand Hand);
+// Q-mode entry points (split press vs release — current single TryPickupOrDrop will be split)
+bool TryPickupOrDrop(EHand Hand);          // existing; treat as press until split
+void BeginPlaceOrDrop(EHand Hand);         // Q + mouse pressed, hand occupied
+bool CommitPlaceOrDrop(EHand Hand);        // Q + mouse released
 
 // Helper
 bool GetIsUnarmed(EHand Hand) const;
 ```
 
-**TryPickupOrDrop decision tree (updated 2026-08-20)**
-- Looking at valid item + hand is Unarmed → Pickup
-- Looking at valid item + hand occupied → Do nothing (or drop, or swap, TBD)
-- Looking at empty space + hand occupied → Drop (entire stack if count > 1)
+**Q-mode press / hold / release (locked 2026-08-26)**
+- Q held = Pickup/Drop/Place mode (outlines already driven by PickUpMode).
+- **Press, hand Unarmed + looking at a valid item** → Pickup. Items sitting on a station socket use this same path as ground items (`TryPickup` detaches the existing actor).
+- **Press, hand Unarmed + looking at empty space** → Do nothing.
+- **Press, hand occupied + looking at another item** → Do nothing (swap later).
+- **Press, hand occupied + not looking at another item** → Begin place/drop: `SetExtended(true)` on that hand. No swinging: procedural orientation and collision damage stay off for the duration of Q-mode even though the hand is extended. While held, preview-snap the live actor toward a nearby station socket (workbench slot first) when one is in range.
+- **While preview-snapped**: push the shared ReleasePose on that arm (palm away, letting go). Control Rig reaches toward the item **loosely and location-only** — no exact grip snap, no copy of item rotation into the hand. Prevents wrist mangling when the socket orientation disagrees with a hold pose. See ItemAnimationPipeline §6.1. Lost snap → Extended HoldPose + normal full grip.
+- **Release, hand occupied**:
+  - Near a valid socket **and** the hand is not holding a stack (count ≥ 2) → attach the existing `AItemActor` to the socket at `SocketTransform × PlacementOffsetTransform`, then `EquipUnarmed(Hand)`.
+  - Otherwise → normal world drop (`TryDrop`). A held stack always takes this branch: drop the entire stack, never place onto a socket. Stacks exist only in a player hand.
+- **Release, hand Unarmed** → Do nothing (pickup already happened on press, or nothing was targeted).
+
+**TryPickupOrDrop decision tree (updated 2026-08-26)**
+- Looking at valid item (ground or socket) + hand is Unarmed → Pickup on **press**
+- Looking at valid item + hand occupied → Do nothing on press (swap later)
+- Hand occupied + Q + mouse held → Extend, no swing, preview-snap to nearby sockets
+- Hand occupied + Q + mouse **released** + near valid socket + not a stack → Place on socket
+- Hand occupied + Q + mouse **released** + no valid socket (or is a stack) → Drop (entire stack if count > 1)
 - Looking at empty space + hand Unarmed → Do nothing
 
 **Implementation notes**
-- Target is locked at the moment of input confirmation.
-- `FindLookedAtItem` uses a small sphere sweep (default ≈8 cm radius, 250 cm distance) on `TRACE_EQUIPPABLE` from the camera.
+- Pickup target is locked at **press**. Place/drop target (socket vs world) is resolved at **release**.
+- `FindLookedAtItem` uses a small sphere sweep (default ≈8 cm radius, 250 cm distance) on `TRACE_EQUIPPABLE` from the camera. Socket query for preview/commit is a nearby-socket search (exact radius TBD when the workbench exists); it is not the same as the item sweep.
 - Ignores owner + both currently held items.
-- Prefer letting Physics Control + IK “suck” the item into pose. No forced teleport for normal world items.
-- Hard teleport / snap reserved mainly for re-equipping Unarmed.
+- Prefer letting Physics Control + IK “suck” the item into pose on pickup. No forced teleport for normal world items.
+- Socket attach is a hard snap of the existing actor (same actor lifetime as a ground drop). Pickup from that socket later is a normal detach + hold.
+- Hard teleport / snap reserved mainly for re-equipping Unarmed and for the socket attach itself.
 - 12-frame reach montage + AnimNotify finalization still pending (current path finalizes immediately for testing).
+- Current live code still fires `TryPickupOrDrop` as a single chord. Split press/hold/release when input moves toward C++ / when the workbench slot lands (Roadmap A3). Until then the decision tree above is the target, not the live binding.
 
 **Unarmed handling inside pickup/drop**
 - `GetIsUnarmed(EHand)` compares the held item’s Definition against the stored `UnarmedDefinition`.
@@ -212,7 +231,7 @@ Hand-held stacks are a lightweight, same-type-only special case managed entirely
 **While a hand holds a stack (count ≥ 2)**
 - Primary actions (swing, throw, examine, etc.) are disabled on that hand.
 - Extending the stack hand enables container-style take/put with the free hand (one item at a time, same type only).
-- Q + mouse button on the stack hand drops the entire stack.
+- Q + mouse **release** on the stack hand drops the entire stack. Stacks never preview-snap or attach to station sockets.
 
 **Collapsing a stack**
 - Taking the last item out of a stack of 2 simply leaves two normal single items.
@@ -237,9 +256,10 @@ Hand-held stacks are a lightweight, same-type-only special case managed entirely
 
 **Input (current interim approach)**
 - Enhanced Input actions are currently wired in the Player Blueprint.
-- Q + LMB / Q + RMB combos fire `TryPickupOrDrop`.
+- Q + LMB / Q + RMB combos currently fire `TryPickupOrDrop` as a single press.
+- Target binding: press = pickup (if Unarmed) or begin place/drop extend; release = commit place or drop. Q-mode suppresses swing / procedural orient / collision damage.
 - A separate `PickUpMode` bool Input Action toggles outline/highlight visibility.
-- Plan: move binding + Q-mode / PickUpMode state into C++ on `AWoodcraftCharacter` once the core feel is solid.
+- Plan: move binding + Q-mode / PickUpMode state into C++ on `AWoodcraftCharacter` once the core feel is solid; that is also the natural moment to split press vs release.
 
 ### 8. Unarmed Handling (Locked)
 
@@ -412,7 +432,8 @@ Until the relevant break condition is met the head stays attached and simply bec
 - **Basic TryPickup / TryDrop / TryPickupOrDrop + GetIsUnarmed** (sphere sweep on TRACE_EQUIPPABLE)
 - Hybrid collision setup (Item profile + EquippableItemFragment sets TRACE_EQUIPPABLE = Block)
 - Pickup and drop fully functional end-to-end (including left-hand mirroring)
-- Held Stacks design locked
+- Held Stacks design locked (stack place-on-socket is out; stacks drop whole on Q + mouse release)
+- Q-mode drop/place-on-socket design locked (commit on release; pickup from socket = ground pickup)
 - EquippableItemFragment already carries NeutralPose / ExtendedPose soft refs
 - Collision damage + incidence + procedural swing orientation (live)
 - `SetExtended` / `GetIsExtended` live (BP still owns the anim extend bool)
@@ -422,15 +443,17 @@ Until the relevant break condition is met the head stays attached and simply bec
 - `UStabItemFragment` impulse on extend
 - Part durability + tool break results on `UDurabilityItemFragment` (this section)
 - Sharpening as crafting recipes (see CraftingSystem stub)
+- Q-mode place-on-socket: press begins extend (no swing), hold preview-snaps, release attaches via `PlacementOffsetTransform` or world-drops. Stacks always world-drop.
 
 **In progress / Next**
 1. Animation hooks between `UHeldItemsComponent` and AnimBP (hold poses / item-specific anims based on held items).
 2. 12-frame reach montage + AnimNotify finalization — largely complete; polish remains.
 3. Dual item highlight (nearby gray + targeted stronger) driven by PickUpMode / FindLookedAtItem.
-4. Move input binding + Q-mode / PickUpMode state into C++.
-5. `UStabItemFragment` impulse on extend.
-6. Later: inventory/storage (Actor destroy/recreate from Instance), two-handed rules, impact audio/VFX, part durability runtime, etc.
+4. Split Q + mouse into press (pickup / begin extend-place) vs release (commit socket attach or world drop). Socket preview + `PlacementOffsetTransform` land with the workbench (Roadmap A3).
+5. Move input binding + Q-mode / PickUpMode state into C++.
+6. `UStabItemFragment` impulse on extend.
+7. Later: inventory/storage (Actor destroy/recreate from Instance), two-handed rules, impact audio/VFX, part durability runtime, etc.
 
 ---
 
-This document reflects the design state as of 2026-08-26. Core pickup/drop, collision hybrid (Primary + Secondary `TRACE_EQUIPPABLE`), Unarmed, Held Stacks, `SetExtended`, collision damage/incidence, and procedural swing orientation are live. Stab impulse, part-durability runtime, and sharpening remain future work.
+This document reflects the design state as of 2026-08-26. Core pickup/drop, collision hybrid (Primary + Secondary `TRACE_EQUIPPABLE`), Unarmed, Held Stacks, `SetExtended`, collision damage/incidence, and procedural swing orientation are live. Q-mode place-on-socket (extend + preview snap while held, commit attach or world drop on release; stacks always drop, never socket) is designed, not implemented. Stab impulse, part-durability runtime, and sharpening remain future work.
