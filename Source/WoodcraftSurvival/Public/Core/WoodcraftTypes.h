@@ -48,8 +48,11 @@ const float GControlStrengthFullLookSpeed = 240.f;
 /** Exponent on the 0–1 look-speed factor before lerping swipe strength. 1 = linear, 2+ = ease-in. */
 const float GControlStrengthCurveExp = 3.f;
 
-/** Angular mass (kg) at which MassScale == 1 before clamp. Hatchet ~1.67 → ~2.78. */
+/** Angular mass (kg) at which MassScale == 1 before the exponent. */
 const float GControlMassRef = 0.6f;
+
+/** Exponent on (mass / Ref) for angular MassScale. 1 = linear. */
+const float GControlMassExp = 1.0f;
 
 /** Floor on angular MassScale. */
 const float GControlMassScaleMin = 0.35f;
@@ -57,29 +60,32 @@ const float GControlMassScaleMin = 0.35f;
 /** Cap on angular MassScale so very heavy items do not over-stiffen rotation. */
 const float GControlMassScaleMax = 6.0f;
 
-/** Linear mass (kg) at which MassScaleLinear == 1 before clamp. Higher than angular so compact items stay sloppy. */
-const float GControlLinearMassRef = 1.2f;
+/** Linear mass (kg) at which MassScaleLinear == 1 before the exponent. Pinned to the hatchet. */
+const float GControlLinearMassRef = 1.67f;
 
-/** Floor on MassScaleLinear so very light items (fists) are not soggy. */
-const float GControlLinearMassScaleMin = 0.85f;
+/** Exponent on (mass / LinearRef) for MassScaleLinear. >1 keeps rocks/fists sloppy and climbs near tool mass. */
+const float GControlLinearMassExp = 3.0f;
+
+/** Floor on MassScaleLinear. */
+const float GControlLinearMassScaleMin = 0.25f;
 
 /** Cap on MassScaleLinear. */
-const float GControlLinearMassScaleMax = 2.5f;
+const float GControlLinearMassScaleMax = 4.0f;
 
 /** Angular strength multiplier (× MassScale) while not extended — planted by the body, slight give. */
-const float GControlAngularStrengthNeutral = 6.f;
+const float GControlAngularStrengthNeutral = 4.f;
 
 /** Angular strength multiplier (× MassScale) while extended with no / slow look. Combat lag floor. */
 const float GControlAngularStrengthBaseline = 3.f;
 
 /** Angular strength multiplier (× MassScale) at high look speed while extended. */
-const float GControlAngularStrengthMax = 36.0f;
+const float GControlAngularStrengthMax = 24.0f;
 
 /** Linear strength multiplier (× MassScaleLinear) while not extended. */
-const float GControlLinearStrengthNeutral = 3.f;
+const float GControlLinearStrengthNeutral = 6.5f;
 
 /** Linear strength multiplier (× MassScaleLinear) while extended with no / slow look. */
-const float GControlLinearStrengthBaseline = 2.f;
+const float GControlLinearStrengthBaseline = 5.5f;
 
 /** Linear strength multiplier (× MassScaleLinear) at high look speed while extended. */
 const float GControlLinearStrengthMax = 10.0f;
