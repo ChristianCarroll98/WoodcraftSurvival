@@ -14,7 +14,7 @@ const FString GErrorPrefix = TEXT("ERROR: ");
 const bool GbDebugPrint = true;
 
 /** Master switch for hit / orientation debug draws. */
-const bool GbDebugDraw = true;
+const bool GbDebugDraw = false;
 
 /** Minimum impulse required for a collision to deal damage. Tunable later. */
 const float GMinImpulse = 100.f;
