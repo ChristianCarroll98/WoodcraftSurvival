@@ -310,8 +310,8 @@ All damage (Unarmed punch, spear tip, thrown rock, arrow, dropped item, etc.) us
 
 **Physics Control strengths (UHeldItemsComponent::UpdateControlStrengths)**
 - Runs every tick for every held item, including Unarmed and `StrikeMode None`. Not gated on edge orientation.
-- Three tiers (constants in `WoodcraftTypes.h`, `GControlAngularStrength*` / `GControlLinearStrength*`): Neutral (`!bExtended`, planted), Baseline (extended + slow/no look), Max (extended + flick). Look-speed lerp uses `GControlStrengthFullLookSpeed` + `GControlStrengthCurveExp`.
-- Angular × `FHandState.MassScale` (`GPhysControlMassRef` 0.6). Linear × `FHandState.MassScaleLinear` (flatter `GPhysControlLinearMassRef` 1.2) so compact items trail without softening tool rotation.
+- Three tiers (constants in `WoodcraftTypes.h`, `GControlAngularStrength*` / `GControlLinearStrength*`): Neutral (`!bExtended`, planted), Baseline (extended + slow/no look), Max (extended + flick). Look-speed lerp is extended-only (`GControlStrengthFullLookSpeed` + `GControlStrengthCurveExp`).
+- Angular × `FHandState.MassScale` = `Pow(mass / GPhysControlMassRef, GPhysControlMassExp)`. Linear × `FHandState.MassScaleLinear` = `Pow(mass / GPhysControlLinearMassRef, GPhysControlLinearMassExp)` (Exp 3, Ref pinned to hatchet). Tune angular from long tools; compact items mostly feel linear.
 
 **Procedural orientation (UHeldItemsComponent::UpdateProceduralOrientation)**
 - Edged tools only (`SingleEdged` / `DoubleEdged`). Pierce / None skip. Rotation only — does not write strengths.
