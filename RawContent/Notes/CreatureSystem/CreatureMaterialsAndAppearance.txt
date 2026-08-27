@@ -101,7 +101,7 @@ These helpers stay dumb. They never contain gameplay logic.
 | Effect              | Driver                                      | Notes |
 |---------------------|---------------------------------------------|-------|
 | Blinking            | Simple free-running timer on Actor / shared component | Independent of AI state. Sleep state forces closed + disables timer. |
-| Eyeshine (Tapetum)  | World darkness / moon-phase value           | Multiplied by intensity and written to Eyes role. |
+| Eyeshine (Tapetum)  | World darkness from Notes/EnvironmentSystem/WeatherAndAtmosphere.txt | Multiplied by intensity and written to Eyes role. |
 | Blood amount        | Combat / damage / status code               | Calls SetScalarOnRole |
 | Special glows, pulsing, aggression effects | State Tree tasks or Creature Context updates | Keeps behavior shareable via Linked assets |
 | Secondary zones (underside, membranes) | Material masks + automatic lightening / multiply | Preferred for MVP over full independent ranges |
@@ -114,6 +114,7 @@ These helpers stay dumb. They never contain gameplay logic.
 - Use additional material slots when necessary (especially Two-Sided wing membranes).
 - BaseColor texture stays relatively flat / value-focused. Color variation is applied at runtime via tint.
 - Fine details (nostrils, ear holes, eye shape) are painted, not modeled.
+- Shared look rules (Edge normals, no normal maps, ORM, Opaque vs Sheet masters, fur as painted + high roughness) live in Notes/ArtDirection.txt. This file only owns creature tint, slots/roles, and runtime parameter driving.
 
 ### Open Points / Needs Further Discussion
 

@@ -13,7 +13,7 @@ FOOD SYSTEM:      Dynamic food system with buffs and debuffs
 FIRE SYSTEM:      How starting fires and adding wood works
 CROP GROWTH:      Many crop seeds or cuttings can be propogated
 CREATURES:        Many creatures both classic and unique fantasy, as well as ambient small life. Dynamic interactive creature AI, creatures interact with one another and the player, "simulated world" feel.
-ENVIRONMENT:      90 day years, 24 minute days, realistic weather systems (rain, snow, wind?) four seasons depending on biome affect temperature/humidity which affects player, creature, crops
+ENVIRONMENT:      90 day years, 24 minute days, realistic weather systems (rain, snow, wind?) four seasons depending on biome affect temperature/humidity which affects player, creature, crops. Look of air/sky: Notes/EnvironmentSystem/WeatherAndAtmosphere.txt. Shared surface look: Notes/ArtDirection.txt.
 
 
 FILE STRUCTURE:
@@ -236,3 +236,8 @@ Time scale: As described previously, 90 day years, 24 minute days
 Weather: realistic weather systems (rain, snow, windstorms, heatwave) affect player status effects, wet, cold, hot, etc. Also affect crop growth and health, and some animal behaviors may change depending on the weather and conditions dynamically.
 Seasons: Affect common weather patterns, also affect temperature and humidity, some crops do better during some seasons but I could just implement this via weather patterns and temperature affecting the crops since thats really how it is irl.
 Biomes and microbiomes: Different areas have different base temperatures, are affected by weather differently, and have unique flora and fauna as well as physical environment features including rock structures, tree types and density, water (lakes, rivers), mountains, etc. Ideally I can generate what biome an area is based on those features such as water proximity and elevation, and nearby mountains and such, but I could do it reverse depending on how UE5.8 works. Some areas like caves, nearby rivers or lakes, or other specific small areas could have microbiome climates with special creatures or plant resources. Not sure how best to implement caves and could wait on that a while.
+
+Detailed look / atmosphere design lives in:
+- Notes/ArtDirection.txt – faceted export, no normal maps, ORM, master materials, surface catalog (fur, sheets, eyes).
+- Notes/EnvironmentSystem/WeatherAndAtmosphere.txt – procedural weather, local climate, fog volumes, moon/darkness, Fast vs Fancy lighting quality.
+Creature eyeshine still implemented in Notes/CreatureSystem/CreatureMaterialsAndAppearance.txt; darkness value comes from WeatherAndAtmosphere.

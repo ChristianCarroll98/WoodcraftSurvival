@@ -1,0 +1,149 @@
+Woodcraft Survival – Art Direction
+(Created 2026-08-27. Living document. Look and surface shading only.)
+
+Purpose
+- Owns the shared visual language for items, harvestables, creatures, structures, and the player mesh.
+- Export rules, material families, ORM, and how special surfaces (fur, leaves, membranes, eyes) should read.
+- Does not own weather, fog density, moon, or darkness. Those live in Notes/EnvironmentSystem/WeatherAndAtmosphere.txt.
+- Does not own creature tint / blink / tapetum implementation. Those live in Notes/CreatureSystem/CreatureMaterialsAndAppearance.txt.
+- Does not own Physical Materials (density / impact). Those stay on the physics side (ItemMeshPhysicsAndImpact.txt).
+- Polish-stage. Not on the Core Loop immediate task list.
+
+Related
+- Notes/EnvironmentSystem/WeatherAndAtmosphere.txt – weather, climate, fog, darkness, Fast vs Fancy lighting quality.
+- Notes/CreatureSystem/CreatureMaterialsAndAppearance.txt – color ranges, slots/roles, blink, eyeshine parameter.
+- Notes/ItemSystem/ItemMeshPhysicsAndImpact.txt – collision, phys mats, dual mesh.
+- Notes/HarvestableSystem/HarvestableSystemDefinition.txt – plant axis convention (+Z up, +Y forward).
+- Notes/Roadmap.txt – T0 is flat readable color; unique ORM is allowed as assets are authored.
+
+
+1. Goals
+- Low-poly, faceted lighting. Faces read from the highlight. Hard value breaks, no outline pass.
+- Rough surfaces look diffuse. Smooth surfaces hold a tight reflection. Nothing reads as default-plastic.
+- Same export smoothing on plants, items, creatures, and structures.
+- Unique albedo + ORM per object (or per material slot) is worth the authoring time.
+- Mood in the world comes from Environment air and lights, not from extra maps on every mesh.
+
+Non-goals
+- Normal maps (locked off).
+- Thin Translucent for leaves / membranes.
+- Strand hair, shell/fin fur, or a unique full material graph per asset.
+- Wet-weather shader suite. Optional later wetness scalar on the masters only.
+
+
+2. Mesh export (Blender 5.2 → UE 5.8)
+- FBX Normals: Edge (split face normals). Lighting uses these exported normals.
+- Closed volumes and thin sheets use the same smoothing rule.
+- Harvestable / plant meshes: +Z up, +Y forward (existing convention). Radial clumps may spawn with random yaw.
+- Item hold is origin + HoldPose, not a grip socket.
+- Unique atlases default 512. Size from world scale and camera distance. Author at ship resolution.
+- Shared atlas across slots of one mesh is fine when the parts are the same family (one wood, one stone, etc.).
+- Different families on one mesh get different slots (nettle stem vs leaves, hatchet handle vs head).
+
+
+3. No normal maps. Yes ORM.
+Locked 2026-08-27: do not author or import normal maps for this look. A detail normal smears the highlight across Edge splits.
+
+ORM is the roughness / metal / contact tool. Unreal pack:
+- R = Ambient Occlusion. Gentle. Skip on smooth simple stones. Paint a little in forks, bindings, bark splits, leaf axils.
+- G = Roughness. Primary look channel. High = light dies on the face. Low = tight highlight on that face.
+- B = Metallic. 0 on almost everything. Only real metals (copper, iron, later) go toward 1. Wet leaves and shiny chitin stay dielectric — darker and smoother, not metallic.
+
+Import: sRGB off, compression Masks. ProjectNotes already records this.
+
+Author roughness as a readable grayscale first, pack after. Per-part textures are expected (head vs handle, stem vs leaf).
+
+Starting roughness ranges (tune per asset, not locks):
+- Raw stone / bark / dry fiber / fur: 0.7–0.9 metallic 0
+- Carved wood, worn handle: 0.55–0.7 metallic 0
+- Fresh leaf / membrane: 0.35–0.55 metallic 0
+- Bone, flint flake, hard-smooth stone: 0.25–0.45 metallic 0
+- Eye / wet surface: 0.15–0.3 metallic 0
+- Copper / iron later: roughness 0.3–0.6, metallic 0.8–1 (tarnish vs polished is roughness)
+- Fur: 0.75–0.95 metallic 0
+
+Masters expose a roughness min/max remap so an instance can be tuned without repainting.
+
+
+4. Master materials (not one graph per thing)
+A unique Material graph per mesh is expensive (permutations, no shared change). A unique Material Instance + unique textures is the intended path.
+
+Two masters cover almost all authored meshes:
+- M_WoodcraftOpaque — Default Lit, Two Sided off. Tools, stems, trunks, stone, bark, bone, fur, player arms, structure wood/stone.
+- M_WoodcraftSheet — Two Sided on. Multiply tangent normal Z by TwoSidedSign. Until there is a normal map (there is not), feed constant (0,0,1). Leaves, membranes, any thin sheet. Opacity / SSS amount is thickness and scatter, not see-through.
+
+Optional third tiny master:
+- M_WoodcraftEye — Opaque with emissive. Or an Opaque instance with emissive enabled. Eyeshine strength is written by the creature appearance system from Environment darkness.
+
+Unlit emissive particles (fireflies, embers, sparks) are not these masters.
+
+Instance parameters (keep the list short):
+- Base Color texture
+- ORM texture
+- Tint
+- Roughness remap min/max
+- Metallic scale (default 1, unused on dielectrics)
+- AO strength
+- Subsurface amount / color (Sheet only, polish)
+- Fuzz / sheen (Opaque, fur / cloth later)
+- Emissive color / strength (eyes, rare glowing bits)
+- Optional wetness scalar later (darken albedo a little, lower roughness a little)
+
+T0 may ship Base Color only on an instance, ORM slot empty / default roughness. Plug ORM in per asset as it is painted.
+
+
+5. Surface catalog
+Opaque solids — Default Lit, Two Sided off. Wood, stone, soil, tools, bark, bone, dry fiber, cordage (painted strands in albedo, very rough).
+
+Thin sheets — Sheet master. Nettle leaves, later foliage, wyvern membrane. Two Sided Foliage or Subsurface at polish. Not Thin Translucent.
+
+Fur — no strand hair. Paint coat in Base Color (roots darker, tips lighter). ORM high roughness, metallic 0, soft AO only where the coat parts. Optional fuzz/sheen on the Opaque instance at grazing angles. Wet fur later = darker multiply + slightly lower roughness. First real test is the wolf.
+
+Eyes — separate slot. Low roughness. Blink and tapetum parameters owned by CreatureMaterials. Darkness value owned by Environment.
+
+Membrane — Sheet slot on the creature (already in creature roles). Same TwoSidedSign rule.
+
+Metal — later tiers. Metallic high, roughness carries polish vs tarnish. Still no normal map.
+
+Ash / charcoal — very rough, low value, metallic 0.
+
+Water / ice — out of scope here. Environment + a dedicated water material later.
+
+Fire / embers / fireflies — Unlit emissive Niagara (or similar). Bloom on Fancy. Count LOD on Fast.
+
+
+6. Nettle (T0 plant example)
+Already modeled: 8-sided stem cylinder, opposing leaf pairs (~14–15), serrated edges, leaf cupping from modeled faces.
+- One mesh, two slots: stem → Opaque instance, leaves → Sheet instance.
+- Same Edge normals on both.
+- Do not rebuild as cards.
+- T0: Base Color. ORM when painted (stem rougher than leaves).
+- Polish: Sheet SSS / Two Sided Foliage on leaves only.
+
+
+7. T0 vs polish
+T0 (Core Loop content, Roadmap A1):
+- Edge normals.
+- Base Color.
+- Correct slot split (Opaque vs Sheet).
+- Shared Wood / Stone Physical Materials (physics doc).
+- ORM authored on new assets when it does not block playable content. One stone or wood mesh may run the full import path first so Masks / sRGB-off is locked.
+
+Polish (after Core Loop, parallel with Environment presets):
+- ORM on remaining parts.
+- Day/night and weather already driving lights (Environment doc).
+- Sheet subsurface.
+- Fur fuzz/sheen if the wolf still looks plastic at grazing angles.
+- Optional global wetness scalar on the masters.
+- Skip any map that softens Edge facets.
+
+LOD cost that matters more than atlas size: two-sided overdraw and particle / volume count. Cap those before raising texture resolution.
+
+
+8. Open points
+- Final master parameter names.
+- Whether eyes are a third master or an Opaque instance.
+- How hard biome should bias creature ColorRange weights at spawn (creature doc).
+- Whether AO is default-on or opt-in per instance.
+- Player-arm skin: stay Opaque roughness-only, or a light SSS later.
+- Packed texture layout if an asset needs a mask besides ORM (eye mask on creatures already planned as a separate slot or channel).

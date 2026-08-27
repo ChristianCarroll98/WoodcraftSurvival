@@ -1,0 +1,531 @@
+Woodcraft Survival – Weather and Atmosphere
+(Created 2026-08-27. Expanded 2026-08-27. Living planning document. Air, sky, climate, darkness.)
+
+Purpose
+- Owns procedural weather, local climate, fog, sun/moon lighting, and the darkness target.
+- Publishes numbers that art, plants, creatures, and player status can all read.
+- Does not own mesh shading, ORM, or master materials. Those live in Notes/ArtDirection.txt.
+- Does not own fire gameplay (stages, ash, cooking, bow drill). That stays under FIRE SYSTEM in ProjectVision until a Fire implementation doc exists.
+- Does not own the 90-day year / 24-minute day lengths — those are already locked in ProjectVision. This doc consumes them.
+- Does not own crop stage math, creature AI, or player status effect application. Those systems read values from here.
+- Polish-stage simulation. Not on the Core Loop immediate task list. Do not start implementation until after Core Loop.
+
+Related
+- Notes/ArtDirection.txt – faceted look, ORM, masters, particles as emissive, optional wetness scalar.
+- Notes/CreatureSystem/CreatureMaterialsAndAppearance.txt – eyeshine uses the darkness value from this system.
+- Notes/ProjectVision.txt ENVIRONMENT + FIRE SYSTEM – seasons, biomes, fire upgrades.
+- Notes/HarvestableSystem – crop growth multipliers will read temperature / water / season from here later.
+- Notes/Roadmap.txt – fire + day cycle are post Core Loop (C and E). Weather rides with E or just after.
+
+
+1. Goals
+- Weather and local climate drive what you see in the air, not a fixed “noon is clear” rule. A clear day is clear because cloud cover and humidity are low. That can be morning or afternoon.
+- One world air mass. No weather map, no weather cells, no storm texture. Performance and simplicity first.
+- Local conditions (biome, elevation, water, canopy, interior) change temperature, humidity, fog, wind shelter, and how much precip *reaches* you. They never turn precip on or off.
+- Local Fog Volumes for woods, hollows, and weather pockets. Global height fog stays a base layer, not a soup.
+- Nights are actually dark. New moon + overcast + woods is annoying and creepy without a torch or fire. A high bright moon on open ground is playable without a carried light, still clearly night.
+- One simulation. Fast and Fancy only change how expensively those numbers are drawn (Lumen, volumetric samples, particle caps).
+- Gameplay status (wet, cold, hot) and crop multipliers use the same weather values as the look.
+
+Non-goals
+- A second art pipeline for Fast quality. Fast drops bounce and volume, it does not re-author textures.
+- Full climate-science fronts. Small state vector + a few rules. Named patterns are a readout of that vector, not a second sim.
+- Weather maps / cells / regional rain. Rejected 2026-08-27. One air mass for the world.
+- Per-asset rain shaders. Optional later wetness scalar lives on ArtDirection masters.
+- Sleet / freezing rain unless ice gameplay appears later.
+- Buying a marketplace sky pack as the source of truth.
+
+
+2. Locked decisions (2026-08-27, planning locks, subject to change)
+- Spatial model: one global air mass + local climate query. No map, no cells.
+- Precip on/off and intensity are global. Stepping into a swamp, creek, or wet biome must not start or stop rain.
+- Temperature is stored and simulated in °C so freeze is just `T <= 0`. Debug prints may also show °F (`F = C * 9/5 + 32`).
+- Two Directional Lights: sun + moon. Do not reuse the sun light after dusk.
+- Pattern catalog below is the starting list. Trim or add while fleshing each pattern. Not every pattern is a first-pass implement.
+- Duration bands in §5 are starting numbers, not sacred. Rationale is “fraction of a game day” for synoptic weather, with a minimum readable length for short real-world events.
+- Implementation waits until after Core Loop.
+
+
+3. Published state
+
+Names will tighten at implement time. Units below are the intent.
+
+Global / world (one set for the whole outdoor world)
+- TimeOfDay (0–1 over the 24-minute day)
+- YearDay (1–90) and Season (derived)
+- TemperatureAir_C (°C) — air-mass temperature before local modifiers
+- Humidity (0–1)
+- CloudCover (0–1)
+- CloudType (Fair / Layered / Convective / Storm)
+- PressureTendency (−1…+1) — fake front energy. Negative = unsettled / precip-prone. Positive = fair / heat-prone. Not real millibars.
+- PrecipType (None / Rain / Snow) — global type from air-mass temperature, not from the biome you are standing in
+- PrecipIntensity (0–1) — global. Zero means it is not precipitating anywhere outdoor.
+- WindDir (yaw) + WindSpeed (starting unit: cm/s or m/s — pick at implement)
+- MoonPhase (0–1)
+- MoonAltitude (below horizon → high)
+- AmbientLightScale (0–1)
+- FogDensityBase
+- GroundWetness (0–1, later; world-wide dry-out after rain)
+- Pattern (readout enum of the current named pattern, for debug / audio / weights)
+
+Local climate (evaluated where the player / actor / plant is)
+Input
+- Biome + microbiome modifiers
+- Elevation
+- Water proximity
+- Canopy / woods density
+- Interior / cave flag
+- Wind shelter (geometry or biome)
+
+Output of GetWeatherAt(Location) / GetClimateAt(Location)
+- Temperature_C
+- Humidity
+- FogDensityLocal (added on top of FogDensityBase)
+- WindSpeedLocal (global speed × shelter)
+- PrecipReach (0–1) — how much of global precip actually hits this point
+- PrecipTypeLocal — almost always the global type; snow/rain flip only from local temperature with hysteresis
+- Visibility
+- Darkness / UsableLight (includes moon, canopy, cloud)
+- WetnessRate (how fast a body / surface gets wet here)
+
+What local is allowed to do
+- Change temperature (lapse, water, canopy shade, wind chill).
+- Change humidity and local fog.
+- Shelter wind.
+- Reduce PrecipReach under canopy or inside interiors (0 in a cave, partial under trees).
+- Flip Rain ↔ Snow only when local temperature crosses freeze with hysteresis.
+
+What local is forbidden to do
+- Raise PrecipIntensity from 0 to >0.
+- Zero PrecipIntensity because the biome is “dry” or “wet.”
+- Spawn a private thunderstorm over a lake.
+
+Readers
+- Height fog + Local Fog Volumes
+- Sun directional + Sky Atmosphere + Sky Light
+- Moon directional
+- Volumetric Cloud material params (coverage / type / storm)
+- Niagara precip, fireflies, embers
+- Creature eyeshine (1 − usable light, including moon)
+- Player status and crop growth (later)
+- Fire / torch only add light; they do not author weather
+- Later: AI perception range, fire rain penalty, creature shelter seeks
+
+
+4. Simulation model
+
+Driver is the air-mass vector. Named patterns are a readout. A first-pass scheduler may push the vector toward a weighted next pattern; rules can replace that scheduler later without changing readers.
+
+First-pass loop (planning)
+1. Advance TimeOfDay, YearDay, Season, MoonPhase / MoonAltitude.
+2. Drift PressureTendency slowly. Season + time-of-day bias the drift (afternoon convective bump in warm seasons, night radiational cooling when skies are already fair).
+3. Integrate TemperatureAir_C toward a seasonal + diurnal target, then apply weather modifiers (overcast shrinks the swing, precip cools, heatwave holds the high).
+4. Integrate Humidity toward a seasonal target, plus water-world bias is NOT used here (water is local). Global humidity still rises during and after precip and at night under fair/low-wind.
+5. CloudCover / CloudType follow humidity + PressureTendency + pattern target.
+6. PrecipIntensity follows cover + humidity + unsettled tendency. Type from air-mass temperature vs freeze.
+7. WindSpeed follows pattern + tendency. Direction drifts slowly.
+8. Publish Pattern = best matching row in §7.
+9. Presentation writes UE actors from the published state.
+10. Anyone who cares calls GetWeatherAt(Location) and applies §6.
+
+No second simulation inside Niagara, fog actors, or materials. They only consume.
+
+Why not a weather map
+- One set of cloud / fog / light params is cheap and matches a single Sky Atmosphere + Volumetric Cloud + Height Fog setup.
+- Regional rain (“wet here, dry 200 m that way”) needs a texture or cells, extra samples, and is how you get precip popping at biome borders.
+- The interesting local difference in this game is fog, temperature, wind shelter, and canopy drip — not a private storm over the swamp.
+
+
+5. Time, season, durations
+
+Consumed from Vision
+- Day = 24 real minutes = 24 game hours. 1 game hour = 1 real minute.
+- Year = 90 game days. Four seasons ≈ 22.5 days each. Season influence is a smooth band, not a midnight switch.
+
+Clock scale vs felt scale
+Literal 1:60 shrinks a 30-minute real shower to 30 seconds of play. That reads as a VFX flicker, which this project does not want.
+
+Rule used for the starting bands:
+- Synoptic events (fronts, overcast days, heatwaves, cold snaps) keep their *fraction of a day or of several days*.
+- Sub-hour real events (showers, thunder cells, fog burn-off) get a minimum readable play length so you can walk through them.
+
+Starting duration bands (real minutes of play = game hours)
+
+| Event | Play length | Game meaning |
+|---|---|---|
+| Pattern blend / sky lerp | ≥ 60–90 s | never a pop |
+| Dawn valley fog burn-off | 3–6 min | morning only, then gone |
+| Shower | 2–5 min | part of a morning or afternoon |
+| Thunderstorm | 3–8 min | afternoon-weighted in warm seasons |
+| Steady rain / snow front | 6–12 min | ~¼–½ of a game day |
+| Overcast stay | 12 min–2 game days | can own a whole day |
+| Heatwave / cold snap | 2–5 game days | season modifier, not a sky flicker |
+
+These are averages to aim the scheduler at, not fixed timers. Exact rolls can vary inside the band.
+
+Diurnal biases (weights, not hard scripts)
+- Fog tendency: late night through early morning, fair-to-layered cover, high humidity, low wind.
+- Convective / storm weight: rises after midday in warm + humid seasons, falls after dusk.
+- Radiational cooling: strong only under low CloudCover at night.
+
+
+6. Local climate (and the no-pop precip rule)
+
+Query
+`FLocalWeather UWeatherSubsystem::GetWeatherAt(FVector WorldPos) const`
+Same function for player, plants, creatures, fire. No per-system snowflake math.
+
+Biome + microbiome
+Data assets hold a climate row, not a private weather machine:
+- TempBase_C and TempSeasonAmplitude_C
+- HumidityBase
+- FogBias
+- WindExposure (1 = open, <1 = sheltered)
+- CanopyDensity default (woods vs meadow)
+- PrecipReach default (almost always 1 outdoors; never used to invent rain)
+- Interior flag (caves)
+
+Elevation
+- Temperature lapse starting point: −0.65 °C per 100 m. Open, tune later.
+- Ridges: FogBias down.
+- Hollows / valley floors: FogBias up, slight cold pool at night.
+
+Water proximity
+- Humidity up, Temperature swing down, FogBias up.
+- Does not start rain.
+
+Canopy
+- Less direct sun (cooler day, weaker moonlight).
+- FogBias up even on a mild day.
+- PrecipReach < 1 (example starting range 0.35–0.7 under dense woods). Particles thin out, wetness rate drops, crops under canopy get less rain water.
+- You can still *hear* global rain and see it in gaps. Walking into woods must not look like the storm ended.
+
+Interior / cave (parked with Vision caves)
+- PrecipReach = 0. No precip particles.
+- Ignore sky lights for usable outdoor light (darkness + torch/fire only, plus whatever cave ambient we add later).
+- Temperature toward a stable cave band for that biome (cool, not outdoor swing).
+- This is a space type, not a biome precip switch.
+
+Rain ↔ snow at the sample point
+- Freeze line is 0 °C local.
+- Hysteresis so walking a contour does not flicker: snow if T <= −0.5 °C, rain if T >= +0.5 °C, keep last type in the gap.
+- Intensity still comes from global PrecipIntensity. A cold ridge can snow while a warm valley rains *only if global precip is already on*. Neither place can be the reason it started.
+
+Desert / dry biome
+- Low HumidityBase, high day Temp, large swing, FogBias down.
+- Same global precip as everywhere else. “Different precip response” means faster GroundWetness dry-out, weaker puddles, maybe dust after — not “it is not raining here.”
+
+Worked anti-pop examples
+- Raining, walk meadow → swamp: rain continues. Swamp adds fog + humidity + slightly cooler. PrecipReach stays ~1.
+- Raining, walk meadow → dense woods: rain continues at lower PrecipReach. Local fog up. Particles thinner.
+- Clear, walk into swamp: no rain. Possible extra local fog / dew, not a shower.
+- Raining and 1 °C air mass, walk up a mountain to −2 °C: type may flip to snow after hysteresis. Intensity unchanged.
+- Inside a cave: precip particles off. Step back outside: same global storm you left.
+
+
+7. Pattern catalog
+
+A pattern is the best label for the current air-mass vector. First pass can implement Fair, Overcast, Rain, Snow, plus Fog as a local overlay. The rest stay documented so weights and presentation have a home.
+
+Each row: when it forms, where it prefers to sit, what it publishes, what you see, what gameplay reads.
+
+Fair / clear
+- Forms: PressureTendency high or rising, Humidity low-mid, CloudCover low.
+- Where: everywhere. Local fog still allowed in wet hollows at dawn.
+- Publishes: CloudType Fair, PrecipIntensity 0, FogDensityBase near 0, full diurnal temp swing.
+- Look: readable sun / moon, low height fog, volumetric clouds thin or scattered.
+- Gameplay: baseline wetness dry-out. Heat risk on hot biomes at noon.
+
+Partly cloudy
+- Forms: mid CloudCover, not saturated.
+- Where: everywhere.
+- Publishes: CloudType Fair or Layered, Precip 0.
+- Look: moving cloud shadows on Fancy. Sun still present.
+- Gameplay: slightly softer swing than Fair.
+
+Overcast (dry)
+- Forms: high CloudCover, Humidity mid-high, PressureTendency low, but precip not triggered yet (or after a front dries).
+- Where: everywhere.
+- Publishes: CloudType Layered, Precip 0, smaller temp swing, FogDensityBase up a little, AmbientLightScale down.
+- Look: dimmer cooler day, grey sky, no streaks.
+- Gameplay: less solar heating. Moonlight heavily cut at night.
+
+Dawn / valley fog
+- Forms: night-to-morning, Humidity high, Wind low, CloudCover not stormy. Local FogBias high (hollow, water, woods).
+- Where: local volumes, not a global soup. Ridges can sit above it.
+- Publishes: global Pattern may still be Fair or Overcast. FogDensityLocal is the event.
+- Look: Local Fog Volumes up, height fog only slightly up. Burns off on the morning band in §5.
+- Gameplay: visibility down in the pocket. WetnessRate slight. AI perception later.
+
+Drizzle / mist
+- Forms: high Humidity, mid-high CloudCover, low Wind, weak precip trigger.
+- Where: global intensity low; hollows read wetter via PrecipReach ~1 + extra fog.
+- Publishes: PrecipType Rain, Intensity low.
+- Look: fine Niagara, soft height fog.
+- Gameplay: slow wet accumulation. Weak crop water.
+
+Light rain
+- Forms: CloudCover high, Humidity high, PressureTendency negative, Intensity mid-low.
+- Look: visible streaks, louder audio than drizzle, ground wetness climbing.
+- Gameplay: wet status. Fire start penalty later. Crop water up.
+
+Steady rain
+- Forms: same as light rain held on the long band in §5.
+- Look: thicker streaks, higher FogDensityBase, CloudType Layered or Storm.
+- Gameplay: faster wet, stronger fire penalty, main crop-water event.
+
+Heavy rain / storm
+- Forms: Intensity high, CloudType Storm, Wind up.
+- Look: dense particles (capped on Fast), darker sky, more fog. Fancy can use the Volumetric Cloud Storm group.
+- Gameplay: high wetness rate, low visibility, creatures more likely to seek shelter later.
+
+Thunderstorm
+- Forms: warm-season afternoon bias + high Humidity + Convective/Storm cover + PressureTendency low.
+- Extra: lightning is a brief sun/moon/skylight intensity bump + optional Niagara bolt. Not a strike-damage system unless a later doc asks for it.
+- Duration: short cell on the §5 band, may repeat the same afternoon.
+- Gameplay: same as heavy rain plus light flashes. Audio cue.
+
+Light snow / flurries
+- Forms: global precip on + air-mass at or below freeze, Intensity low.
+- Look: sparse snow Niagara. GroundWetness may freeze later; first pass can treat as wet/cold.
+- Gameplay: cold bias. Slow wet. Weak crop water (most plants will care about T more than snow type).
+
+Steady snow
+- Forms: precip on + below freeze, Intensity mid, long band.
+- Look: thicker flakes, FogDensityBase up, AmbientLightScale down.
+- Gameplay: cold, wet, low vis. Later: accumulation / footprints are not this doc.
+
+Blizzard
+- Forms: snow + high WindSpeed + high Intensity.
+- Look: Fast still has to read as “bad snow” from particles + fog + wind, not from a unique mesh set.
+- Gameplay: strong cold + wet + visibility floor. Shelter pressure on creatures later.
+
+Heatwave
+- Forms: multi-day. PressureTendency high, CloudCover low, TemperatureAir held on the hot side of the seasonal band.
+- Where: felt more in already-hot biomes via local temp, but the air mass is world-wide.
+- Look: hard sun, maybe heat haze later (open). Low fog.
+- Gameplay: hot status risk. Drought pressure on crops (low Humidity, no precip). Fire easier later.
+
+Windstorm / gale
+- Forms: WindSpeed spike on whatever cover you already have. Optional light precip. Dry biomes may kick dust motes.
+- Look: clouds race (wind on volumetric cloud animation), foliage later, particles advect.
+- Gameplay: wind chill, fire spread / extinguish later, projectile / hearing later if those systems want it.
+
+After-front clear
+- Forms: PressureTendency flips positive after precip tails off.
+- Look: high visibility, leftover GroundWetness, maybe leftover local fog in hollows.
+- Gameplay: wet things dry. Good foraging light.
+
+Desert haze / dust
+- Later biome garnish. High Wind + low Humidity + dry ground. Not a precip pattern.
+- Must not be implemented as “desert turns rain off.”
+
+Cave / interior
+- Not a sky pattern. See §6. Stable temp, PrecipReach 0, darkness without moon.
+
+
+8. Sun, moon, darkness
+
+Sun
+- Directional light + Sky Atmosphere ride TimeOfDay.
+- Color and intensity also scale with CloudCover. Overcast day is dimmer and cooler, not just grey fog.
+
+Moon
+- Second Directional Light. Stays in the sky through dusk / dawn instead of popping in when the sun is disabled.
+- Usable moonlight = phase × altitude × (1 − CloudCover) × canopy transmittance at the sample point.
+- High bright moon + open ground: enough to walk and read silhouettes.
+- New moon or moon down + overcast: not enough.
+
+Darkness target
+- Overcast new moon in woods should feel like you need a fire or torch.
+- Auto-exposure must be clamped so the camera does not open up and turn that night into grey noon.
+- Ambient / skylight nearly dies in that worst case.
+- Q-mode item outlines are UI and can stay visible so pickup is not impossible in pitch black (final call later).
+- Eyeshine strength on the Eyes role scales with this darkness. Implementation stays in CreatureMaterials.
+
+Darkness metric (still open which exact published name)
+- Planning default: UsableLight 0–1 at the sample point, and Darkness = 1 − UsableLight.
+- Built from AmbientLightScale × (sun term + moon term) × canopy × (1 − local fog crush).
+- Eyeshine reads Darkness. Do not invent a second night factor.
+
+Lumen (plain language)
+- Lumen is Unreal’s dynamic bounce light (sun hitting a trunk lights the nettle underneath; fire lights a log’s underside).
+- Fancy: Lumen on (hardware if the GPU can).
+- Fast: Lumen off or lowest software. Facets must still read from exported normals + ORM. Bounce is garnish.
+
+
+9. Fog
+
+Two layers.
+- Exponential Height Fog: base extinction and color from global FogDensityBase + weather color. Fair → near zero. Storm / snow → up. Enable Support Sky Atmosphere Affecting Height Fog; set Height Fog inscattering colors black so Sky Atmosphere owns the tint.
+- Local Fog Volumes: woods, hollows, morning valley fog, fire glow pockets. Density = local climate × weather.
+
+Clear Fair weather turns local volumes down, not necessarily off in a wet hollow.
+Do not max height fog and every local volume at once.
+
+Fancy draws these as volumetrics. Fast can keep the same actors at cheaper settings or hide volumes and only keep height-fog color / sky dimming so weather is still readable.
+
+UE 5.8 FSSS (Fog Screen Space Scattering) is experimental garnish on Fancy only. Not a dependency. Does not support volumetric clouds.
+
+
+10. Clouds (presentation of CloudCover + CloudType)
+
+Engine: one Volumetric Cloud component. Project instance of Engine `m_SimpleVolumetricCloud` (do not edit Engine content). Drive coverage / storm / animation from the global vector.
+
+| CloudType | Intent |
+|---|---|
+| Fair | thin / scattered, bright |
+| Layered | stratus / overcast sheet |
+| Convective | taller build-ups, afternoon warm-season |
+| Storm | material Storm group on, darker, may hide the moon |
+
+WindSpeed advects cloud animation. Cloud shadows on Fancy if the scalability path is cheap enough; Fast can drop them.
+
+Clouds are global. There is no “storm cell over that hill only.”
+
+
+11. Precipitation, wind, particles
+
+Precip
+- Niagara rate from global PrecipIntensity × local PrecipReach.
+- Type from PrecipTypeLocal (hysteresis in §6).
+- Camera-relative spawn. Cap counts on Fast.
+- Under canopy: lower rate, not zero, unless Interior.
+
+Wind
+- Global dir + speed. Local shelter multiplies speed.
+- First visual consumers: cloud advection, precip drift, later foliage. No separate wind field.
+
+Ground wetness (later)
+- World-wide value climbs while PrecipIntensity > 0 and type is rain (snow handling later).
+- Dries on a timer modified by TemperatureAir, Humidity, sun, and biome dryness.
+- Optional scalar on ArtDirection masters last. Not a per-asset rain shader.
+
+Other particles
+- Fireflies: effects, not full creatures (ProjectVision). Unlit emissive sprites. Bloom on Fancy. Count LOD on Fast. Allowed when local evening + warm-enough + not hard precip.
+- Embers / sparks: same family, tied to fire stage.
+- Dust motes only when a volume is already up (dusk woods, cave mouth later, desert wind later), never as a Fair default.
+
+ArtDirection owns the emissive look. This doc owns when they are allowed to spawn and how many.
+
+
+12. Local lights (fire and torch)
+
+Gameplay of fire is Vision / a future Fire doc. Visual stack when that exists:
+
+- Mesh: pit / logs (ArtDirection Opaque, very rough).
+- Niagara: flame + embers (Unlit emissive). Same particle family as fireflies.
+- One point light, shadow-casting. Radius and intensity from fire stage (small / regular / bonfire).
+- Fancy: Volumetric Scattering Intensity on that light and/or a small local fog pocket so the glow sits in the air.
+- Flicker: cheap noise on intensity / color.
+
+Torch / held light: same recipe, smaller radius, follows the hand. This is what makes the darkness target playable.
+
+Fast: light + mesh + few particles. Skip the volume pocket.
+
+Do not invent extra GI for fire. Lumen on Fancy will bounce it; Fast will not.
+
+
+13. Fast vs Fancy
+
+Engine Scalability (Low–Epic) plus a few project toggles: Lumen, Volumetric Fog, Particle density.
+
+| | Fast | Fancy |
+|---|---|---|
+| Bounce | Off / lowest Lumen | Lumen on |
+| Shadows | Low | High / VSM |
+| Fog | Height fog + cheap or no volumes | Height + local volumetrics |
+| Clouds | Cheaper volumetric samples or simplified coverage | Full volumetric + optional cloud shadows |
+| Particles | Hard caps | Higher count, bloom |
+| Reflections | Off | On later for wet / metal |
+| FSSS | Off | Optional experimental |
+
+A Fair day and a dark night must read on Fast. If a material only looks correct with Lumen and volume fog, the ORM is wrong.
+
+
+14. Gameplay readers (contracts, not implementations)
+
+Player (later survival)
+- Temperature_C + WindSpeedLocal + Wetness → cold / hot / wet status. Formulas live in player survival, not here.
+- WetnessRate from PrecipReach × Intensity, plus standing in local fog / water later.
+
+Crops (Harvestable later)
+- Read Temperature_C, incoming water (PrecipReach × Intensity, plus player watering), Season.
+- This doc does not duplicate stage durations.
+
+Creatures
+- Eyeshine: Darkness from this system, applied in CreatureMaterials.
+- Later AI: seek shelter on Blizzard / Heavy rain / Thunderstorm; hunt / howl rules stay in creature docs and may read Pattern or Wind / Precip.
+
+Fire (future Fire doc)
+- Rain / wind modifiers on lighting and staying lit. Weather only publishes Intensity, Reach, WindSpeedLocal.
+
+AI perception (later)
+- Visibility / FogDensityLocal as a range scale. Same number the camera fog uses.
+
+
+15. Unreal mapping
+
+Own the numbers in a UWorldSubsystem. Drive stock UE actors. Do not let a marketplace sky become the sim.
+
+Use
+- Sky Atmosphere — sky color, aerial perspective, sun disk
+- Volumetric Cloud + project material instance — CloudCover / CloudType
+- Directional Light ×2 — sun, moon
+- Sky Light realtime capture — bounce from sky / clouds
+- Exponential Height Fog (+ optional second layer, volumetric) — FogDensityBase
+- Local Fog Volumes — hollows, canopy, fire pockets
+- Niagara — rain / snow / embers / fireflies
+- Post Process — clamped auto-exposure, later color grade per pattern if needed
+- Environment Light Mixer — editor convenience only
+
+Ignore as source of truth
+- Ultra Dynamic Sky / Sky Creator / SkyScape and similar
+- Weather map textures
+- Experimental FSSS as a required look
+
+Project setting
+- Support Sky Atmosphere Affecting Height Fog on.
+
+
+16. Architecture (when it is built)
+
+- UWeatherSubsystem (UWorldSubsystem), same family as Item / Harvestable factories.
+- FWeatherState global snapshot + GetWeatherAt / GetClimateAt.
+- UBiomeClimateData (or fields on whatever biome asset exists by then): the row in §6.
+- Thin presentation actor or coordinator that writes lights / fog / clouds / Niagara from the snapshot.
+- Debug: print Pattern, TemperatureAir_C + local Temperature_C, and the same two in °F, Humidity, Cover, Precip, Wind.
+- Save / load: YearDay, TimeOfDay, the air-mass vector, GroundWetness. Do not save every Local Fog Volume.
+
+Actors stay thin. Fragments / biome assets stay data. No runtime work in data assets.
+
+
+17. T0 vs polish
+
+T0 / Core Loop: default Unreal sun + whatever is already in the test level. No weather actor required.
+
+After Core Loop (Roadmap E is day cycle; C is fire; weather can ride with E or just after):
+1. Time of day + clamped exposure + two-light moon (darkness target).
+2. Weather state vector + simple pattern scheduler + §5 durations.
+3. Height fog driven by that state.
+4. GetWeatherAt + biome climate rows. Local Fog Volumes × canopy / hollow. PrecipReach under canopy.
+5. Fire / torch light stack.
+6. Eyeshine wired to Darkness.
+7. Precip particles from global intensity × reach. Rain/snow hysteresis.
+8. Optional GroundWetness + master-material scalar last.
+
+Never added: weather map / cells.
+
+
+18. Open points
+- Exact WindSpeed unit (cm/s vs m/s) and first numeric ranges.
+- First filled biome climate table (woods, meadow, water edge, ridge, later desert). Shape is in §6; numbers are not.
+- Darkness published name: UsableLight vs AmbientLightScale vs both.
+- Q-mode outlines in pitch black: always on vs dim vs require a light.
+- Cave / interior volumes (Vision already parks caves).
+- Heat haze look on heatwave.
+- How many Local Fog Volumes are budgeted around the player.
+- Whether GroundWetness is world-wide only or also a local add under canopy drip.
+- Lightning: flash-only vs later strike.
+- Foliage wind: material vs Chaos / anim, owned by art or a later environment anim note.
+- Scheduler vs rule-integration as the first driver of PressureTendency. Either is valid if readers only see the vector.

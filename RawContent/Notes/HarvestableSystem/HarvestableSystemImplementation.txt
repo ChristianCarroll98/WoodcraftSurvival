@@ -101,11 +101,11 @@ Exactly the same philosophy as the Item system.
   ```
 
 - Fragments own specialized behaviour in `OnHarvestableSpawned`:
-  - Trees / large rocks / stumps → leave the solid defaults (or explicitly reinforce them).
-  - `UCropHarvestableFragment` (or a thin collision helper) changes responses for plants:
-    - Ignore Pawn (or very soft Block) for small crops.
-    - QueryOnly or NoCollision for the tiniest sprout stage.
-    - Optionally scale collision with growth stage later.
+  - Trees / large rocks / stumps → omit the collision fragment; profile stays solid.
+  - `UCollisionHarvestableFragment` (Mode = WalkThrough) for nettle and other plants the player should walk through:
+    - After HarvestableProfile is applied, Ignore `ECC_Pawn` and `COLLISION_PLAYER`.
+    - Leave Collision Enabled = QueryAndPhysics and keep Block on `COLLISION_ITEM` so held-item `OnComponentHit` still fires.
+  - `UCropHarvestableFragment` later can reuse or replace this for stage-based collision (QueryOnly sprouts, etc.).
 
 - Standing harvestables start **kinematic / non-simulating**. Physics simulation is only enabled later if a FallableHarvestableFragment decides to drop the tree, or when the resource becomes an Item (Log).
 
