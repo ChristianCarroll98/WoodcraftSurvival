@@ -16,18 +16,13 @@ if (GEngine) GEngine->AddOnScreenDebugMessage
 	TEXT("comment string") // comment FString. Can concatenate or add variables and format as long as its an FString.
 );
 
+reminder for next time:
+Strengthen phys control during swing at low speed for easier control, lower threshold for blade aiming.
+
+
 current issues/working task list:
 
-- Collision damage path is live (held-only, impulse + speed gates, short cooldown). Stick works on TestTree.
-- DONE: Resistance data lives on HealthHarvestableFragment (defaults) → copied to UHarvestableInstance at creation. ApplyDamage multiplies by Instance->GetDamageMultiplier. Tree data asset: put Blunt in Immunities (or high positive modifier) so sticks stop killing trees.
-- DONE: Copper Hatchet dual-mesh via fixed UPhysicsConstraintComponent (Chaos WeldTo unreliable for runtime NewObject secondaries). Both meshes simulate; constraint locks all 6 DOF + SetDisableCollision(true). Feels heavier, hits register, head stays attached.
-- DONE: DamageItemFragment is pure “enable hit events” marker. DamageType from named collision primitives (Slash/Sharp/Blade → Slash, Pierce/Point → Pierce, else Blunt). Amount from impulse only (mass already in physics). Softness multipliers later on Physical Material.
-- DONE: Named shape extraction — ResolveShapeNameFromHit uses closest Box/Sphere/Sphyl to ImpactPoint.
-- DONE: Mass-scaled Physics Control + reduced gravity via Body Modifier on Primary+Secondary (HeldItemLeft/Right sets). Effective mass = Primary+Secondary. Modifiers destroyed on detach. Live strength/damping constants live in WoodcraftTypes.h.
-- DONE: Damage gated by GMinItemSpeed (world speed of hitting mesh) so continuous contact while pressed does not keep dealing damage. Sprinting into a target while extended can still hit.
-- DONE: Extended state on HeldItemsComponent (SetExtended / GetIsExtended per hand). Damage + procedural orient gated on extended. Anim extend flag still driven from Player BP. Stab impulse (UStabItemFragment) still needs work.
-- DONE: FHandState on HeldItemsComponent (HeldItem, PendingPickup, ActiveControl, bItemStuck, bExtended, LastItemVelocity, bProceduralOrientActive, MassScale, MassScaleLinear, OrientEdgeSign). Tick samples primary-mesh velocity for pre-bounce incidence.
-- DONE: Incidence / angle → type conversion (model B). EItemStrikeMode on EquippableItemFragment (None, SingleEdged +Y, DoubleEdged ±Y, Pierce +Z). Outside cone → force Blunt. Incoming dir = LastItemVelocity → live vel → -NormalImpulse. Cone constants live in WoodcraftTypes.h.
+
 - DONE: Procedural swing orientation (screen intent). Edged only. Gate: extended + owner-relative speed ≥ GMinItemSpeed. Drive: SetLookDelta → screen intent → WeaponBone Z. A/D skeletal. Rotation only — strengths are not written here.
 - DONE: Control strengths in UpdateControlStrengths (all held items, including Unarmed / StrikeMode None). Tiers Neutral / Baseline / Max as GControlAngularStrength* + GControlLinearStrength*. Look-speed lerp uses GControlStrengthFullLookSpeed. Separate MassScale (angular, Ref 0.6) and MassScaleLinear (Ref 1.2). Constants in WoodcraftTypes.h.
 - DONE: Wrist limits on procedural orient. Asymmetric CW/CCW around neutral (projected WeaponBone +Y). Per-hand sign mapping (right vs left). Target stays in legal band via 1D scalar twist rate-limit. Flip preferred edge (±Y) with hysteresis (GWristHysteresisDeg). SingleEdged prefers +Y until forced; DoubleEdged stays on current while legal. OrientEdgeSign on FHandState. Globals for now (per-item later).
