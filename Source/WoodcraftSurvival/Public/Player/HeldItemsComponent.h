@@ -249,9 +249,9 @@ private:
 	void SetHeldItemStuckResponses(AItemActor* Item, bool bStuck);
 
 	/**
-	 * While extended and above GMinItemSpeed, drives the Physics Control angular
-	 * target so the preferred strike axis aligns with screen-space look intent (SetLookDelta).
-	 * Rotation only — strengths live in UpdateControlStrengths.
+	 * While extended and above GMinItemSpeed, drives the Physics Control target so the
+	 * preferred strike axis aligns with screen-space look intent (SetLookDelta).
+	 * Twist axis is WeaponBone +Z; pivot is the Hand bone (wrist). Strengths live in UpdateControlStrengths.
 	 */
 	void UpdateProceduralOrientation(EHand Hand, float DeltaTime);
 

@@ -878,8 +878,9 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 			State.bProceduralOrientActive = false;
 			State.OrientEdgeSign = 1;
 			PhysicsControl->SetControlUseSkeletalAnimation(State.ActiveControl, true, 1.f);
-			PhysicsControl->SetControlTargetOrientation(
+			PhysicsControl->SetControlTargetPositionAndOrientation(
 				State.ActiveControl,
+				FVector::ZeroVector,
 				FRotator::ZeroRotator,
 				0.f,
 				true,
@@ -1038,8 +1039,14 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 	const FQuat RelativeQuat = ParentWorldRot.Inverse() * DesiredWorldRot;
 	const FRotator RelativeRot = RelativeQuat.Rotator();
 
-	PhysicsControl->SetControlTargetOrientation(
+	// Pivot at the Hand bone (wrist). RelLoc is wrist in WeaponBone / item space.
+	// TargetPos orbits the item origin around that point so the wrist stays put.
+	const FVector RelLoc = GetRelativeTransformBetweenWeaponAndHandBones(Hand).GetLocation();
+	const FVector TargetPos = RelLoc - RelativeQuat.RotateVector(RelLoc);
+
+	PhysicsControl->SetControlTargetPositionAndOrientation(
 		State.ActiveControl,
+		TargetPos,
 		RelativeRot,
 		0.f,
 		true,

@@ -23,7 +23,8 @@ Strengthen phys control during swing at low speed for easier control, lower thre
 current issues/working task list:
 
 
-- DONE: Procedural swing orientation (screen intent). Edged only. Gate: extended + owner-relative speed ≥ GMinItemSpeed. Drive: SetLookDelta → screen intent → WeaponBone Z. A/D skeletal. Rotation only — strengths are not written here.
+- DONE: Procedural swing orientation (screen intent). Edged only. Gate: extended + owner-relative speed ≥ GMinItemSpeed. Drive: SetLookDelta → screen intent → WeaponBone Z. A/D skeletal. Strengths are not written here.
+- DONE: Procedural orient pivot is Hand_L/R (wrist). Axis stays WeaponBone +Z. Parent stays WeaponBone. Writes SetControlTargetPositionAndOrientation so the item origin orbits the wrist (TargetPos = RelLoc - R_rel.RotateVector(RelLoc)). Clear pos+ori on falling edge. [2026-08-29]
 - DONE: Control strengths in UpdateControlStrengths (all held items, including Unarmed / StrikeMode None). Tiers Neutral / Baseline / Max as GControlAngularStrength* + GControlLinearStrength*. Look-speed lerp uses GControlStrengthFullLookSpeed. Separate MassScale (angular, Ref 0.6) and MassScaleLinear (Ref 1.2). Constants in WoodcraftTypes.h.
 - DONE: Wrist limits on procedural orient. Asymmetric CW/CCW around neutral (projected WeaponBone +Y). Per-hand sign mapping (right vs left). Target stays in legal band via 1D scalar twist rate-limit. Flip preferred edge (±Y) with hysteresis (GWristHysteresisDeg). SingleEdged prefers +Y until forced; DoubleEdged stays on current while legal. OrientEdgeSign on FHandState. Globals for now (per-item later).
 - DONE: Arm follow in Control Rig (not C++): lerp animated pole toward Midpoint + RotateVector((0,-50,0), GripRotation). Wrist pinch on extreme side swings accepted (hold pose does not twist with the item).
