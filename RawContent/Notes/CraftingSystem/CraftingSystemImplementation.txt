@@ -1,28 +1,471 @@
-**Crafting System – Implementation Notes**  
-*(Stub – 2026-08-25. Full design to be expanded in a later session.)*
+**Crafting System – Definition**
+*(Updated 2026-08-28. Vision / exact terms. Not a C++ implementation plan. Minigame catalog in §11.)*
 
-### High-Level Goals (from ProjectVision)
+This file is the authority for how crafting works. ProjectVision.txt keeps the short system blurb and a link here. Item durability, hold/place, and factory rules stay in ItemSystemImplementation.txt. Station actors and sockets stay in the Structure system once that doc exists; this file only states what crafting needs from a station.
 
-- Player crafts items using resources gathered from the world.
-- Primary interaction: both hands extended and holding items that form a valid recipe → crafting minigame activates (locks view/movement, mouse controls arms).
-- All crafting actions are minigames (even simple ones). Exact minigame designs are determined per recipe/station later.
-- Some crafts require a specific workstation (workbench, leatherworking bench, woodworking station, forge, anvil, grindstone, etc.). Stations provide an additional item slot so three-item-type crafts become possible.
-- Some crafts use multiple items of the same type or are staged so more than three total items can still be handled without exceeding three types.
-- Tools required for a craft must be held; other ingredients may be in hands or on the workstation slot.
-- Recipe selection UI appears under the progress bar (A/D cycles available recipes). Most crafts can be cancelled by releasing the activation buttons; certain crafts (flint knapping, forging) lock the recipe after 50 % progress.
-- Failure states exist (e.g. hitting too hard while forging produces scrap that can be melted down and retried).
+Open sections are marked OPEN. Do not invent those in code until they are closed here.
 
-### Sharpening (locked interaction with Item durability)
 
-Sharpening is implemented entirely as crafting recipes rather than a special one-off action.
+### 1. Goals
 
-- Multiple recipes can target the same tool (crude stone sharpening vs higher-quality grindstone).
-- Each recipe restores some `CurrentHeadHealth` and permanently lowers `MaxHeadHealth` by an amount authored on that recipe (crude = higher Max loss, grindstone = lower Max loss).
-- Grindstone is a workstation; its associated recipes are minigames like every other craft.
-- The item durability system (see `ItemSystem/ItemSystemImplementation.txt` §10) consumes the results: visual/mechanical dulling is driven by the Current/Max ratio; final scrap occurs when Current reaches 0 **and** Max has fallen to ≤ 25 % of the original seeded Max.
+- Crafting is how gathered items become tools, parts, materials, and later food-prep / metalwork products.
+- Interaction stays manual: hold the right items, optionally park one on a station slot, get a quiet prompt, press the default action button, play a minigame.
+- Every craft is a minigame, including simple ones. Types, motion modes, and meters are in §11.
+- At most three item *types* in one recipe (two hands + one station slot). More pieces than that use staged recipes (output of recipe A is an input of recipe B) or several pieces of the same type across multiple crafts.
+- Tools used in a craft are held. They are not consumed unless the recipe says so.
+- Minimal UI. No grid. No recipe list dumped on screen. One prompt, wheel to cycle matches, then a progress / minigame band in the same bottom-middle area.
 
-Exact recipe data, station definitions, and minigame implementations are left for a future expansion of this document.
 
-### Status
+### 2. What crafting is not
 
-This is a minimal stub only. The full crafting architecture (recipe assets, station actors, minigame framework, failure handling, progression tiers, etc.) will be designed in detail in a later session.
+- Not inventory-grid combination.
+- Not fragment-type detection. A slot matches an exact item data asset or a gameplay tag on `UItemDefinition::ItemTags`.
+- Not stacked. A hand that holds a stack (`count ≥ 2`) is not a legal craft socket. Unstack first (existing R + mouse rule).
+- Not a fake / invisible station for hands crafts. Hands craft is the absence of a station.
+- Not mid-session recipe swapping by default. The recipe freezes when the session starts. Unfinished work is a later *item*, not a saved minigame (see §10).
+- Not composite live head/handle Instances. A crafted hatchet is a new item definition (dual-mesh). Part-break at runtime stays on the Item durability design and is out of this system until that ships.
+
+
+### 3. Context snapshot
+
+Crafting never scans the world. It reads a snapshot that is rebuilt when something relevant changes: hand attach / detach, Neutral vs Extended, look-at station, station slot contents.
+
+Snapshot sockets:
+
+- Left hand Instance (or empty / Unarmed)
+- Right hand Instance (or empty / Unarmed)
+- Station-in-context: the structure the player is looking at, or the structure that already holds the slotted item, plus that slot’s Instance (may be empty)
+
+Illegal sockets (recipe match fails for that snapshot):
+
+- Either hand holds a stack
+- Either hand is Extended — prompt and match list are hidden while any occupied hand is Extended
+- A would-be unused hand is not Unarmed (see §6)
+
+Hands craft and “ground craft” are the same thing: a recipe with no station. The snapshot must have **no** station in context.
+
+Station craft: the snapshot’s station identity must equal the recipe’s station asset.
+
+
+### 4. Pieces
+
+**`UCraftingRecipe`** (Primary Data Asset)
+One asset per craft (`DA_Recipe_SharpenedStone`, `DA_Recipe_Cordage`, `DA_Recipe_StoneHatchet`, …).
+
+- `DisplayName` — used in the prompt
+- `Icon` — selector / guidebook later
+- `Station` — optional soft pointer to one `UStructureDefinition` (or the station-identity asset Structures end up using). Unset = hands craft. Set = that station only. No list. Hands recipes are not also valid at a workbench.
+- `Slots` — array of `FCraftingSlot` (usually 2, at most 3)
+- `Outputs` — array of `FCraftingOutput` (one or more)
+- `Minigame` — type id + tuning asset (mode, locks, strengths, engage, presentation). See §11.
+
+**`FCraftingSlot`**
+
+- `Role`: `Ingredient` or `Tool`
+- `Match`: exactly one of
+  - `ExactDefinition` — this item data asset
+  - `RequiredTag` — any item whose `ItemTags` contains the tag (`Item.Tool.Knife`, `Item.Fiber`, …)
+  - `Sharpenable` — Hone only. Runtime: `UDurabilityItemFragment::bCanBeSharpened` and `CurrentHeadHealth < MaxHeadHealth`. Not used as a general fragment matcher.
+- `bMustBeHeld`: `true` = must bind to a hand (tools). `false` = hand or the single station slot
+- `bConsumed`: destroy that Instance on success
+- `DurabilityCost`: `0` = none. On success, applied to the bound item if it has durability. Typical tools: not consumed, cost > 0 once wear ships
+
+No count field. Stacks are illegal in this system.
+
+**`FCraftingOutput`**
+
+- `ItemDefinition`
+- `bAutoEquip`
+
+Authoring convention: a single-output recipe sets `bAutoEquip` true. Multi-output recipes flag at most one output. The data asset is the source of truth; there is no hidden default in code beyond “if you leave it false, it piles.”
+
+**`UCraftingSubsystem`** (World Subsystem)
+Owns / discovers the recipe table. Pure query:
+
+- Input: the snapshot
+- Output: the list of matching recipes, each with a slot binding (which snapshot socket fills which recipe slot)
+
+Does not lock the player, does not spawn items, does not tick minigames.
+
+**`UCraftingComponent`** (on the player)
+Owns prompt state, selected match index, and the live session if any. Calls the subsystem when the snapshot changes. Starts / cancels / commits sessions.
+
+**Session**
+A short-lived object or struct on the component. Created on E, destroyed on success, cancel, fail, or interrupt. Holds:
+
+- Frozen recipe
+- Frozen bindings (the Instances, not “whatever is in the hand later”)
+- Which binding is the tool (if any)
+- Progress `0–1`
+- Minigame state
+
+It is not an actor and not a station.
+
+
+### 5. Matching and binding
+
+For each recipe, try to assign every slot to a snapshot socket.
+
+1. `bMustBeHeld` slots consume hands first. Fail if not enough free hands.
+2. Remaining slots fill leftover hands, then the station slot.
+3. Each socket is used at most once.
+4. A `Tool` slot is always `bMustBeHeld`.
+5. Hands recipe: there is no station socket; every slot must land on a hand. Station-in-context must be empty.
+6. Station recipe: station identity matches `Recipe.Station`. At least one slot should be able to bind the slot (`bMustBeHeld == false`) so the extra socket is actually usable.
+7. Match test per slot: bound item’s definition == `ExactDefinition`, or item tags contain `RequiredTag`.
+8. A hand the recipe does not bind must be Unarmed. Strip binds the stalk and uses Unarmed as the working hand — that Unarmed hand is required, not “unused.”
+
+Several recipes may match one snapshot (same three items, different products). That is a list, not an error.
+
+
+### 6. Prompt and selection
+
+Shown only when:
+
+- Both hands are Neutral (neither Extended)
+- Match list length ≥ 1
+
+Bottom-middle, slightly transparent text, same band as stamina / future progress. Container-list language: selected row full; if `N > 1`, one neighbor above and below smaller and faded.
+
+- `N = 1`: `[E] Craft {DisplayName}`
+- `N > 1`: same line on the selected row; wheel moves selection and wraps
+
+E is the default action button (not extend, not swing). Binding can move later; the prompt always shows the current key.
+
+Mouse wheel while this prompt is up cycles matches. Same wheel used by container UI; a hand Extended for container-take already hides this prompt.
+
+A/D is not used for recipe cycling.
+
+
+### 7. Starting, cancelling, committing
+
+**Start (E)**
+Selected match is frozen into a session. Crafting Input Mapping Context is added (or replaces gameplay mapping). Move off. Camera-look stops driving combat aim; mouse is minigame input. Q pickup / place off. LMB / RMB no longer swing or activate. View lock as in ProjectVision. Prompt hides. Progress / minigame UI uses the same bottom-middle band.
+
+The recipe does not change after this point.
+
+**Cancel (R)**
+Session destroyed. IMC removed. Bindings untouched (no consume, no durability). Prompt may show again if the snapshot still matches.
+
+**Interrupt — any damage the player receives**
+Same teardown as cancel. Immediate. No consume. This includes incoming combat hits, fall damage, and any later damage channel that hurts the player.
+
+Do not plan a single-player path where a bound item leaves its socket mid-session (no drop, no swap, Q off). Later multiplayer: while a session is live, bound hand items and the station slot used by that session are locked so other players cannot pick them up. Unlock on session end.
+
+**Success**
+Order:
+
+1. Apply each slot’s `DurabilityCost` to the bound Instance
+2. Destroy every bound Instance with `bConsumed` (ItemFactory / existing Instance teardown — the actor in that hand or slot goes with it)
+3. Spawn each output via ItemFactory
+4. Auto-equip at most one output (see §8)
+5. Remaining outputs pile at craft origin
+6. Destroy session, remove IMC
+
+**Fail**
+A minigame may own a fail meter `0–1` (fleshing on already-clean hide; later knap/forge overstrike). When the meter fills the session ends as a fail: no consume unless the recipe lists fail outputs; those pile at origin. Tools keep `bConsumed = false` and do not pay `DurabilityCost` on fail. Teardown is otherwise the same as cancel.
+
+
+### 8. Outputs, auto-equip, piles
+
+**Craft origin**
+
+- Hands craft: player location, in front / at feet (same idea as a drop)
+- Station craft: station slot / work surface
+
+**Auto-equip hand**
+
+1. If any bound slot has `Role = Tool`, use the other hand
+2. Else use the primary hand (right unless handedness settings flip it)
+3. That hand must be free after consumes. A remaining tool occupies its hand; do not auto-equip into the tool hand
+4. If auto-equip cannot run, that output piles instead
+
+Non-auto-equip outputs always pile. Several piled items are separate world actors (no craft-time stacks).
+
+
+### 9. Stations (what crafting needs)
+
+A station is a Structure. Crafting needs:
+
+- A station identity: one structure data asset. The recipe’s `Station` field and the structure’s identity must be the same asset
+- Zero or one item slot that uses the shared socket frame already locked for items (`+Z` up, `+X` forward, item `PlacementOffsetTransform`)
+- Detection: looked-at station, or the station that already owns the slotted item
+- Slot cannot hold a stack (Item Q-place already forbids that)
+
+Q-place / retrieve is Item + Structure work, not a crafting verb. Typical station craft: park one ingredient with Q, stand Neutral with the other item(s) in hand, prompt appears, E.
+
+While a session is live the bound station slot (and bound held items) stay put. Single-player: Q is off, so nothing removes them. Multiplayer later: lock those sockets so other players cannot pick the items up until the session ends.
+
+**Higher-tier stations**
+Not a list on the recipe. A copper-tier bench is a different structure asset with its own recipes. Revisit only if a later bench should accept older recipes.
+
+**Workbench (one-slot station, T1 / core loop)**
+First slotted station. Identity `DA_Structure_Workbench`. One actor from ghost to finished, not assembled part-actors.
+
+- Slot: marked flat patch on the top. Shared socket frame. No divot. Back-edge stick rail is mesh only until a second slot exists.
+- Hands recipes are not valid here. Tie (Sharpened Stone + Stick + Cordage → Stone Hatchet) is the first bench recipe.
+- Test level may spawn a finished bench (Roadmap A3). Player-built is A4.
+
+Build graph, ghost apply, and section vis live in Notes/StructureSystem/StructureSystemDefinition.txt. BOM there: 3 Logs, 2 Cordage, 5 Sticks. Raw items consumed on the ghost; no part crafts. Logs require two-hand carry (A4).
+
+Hammer + build mode for placing the ghost stays with Structures / Vision (`B` while holding a hammer, TBD).
+
+**Grindstone (no-slot station, T3)**
+First sharpenable tools are **T3 copper**. T1 stone/bone and T2 flint tools have `bCanBeSharpened = false`. No crude T1 hone unless that is added later.
+
+- Structure: framed stone wheel, axle, foot treadle, copper fasteners. Optional crafted gear on the axle. No item socket.
+- Drive: no hand crank (both hands are on the tool). V1 treadle is presentation — wheel turns and feet pump while Engage is held. Separate pedal-speed input later if needed.
+- Snapshot: looking at the grindstone, one `Sharpenable` tool in a hand, other hand Unarmed, both Neutral. Prompt `[E] Sharpen {ToolName}`.
+- On E: same actor, two-hand stance. Secondary on the head, primary on the handle. Physics Control stays on the primary WeaponBone. Off-hand IK uses an item-space `AssistOffset` (ItemAnimationPipeline — not a mesh grip socket). Per-tool hone poses can wait until that assist IK exists.
+- Live mutate (exception to “writes only on success”): while Engage is held, `CurrentHeadHealth` rises at rate `R` and `MaxHeadHealth` falls at rate `r` (grindstone `r` is small). Release Engage: writes pause, session stays up.
+- Cancel / damage: session ends, **already-applied** Current/Max stay. No rollback.
+- When `CurrentHeadHealth` reaches `MaxHeadHealth`: auto-release Engage, green flash, end session. No further Max loss that tap.
+- Already sharp (`Current >= Max`): no prompt.
+- No consume, no new item. Same Instance. Numbers live in ItemSystemImplementation.txt §10; this recipe only authors `R` and `r`.
+- Scrap cap still Item §10. If Max hits the cap during a hone, stop writes and end the session.
+
+**Other no-slot stations**
+Hide frame is a later station (Flesh). Do not treat grindstone as the pattern for slotted benches.
+
+
+### 10. Staged crafts, unfinished items, progression
+
+Three types is a hard cap per recipe. Longer chains are several recipes.
+
+Example processing chain (names can move):
+
+- Stick + any knife → Wood Shavings + Broken Stick
+- Broken Stick + any knife → Wood Shavings or Kindling (one name, use it everywhere once picked)
+- Clay (gathered) + hands → Clay Bowl (green). Large fire hardens it. Cordage basket can carry clay. Not gated on flint or leather. Pottery wheel later for larger / nicer ware.
+
+Example tool chain (T0 / Core Loop, from Roadmap — still valid as content, not as a scope cap):
+
+- Stone + Stone (hands, Grind) → Sharpened Stone
+- Fibrous Stalks + Unarmed (hands, Strip) → Plant Fiber + Wood Scraps
+- Plant Fiber + Plant Fiber (hands, Twist) → Cordage
+- Sharpened Stone + Stick + Cordage (workbench, Tie) → Stone Hatchet
+
+The hatchet is a new definition (StickHandle primary mesh + stone head secondary). It does not keep a live Stick Instance inside it.
+
+**Unfinished items (later, when a minigame actually needs them)**
+Success of recipe A spawns `UnfinishedX`. Recipe B consumes `UnfinishedX` and yields `X`. That is data. Do not serialize a half-finished session.
+
+**Guidebook / unknown recipes — OPEN**
+Prompt policy can follow the existing guidebook setting. Candidate:
+
+| Setting    | Prompt                         |
+|------------|--------------------------------|
+| All known  | `[E] Craft {DisplayName}`      |
+| Discover   | `[E] Craft ???` until learned  |
+| Strict     | no prompt until learned        |
+
+Default lean: Discover. “Known” lives with the guidebook when that exists. Matching itself does not depend on known-state.
+
+
+### 11. Minigames
+
+One session framework. Each recipe points at a **type** plus a tuning asset (locks, strengths, thresholds, presentation). Audio and VFX are **curated from meter events** (engage, valid stroke / slice / pull / pop / finish, fail tick). Item collision hits do not drive craft feedback.
+
+#### 11.1 Camera and craft frame
+
+On E, blend the current FP view to the tuning’s forward / down aim. Freeze a **craft frame** when the blend ends so volumes do not swim:
+
+- Origin in front of the chest, between the work
+- `+Z` world up
+- `+X` flattened view / player forward at lock time
+
+Mouse is minigame input, not camera, until the session ends. Optional tiny sway only.
+
+#### 11.2 Authority
+
+`UCraftingComponent` owns the session, camera, type logic, engage button, progress / fail meters, and any presentation actor.
+
+`UHeldItemsComponent` keeps Physics Controls and grip IK (`AnimRef Hand relative to WeaponBone × item world`). Crafting **pushes** motion into HeldItems; it does not steal the grip target or move that math onto the player Blueprint.
+
+HeldItems craft API (design):
+
+- `BeginCraftMotion(Hand, Constraint)` — strength overrides, craft-space volume, default axis locks
+- `SetCraftAxisLocks(Hand, LockX, LockY, LockZ)` — click-lock changes
+- `EndCraftMotion(Hand)` — restore normal strengths and swing rules
+
+Swing orientation and collision damage stay off for the whole session.
+
+#### 11.3 Motion modes
+
+How the hands behave. Types pick one.
+
+**`PhysicsItem`**
+Working item moves for real inside a craft-space slab. Progress from that item’s motion. Planted hand locked. Strengths medium–high on the working hand (mass), near-max on the planted hand.
+
+**`GuidedGesture`**
+Hands must not wander. Both hands XYZ-planted (or planted + a tiny authored offset on the working arm). Physics strengths near-max so items sit still. Mouse is a 2D phase / stroke detector. Visible motion is a **clamped authored offset** or a short AnimRef loop whose phase follows the gesture — amplitude is data, not how far the player flails. Presentation mesh does the real twisting / peeling / wrapping.
+
+**`PhysicsStrike`**
+Aim inside the box. Tool-hand mouse **hold** locks X and Y (aim frozen, Z free) for the slam. Release returns to aim. Used by knapping and forging.
+
+#### 11.4 Presentation meshes
+
+Some types hide the bound item meshes for the session and spawn a presentation actor owned by CraftingComponent. It is not an Item, not in the factory, not pickupable. Bound Instances stay in the hands / slot until success consume. Inputs: `Progress`, engage state, type-specific phase. On cancel, destroy presentation and show the real meshes again. On success, destroy presentation then run the normal consume / spawn path.
+
+#### 11.5 Tuning fields (all types)
+
+- `MotionMode`
+- `LinearStrength` / `AngularStrength` (optional planted vs working)
+- Working / planted axis locks
+- Craft view pitch / yaw offset / blend time
+- Volume (box half-extents or radius + height)
+- `GestureRadius` (GuidedGesture)
+- Stroke / slice / pull distance and speed band
+- Optional presentation asset
+- Optional fail-meter rate
+
+#### 11.6 Engage
+
+Hands types use **Engage** (default LMB). Not a swing. Release lifts / lets go.
+
+Hammer uses the **tool-hand** mouse button for strike lock (LMB if the mallet is left, RMB if right).
+
+#### 11.7 Types
+
+**Grind** — `PhysicsItem`, hands. Stone + Stone → Sharpened Stone.
+
+- Secondary (non-primary): stone face **up**, planted below, lock XYZ.
+- Primary: stone face **down**, above, lock Z. Only this hand is read for progress.
+- Real stone meshes. No presentation mesh unless poses cannot make the faces meet.
+- Without Engage: primary sits slightly above; no progress.
+- Engage: lower primary onto the secondary (close the Z gap).
+- While Engage held, primary XY motion inside the box, speed in band: a stroke is travel `D` then a reverse. Each valid stroke adds progress and a grind cue.
+- Release Engage: lift, meter pauses.
+
+**Twist** — `GuidedGesture`, hands. Plant Fiber + Plant Fiber → Cordage.
+
+- Do not rub the two world fiber meshes. Hide them. Presentation: two strands from the working wrist, finished two-ply growing outward as `Progress` goes `0 → 1`. Real Cordage item is the product, not this mesh.
+- Both hands planted, strengths near-max. Working arm gets the small authored circle only.
+- Gesture: repeated **opposite-direction circles**, not a mouse-twist knob. Accumulate heading in craft XY. Complete a CW slice of `Slice` radians, then a CCW slice, alternate. Wrong-way motion is ignored (v1).
+- Secondary planted on the growing end. Primary is the circling hand.
+- No Engage required for v1 (hands already planted). Cues on slice and on length-up.
+
+**Tie** — `GuidedGesture`, workbench. Sharpened Stone + Stick + Cordage → Stone Hatchet.
+
+- Same mode and circle slices as Twist.
+- Presentation is cord wrapping head + handle. Third ingredient may sit in the station slot.
+- Success spawns the dual-mesh hatchet definition (not a live Stick Instance).
+
+**Strip** — `GuidedGesture`, hands. Fibrous Stalks → Plant Fiber + Wood Scraps.
+
+- Other hand must be Unarmed. That Unarmed hand is the working hand.
+- Planted hand holds the stalk. Hide or swap the real stalk for a presentation stalk that gets barer as `Progress` rises.
+- Engage (LMB) = **grip a fiber strip**. Presentation strip attaches to the working hand.
+- While Engage held, the required gesture is a pull along the stalk axis of length `D` in the peel direction (authored offset, not a wobbly drag).
+- Valid pull: strip peels, add progress, peel cue. Release without `D`: strip snaps back, no progress.
+- Success: consume stalk; Plant Fiber + Wood Scraps as authored outputs.
+
+**Hammer** — `PhysicsStrike`, station. Flint knapping and forging share this type.
+
+- Tool held (mallet / hammer). Workpiece in the other hand or on the station.
+- Aim in the box. Tool-hand click-hold locks XY; slam on Z.
+- Progress if the tool passes through the strike slab at a legal speed.
+- Circles-on-flint / hot metal are presentation + cues, not a different hold.
+- Optional later: fail meter on overstrike; wheel-reselect until 50 % as a flag; forge heat / reheat. Park those flags here; do not build them for Grind / Twist.
+
+**Flesh** — `PhysicsItem` on a surface, hide-frame station.
+
+- Frame is the station. Hide is on the frame (slot, or the frame owns the hide Instance). Knife is Tool, held, not consumed. Other hand Unarmed.
+- Knife is kept at a small standoff from the hide plane; motion in surface X/Y.
+- Without Engage: knife hovers, no pops, no fail.
+- Engage: press the knife to the surface. Path of the blade / tip is sampled.
+- Flesh is a **presentation layer** of sites (points or short segments) on the hide. Nearby sites **merge only in the mesh** (two close sites → peanut; a cluster → thin sheet). Gameplay pops **sites**, not the merged shape.
+- Run the engaged knife along a remaining site for at least `D` at legal speed → site removed, pop cue, progress `1 / SiteCount`.
+- Engaged path over **already-empty** hide adds fail. Fail meter full → session fail (§7). Hide and knife stay unless the recipe lists fail outputs.
+- When no sites remain → success. Hide result (same Instance marked defleshed vs consume UnprocessedHide and spawn DefleshedHide) waits on hide item defs.
+
+**Hone** — `PhysicsItem`, grindstone (no slot). T3 copper tools with `bCanBeSharpened`.
+
+- Secondary planted on the head (`AssistOffset` IK). Primary on the handle, blade in a thin slab against the wheel.
+- Without Engage: blade off the wheel, wheel still. No writes.
+- Engage: edge down, treadle / wheel presentation on, sparks + scrape cues from engage (not hits).
+- While Engage held: `CurrentHeadHealth += R * dt`, `MaxHeadHealth -= r * dt` (same Instance, Item §10 fields).
+- Release: lift, writes pause, session remains.
+- `Current` reaches `Max`: auto-release Engage, green flash, end session.
+- R / damage: end session, keep writes already applied.
+- No consume, no output item. Tuning authors `R` and `r` only.
+
+#### 11.8 Still parked
+
+- Exact stroke counts, slice radians, peel `D`, site counts, hone `R` / `r`
+- Forge heat, knap/forge fail products, 50 % reselect flag
+- AssistOffset two-hand IK (ItemAnimationPipeline)
+- Knife-on-stick shavings as its own type vs a short Strip / scrape reuse
+- Kindling vs Wood Scraps naming (Strip uses Wood Scraps until renamed)
+- Clay bowl minigame type (hands; fire harden is Fire system)
+
+
+### 12. Input Mapping Context
+
+Default / gameplay IMC: move, look, Q pickup-place, LMB / RMB activate, R cancel / stack, wheel for containers (and the craft prompt when it is up).
+
+Crafting IMC, pushed for the life of a session:
+
+- Mouse / look → minigame aim / gesture
+- Engage (default LMB) — lower / grip / press, per type in §11. Hammer uses the tool-hand mouse button instead
+- R → cancel
+- No move, no Q place, no swing, no stack start
+- Wheel unused unless a later minigame flag re-opens recipe select
+
+Removing the Crafting IMC always returns the player to the default mapping.
+
+
+### 13. Item system contact points
+
+- Create / destroy Instances only through `UItemFactorySubsystem`
+- Tags on `UItemDefinition::ItemTags`
+- Durability numbers written by recipes live on `UDurabilityItemFragment` / Instance state (ItemSystemImplementation.txt §10). Crafting applies `DurabilityCost` and, later, sharpening writes; it does not own dulling visuals
+- Station place / retrieve: Q-mode, `PlacementOffsetTransform`, shared ReleasePose — already locked on items. Crafting only *reads* the slot
+- Held stacks exist only in hands and never enter a station slot or a recipe
+
+
+### 14. Example bindings
+
+**Stone + Stone → Sharpened Stone** (hands, Grind, one output, auto-equip)
+- Two slots: Ingredient, Exact DA_Stone, held, consumed, cost 0
+- Snapshot: two Stones, both Neutral, no station
+- Success: both consumed, Sharpened Stone into primary, other hand Unarmed
+
+**Fibrous Stalks → Plant Fiber + Wood Scraps** (hands, Strip)
+- Slot: Ingredient, Exact DA_FibrousStalks, held, consumed
+- Other hand Unarmed (working / peel hand)
+- Outputs: Plant Fiber (auto-equip or as authored), Wood Scraps pile
+
+**Plant Fiber + Plant Fiber → Cordage** (hands, Twist)
+- Same two-ingredient shape with DA_PlantFiber. Presentation mesh during the session.
+
+**Stick + knife → Wood Shavings + Broken Stick** (hands)
+- Slot A: Ingredient, Exact DA_Stick, held, consumed
+- Slot B: Tool, tag `Item.Tool.Knife` (name TBD), held, not consumed, durability cost later
+- Outputs: Wood Shavings (pile), Broken Stick (auto-equip into the non-knife hand — the hand that just lost the stick)
+
+**Copper tool + grindstone → same tool, honed** (Hone)
+- Station = DA_Structure_Grindstone (no slot)
+- One slot: `Sharpenable`, Role Tool, held, not consumed
+- Other hand Unarmed going in; session forces two-hand stance
+- No output item; live Current/Max writes
+
+**Sharpened Stone + Stick + Cordage → Stone Hatchet** (workbench, Tie)
+- Station = DA_Structure_Workbench
+- Three Ingredient slots, each exact def, not `bMustBeHeld` so any one of them may sit in the slot
+- One output, auto-equip primary
+- All three consumed; slot empty
+- Same GuidedGesture as Twist; wrap presentation instead of growing cord
+
+
+### 15. Status
+
+Locked this pass: snapshot, Neutral-only prompt, wheel select, E start, lock-on-E, R / player-damage cancel, recipe + slot + output fields, single station pointer, no stacks, no fake station, consume / pile / auto-equip rules, subsystem vs session split, IMC split. Bound items do not leave sockets mid-session; multiplayer later locks those sockets for other players.
+
+Minigames (§11) locked at catalog level: modes PhysicsItem / GuidedGesture / PhysicsStrike; types Grind, Twist, Tie, Strip, Hammer, Flesh, Hone.
+
+Hone / grindstone locked: T3 copper first sharpenable, no-slot station, treadle presentation, `Sharpenable` match, live Current/Max writes, keep writes on cancel, auto-disengage and end when Current hits Max. Clay ware T1-accessible (bowl hands + fire; wheel later).
+
+OPEN: AssistOffset two-hand IK, discovery prompt setting, hide result Instance vs new def, knap/forge heat and overstrike products, exact stroke counts, Wood Scraps vs Kindling name, clay-bowl minigame type.
+
+Workbench locked at station/recipe level (§9): `DA_Structure_Workbench`, one slot, Tie hatchet first. Build graph and ghost apply: Notes/StructureSystem/StructureSystemDefinition.txt.

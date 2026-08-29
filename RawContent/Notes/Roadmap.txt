@@ -67,8 +67,8 @@ A3. Structure scaffolding + placed Workbench
 - Third recipe: SharpenedStone + Stick + Cordage → StoneHatchet.
 
 A4. Building + logs (final Core Loop stage)
-- Player-facing way to get a workbench (logs / blueprint / piece place — design in Structure implementation when this slice starts).
-- Two-handed log carry as needed for that recipe only.
+- Player-built workbench from the ghost graph in Notes/StructureSystem/StructureSystemDefinition.txt (3 Log + 2 Cordage + 5 Stick).
+- Two-handed log carry as needed for that build only.
 - Still not the full shelter / degradation / decorative structure set.
 
 After Core Loop Playable
