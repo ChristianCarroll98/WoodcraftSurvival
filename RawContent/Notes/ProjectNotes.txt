@@ -34,6 +34,7 @@ current issues/working task list:
 - Crafting vision spec written (2026-08-28): Notes/CraftingSystem/CraftingSystemImplementation.txt. Neutral-only [E] prompt, wheel select, lock-on-E, no stacks, single station DA, damage cancels session. §11 minigame catalog locked. Workbench + grindstone in §9.
 - Structure definition expanded (2026-08-28): Notes/StructureSystem/StructureSystemDefinition.txt. Sections + deps, count-1 apply, consume-on-ghost, ItemSlot only when finished. Workbench BOM 3 Log + 2 Cordage + 5 Stick. One static mesh per section; actor creates one component each. B-place / storage OPEN.
 - NEXT: T0 content for Core Loop Playable (see Notes/Roadmap.txt). Flat color only. Per-item Neutral + Extended HoldPoses with the mesh.
+  - Cordage mesh + unique BC/ORM in-engine (2026-08-30): hank, ~1300 tris, Edge + AO look accepted. Still need: scale up to match PlantFiber; Neutral + Extended poses if not authored yet. Green streak value on BC is polish.
   - Items: Stone, Stick (update mesh), SharpenedStone, FibrousStalks (shared mesh/tag for stalk fiber sources), PlantFiber, Cordage, StoneHatchet (Primary = StickHandle static mesh, Secondary = stone head, existing dual-mesh constraint).
   - Resources (fiber, stalks, cordage, stone): Equippable, StrikeMode None, no Damage fragment. Stalks carry a fiber-source tag.
   - Harvestable: Nettle (Urtica dioica / subsp. gracilis look), low HP, Slash only (Blunt + Pierce in Immunities), Collision fragment WalkThrough. Yields FibrousStalks.

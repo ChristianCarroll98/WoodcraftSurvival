@@ -64,6 +64,36 @@ Starting roughness ranges (tune per asset, not locks):
 
 Masters expose a roughness min/max remap so an instance can be tuned without repainting.
 
+Bake in Blender 5.2 (Cycles Emit). First pass locked from Cordage [2026-08-30]. Keep the bake material; do not rebuild it per asset.
+
+Shader (this is the bake material, not the look material):
+- Ambient Occlusion node → Color Ramp → R of Combine Color.
+- G = roughness from the ranges above (dry fiber / cordage started at 0.9).
+- B = metallic (0 on dielectrics).
+- Combine Color → Material Output Surface.
+- AO Distance is in scene meters. Cordage first bake used 0.5 m (bundle-contact, waist and loop-on-loop). That is large next to a ~6 cm hank. Drop toward 0.02–0.05 m when only a tight crease should darken (ply valley, bark split). Retune per asset; do not treat 0.5 m as a lock.
+
+Color Ramp (how to adjust it):
+- Blender AO is white = open, black = occluded. The ramp only remaps that.
+- Two stops are enough.
+- Left stop = floor. Do not leave it at black. Value ~0.6–0.7 means the darkest crease stays gray (gentle AO). Lower the floor only if forks / bindings vanish in-engine.
+- Right stop = cutoff. Put white at ~0.45–0.6 so only close faces contribute. Sliding this stop left tightens contact shadows; sliding it right floods the mesh with soft dirt.
+- If the whole object is muddy: raise the floor and/or shorten Distance. If creases are invisible: lower the floor a little or raise Distance. Do not add extra stops to "paint" AO.
+
+Target image:
+- Image Texture node, New, name `*_ORM`.
+- Color Space = Non-Color. Not sRGB.
+- Leave the node unconnected. It must be the selected node in the Shader Editor when you bake.
+- Resolution matches the albedo for that asset (256 was enough for PlantFiber / Cordage practice). 8-bit is fine.
+
+Bake:
+- Render engine Cycles. Bake Type = Emit.
+- Object selected in Object Mode. ORM image node selected.
+- Bake. Image Editor → Image → Save As.
+- Switch the object back to the look material after. The Emit graph is only a packer.
+
+Unreal import stays: sRGB off, compression Masks.
+
 
 4. Master materials (not one graph per thing)
 A unique Material graph per mesh is expensive (permutations, no shared change). A unique Material Instance + unique textures is the intended path.
@@ -91,9 +121,13 @@ Instance parameters (keep the list short):
 
 T0 may ship Base Color only on an instance, ORM slot empty / default roughness. Plug ORM in per asset as it is painted.
 
+Master defaults (created 2026-08-30). Assign these as the Texture Sample defaults on the masters so an instance with no override is obvious and still valid:
+- `T_Default_BC` — purple / black checkerboard. Missing albedo.
+- `T_Default_ORM` — 1×1 pixel `(1.0, 0.5, 0.0)` = AO open, roughness 0.5, metallic 0. Import same as every ORM: sRGB off, Masks.
+
 
 5. Surface catalog
-Opaque solids — Default Lit, Two Sided off. Wood, stone, soil, tools, bark, bone, dry fiber, cordage (painted strands in albedo, very rough).
+Opaque solids — Default Lit, Two Sided off. Wood, stone, soil, tools, bark, bone, dry fiber, cordage (two-ply geo + blotchy albedo, very rough).
 
 Thin sheets — Sheet master. Nettle leaves, later foliage, wyvern membrane. Two Sided Foliage or Subsurface at polish. Not Thin Translucent.
 
@@ -120,6 +154,13 @@ Already modeled: 8-sided stem cylinder, opposing leaf pairs (~14–15), serrated
 - T0: Base Color. ORM when painted (stem rougher than leaves).
 - Polish: Sheet SSS / Two Sided Foliage on leaves only.
 
+Cordage (T0 item example)
+Hank: two loops + a small waist wrap. Two hex plies, pair diameter 1 cm. ~1300 tris. Denser than Stone / Stick / PlantFiber; Edge facets still read. Do not spiral-coil a long two-ply path.
+- Opaque instance. Plant PhysMat. Simple `Blunt` capsule, not the visual mesh.
+- First asset to run the full unique BC + ORM import path (Masks / sRGB-off). Bake process is §3.
+- Albedo: blotchy dry-fiber tan, optional khaki-sage streaks. No painted helix lines. Streak value / hank scale vs PlantFiber are polish — enlarge the mesh to match PlantFiber before spending more paint.
+- Neutral grips the waist.
+
 
 7. T0 vs polish
 T0 (Core Loop content, Roadmap A1):
@@ -127,7 +168,7 @@ T0 (Core Loop content, Roadmap A1):
 - Base Color.
 - Correct slot split (Opaque vs Sheet).
 - Shared Wood / Stone Physical Materials (physics doc).
-- ORM authored on new assets when it does not block playable content. One stone or wood mesh may run the full import path first so Masks / sRGB-off is locked.
+- ORM authored on new assets when it does not block playable content. Cordage ran the full import + Masks / sRGB-off path first so the pipeline is locked. Other T0 items may stay on `T_Default_ORM` until painted.
 
 Polish (after Core Loop, parallel with Environment presets):
 - ORM on remaining parts.
