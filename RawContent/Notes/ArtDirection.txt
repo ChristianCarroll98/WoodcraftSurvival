@@ -94,6 +94,8 @@ Bake:
 
 Unreal import stays: sRGB off, compression Masks.
 
+Assembled-only AO (locked 2026-08-31): when a part mesh is reused on a tool (SharpenedStone as StoneHatchet Secondary), do not duplicate the mesh. Bake a second ORM with the handle + wrap visible as AO casters, same UVs. Assign that ORM on a second Material Instance. Point `SecondaryMaterialOverride` (or Primary) at that instance. Standalone item keeps the mesh default MI. StickHandle is hatchet-only — bake its ORM once in the assembled pose.
+
 
 4. Master materials (not one graph per thing)
 A unique Material graph per mesh is expensive (permutations, no shared change). A unique Material Instance + unique textures is the intended path.

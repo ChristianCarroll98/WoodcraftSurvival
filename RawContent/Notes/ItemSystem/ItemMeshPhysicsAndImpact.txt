@@ -24,8 +24,9 @@ Logical materials have been removed; Physical Materials are the single source of
 ### 2. Core Concepts
 
 **Visuals**
-- Single material slot per mesh (BaseColor + ORM + Normal).
+- Single material slot per mesh (BaseColor + ORM). No normal maps (ArtDirection).
 - Primary mesh and Secondary mesh are authored as separate Static Mesh assets (supports future in-game crafting/assembly).
+- Shared mesh + assembled look (StoneHatchet head = SM_SharpenedStone): same Static Mesh, optional `PrimaryMaterialOverride` / `SecondaryMaterialOverride` on the Definition (slot 0). Empty = mesh asset default. Do not duplicate the mesh.
 
 **Multi-Mesh Structure (AItemActor)**
 - Every item has a **PrimaryMeshComponent** (always present). This is the handle or the single body for simple items.
@@ -88,9 +89,15 @@ TSoftObjectPtr<UStaticMesh> SecondaryMesh;
 
 UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Display", meta = (EditCondition = "SecondaryMesh != nullptr"))
 FTransform SecondaryRelativeTransform = FTransform::Identity;
+
+UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Display")
+TSoftObjectPtr<UMaterialInterface> PrimaryMaterialOverride;
+
+UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Display", meta = (EditCondition = "SecondaryMesh != nullptr"))
+TSoftObjectPtr<UMaterialInterface> SecondaryMaterialOverride;
 ```
 
-No material maps. No mass properties. No PhysicsFragment.
+Material overrides are optional slot-0 only. No material maps, no mass properties, no PhysicsFragment.
 
 #### 3.2 Physics Simulation (default behaviour in `AItemActor::InitializeFromInstance`)
 

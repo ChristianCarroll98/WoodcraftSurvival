@@ -12,6 +12,7 @@
 #include "Core/Damage/DamageType_Slash.h"
 #include "Core/Damage/DamageType_Pierce.h"
 #include <Components/StaticMeshComponent.h>
+#include <Materials/MaterialInterface.h>
 #include <PhysicsEngine/PhysicsConstraintComponent.h>
 #include <PhysicsEngine/BodySetup.h>
 #include <DrawDebugHelpers.h>
@@ -47,6 +48,13 @@ void AItemActor::InitializeFromInstance(UItemInstance* Instance)
 	}
 
 	PrimaryMeshComponent->SetStaticMesh(PrimaryMesh);
+	if (!Instance->ItemDefinition->PrimaryMaterialOverride.IsNull())
+	{
+		if (UMaterialInterface* PrimaryOverride = Instance->ItemDefinition->PrimaryMaterialOverride.LoadSynchronous())
+		{
+			PrimaryMeshComponent->SetMaterial(0, PrimaryOverride);
+		}
+	}
 	PrimaryMeshComponent->SetSimulatePhysics(true);
 	PrimaryMeshComponent->SetUseCCD(true);
 	PrimaryMeshComponent->CanCharacterStepUpOn = ECB_No;
@@ -61,6 +69,13 @@ void AItemActor::InitializeFromInstance(UItemInstance* Instance)
 		{
 			SecondaryMeshComponent = NewObject<UStaticMeshComponent>(this, TEXT("SecondaryMeshComponent"));
 			SecondaryMeshComponent->SetStaticMesh(SecondaryMesh);
+			if (!Instance->ItemDefinition->SecondaryMaterialOverride.IsNull())
+			{
+				if (UMaterialInterface* SecondaryOverride = Instance->ItemDefinition->SecondaryMaterialOverride.LoadSynchronous())
+				{
+					SecondaryMeshComponent->SetMaterial(0, SecondaryOverride);
+				}
+			}
 			SecondaryMeshComponent->SetRelativeTransform(Instance->ItemDefinition->SecondaryRelativeTransform);
 			SecondaryMeshComponent->SetCollisionProfileName(TEXT("ItemProfile"));
 
