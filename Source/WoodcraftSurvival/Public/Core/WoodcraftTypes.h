@@ -27,7 +27,7 @@ const float GMinItemSpeed = 80.f;
 
 /** Minimum look-delta rate (LookDelta.Size() / DeltaTime) to snap-orient.
  *  Tune from the cyan “look speed” print. Damage still uses GMinItemSpeed / GMinImpulse. */
-const float GMinLookSpeed = 80.f;
+const float GMinLookSpeed = 50.f;
 
 /** Accepted half-angle (degrees) from the blade plane for Slash.
  *  Velocity farther off the plane than this (more face-on) is forced to Blunt. */
@@ -67,7 +67,7 @@ const float GControlLinearMassRef = 1.67f;
 const float GControlLinearMassExp = 3.0f;
 
 /** Floor on MassScaleLinear. */
-const float GControlLinearMassScaleMin = 0.25f;
+const float GControlLinearMassScaleMin = 0.4f;
 
 /** Cap on MassScaleLinear. */
 const float GControlLinearMassScaleMax = 10.0f;

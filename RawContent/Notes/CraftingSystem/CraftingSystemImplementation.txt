@@ -1,9 +1,15 @@
 **Crafting System – Definition**
-*(Updated 2026-08-28. Vision / exact terms. Not a C++ implementation plan. Minigame catalog in §11.)*
+*(Updated 2026-08-30. Vision / exact terms. Not a C++ implementation plan. Minigame catalog in §11. Fidelity tiers in §16. Presentation + morph sampling in §11.4.)*
 
-This file is the authority for how crafting works. ProjectVision.txt keeps the short system blurb and a link here. Item durability, hold/place, and factory rules stay in ItemSystemImplementation.txt. Station actors and sockets stay in the Structure system once that doc exists; this file only states what crafting needs from a station.
+This file is the authority for how crafting works. ProjectVision.txt keeps the short system blurb and a link here. Item durability, hold/place, and factory rules stay in ItemSystemImplementation.txt. Station actors and sockets stay in the Structure system; this file only states what crafting needs from a station.
 
 Open sections are marked OPEN. Do not invent those in code until they are closed here.
+
+Fidelity (read §16 before taking §11 as an implementation checklist):
+
+- **Vision** — full minigame definition: presentation stages / morphs, authored events (flip, crack), crafting-owned workpiece actor after first checkpoint, resume prompt. Destination. Not Core Loop.
+- **Shippable** — looks like the craft (presentation SKM morph and/or growing bones). No save/resume. Flip waits. No stepped static-mesh swaps.
+- **Core Loop / A2** — grind *motion* + Twist presentation. Two live stones. Cancel returns both stones. No checkpoints, no flip, no Form.
 
 
 ### 1. Goals
@@ -57,11 +63,11 @@ One asset per craft (`DA_Recipe_SharpenedStone`, `DA_Recipe_Cordage`, `DA_Recipe
 - `Station` — optional soft pointer to one `UStructureDefinition` (or the station-identity asset Structures end up using). Unset = hands craft. Set = that station only. No list. Hands recipes are not also valid at a workbench.
 - `Slots` — array of `FCraftingSlot` (usually 2, at most 3)
 - `Outputs` — array of `FCraftingOutput` (one or more)
-- `Minigame` — type id + tuning asset (mode, locks, strengths, engage, presentation). See §11.
+- `Minigame` — one `UCraftingMinigameDefinition` asset (type + shared modules + type payload). See §11.9. Do not pack minigame fields onto the recipe.
 
 **`FCraftingSlot`**
 
-- `Role`: `Ingredient` or `Tool`
+- `Role`: `Ingredient`, `Tool`, or `Workpiece` (vision; see §10.1). Core Loop recipes only use Ingredient / Tool.
 - `Match`: exactly one of
   - `ExactDefinition` — this item data asset
   - `RequiredTag` — any item whose `ItemTags` contains the tag (`Item.Tool.Knife`, `Item.Fiber`, …)
@@ -80,12 +86,12 @@ No count field. Stacks are illegal in this system.
 Authoring convention: a single-output recipe sets `bAutoEquip` true. Multi-output recipes flag at most one output. The data asset is the source of truth; there is no hidden default in code beyond “if you leave it false, it piles.”
 
 **`UCraftingSubsystem`** (World Subsystem)
-Owns / discovers the recipe table. Pure query:
+Owns / discovers the recipe table. Query:
 
 - Input: the snapshot
 - Output: the list of matching recipes, each with a slot binding (which snapshot socket fills which recipe slot)
 
-Does not lock the player, does not spawn items, does not tick minigames.
+Does not lock the player, does not tick minigames, does not spawn *items* (Factory still does that). Vision: owns `ACraftWorkpieceActor` lifetime after the first checkpoint.
 
 **`UCraftingComponent`** (on the player)
 Owns prompt state, selected match index, and the live session if any. Calls the subsystem when the snapshot changes. Starts / cancels / commits sessions.
@@ -94,12 +100,13 @@ Owns prompt state, selected match index, and the live session if any. Calls the 
 A short-lived object or struct on the component. Created on E, destroyed on success, cancel, fail, or interrupt. Holds:
 
 - Frozen recipe
-- Frozen bindings (the Instances, not “whatever is in the hand later”)
-- Which binding is the tool (if any)
+- Frozen bindings (Item Instances and, after a checkpoint, the workpiece actor — not “whatever is in the hand later”)
+- Which binding is the tool / workpiece (if any)
 - Progress `0–1`
-- Minigame state
+- Minigame phase + optional intermission
+- Live presentation actor pointer (session-only; dies with the session)
 
-It is not an actor and not a station.
+The session itself is not an actor and not a station. The vision workpiece actor is separate (§10.1).
 
 
 ### 5. Matching and binding
@@ -112,8 +119,9 @@ For each recipe, try to assign every slot to a snapshot socket.
 4. A `Tool` slot is always `bMustBeHeld`.
 5. Hands recipe: there is no station socket; every slot must land on a hand. Station-in-context must be empty.
 6. Station recipe: station identity matches `Recipe.Station`. At least one slot should be able to bind the slot (`bMustBeHeld == false`) so the extra socket is actually usable.
-7. Match test per slot: bound item’s definition == `ExactDefinition`, or item tags contain `RequiredTag`.
+7. Match test per slot: bound item’s definition == `ExactDefinition`, or item tags contain `RequiredTag`. Vision: a `Workpiece` slot also matches an `ACraftWorkpieceActor` whose state `Recipe` is this recipe and `Progress < 1`. Raw ExactDefinition still matches a fresh start.
 8. A hand the recipe does not bind must be Unarmed. Strip binds the stalk and uses Unarmed as the working hand — that Unarmed hand is required, not “unused.”
+9. Vision only: a `Workpiece` slot is the body that checkpoints into a crafting-owned actor. At most one per recipe. Hone has none.
 
 Several recipes may match one snapshot (same three items, different products). That is a list, not an error.
 
@@ -129,6 +137,7 @@ Bottom-middle, slightly transparent text, same band as stamina / future progress
 
 - `N = 1`: `[E] Craft {DisplayName}`
 - `N > 1`: same line on the selected row; wheel moves selection and wraps
+- Vision resume: if the workpiece socket is an `ACraftWorkpieceActor` for that recipe, the row reads `[E] Resume Crafting: {DisplayName}`. Still the same recipe.
 
 E is the default action button (not extend, not swing). Binding can move later; the prompt always shows the current key.
 
@@ -247,8 +256,13 @@ Example tool chain (T0 / Core Loop, from Roadmap — still valid as content, not
 
 The hatchet is a new definition (StickHandle primary mesh + stone head secondary). It does not keep a live Stick Instance inside it.
 
-**Unfinished items (later, when a minigame actually needs them)**
-Success of recipe A spawns `UnfinishedX`. Recipe B consumes `UnfinishedX` and yields `X`. That is data. Do not serialize a half-finished session.
+**Staged recipes (locked — not the same as checkpoints)**
+Success of recipe A can spawn `UnfinishedX`. Recipe B consumes `UnfinishedX` and yields `X`. That is two recipes. Example later: green bowl → fire harden. Do not use this pattern just to fake minigame save.
+
+**Workpiece checkpoints and resume — VISION only (§10.1)**
+The live player session (IMC, camera, engage, presentation spawned for the session) stays ephemeral. It is never serialized.
+
+What persists after the first checkpoint is a **crafting-owned workpiece actor**, not an Item Instance and not a parked minigame. Core Loop / A2 does not spawn one. Cancel returns the original items.
 
 **Guidebook / unknown recipes — OPEN**
 Prompt policy can follow the existing guidebook setting. Candidate:
@@ -262,9 +276,103 @@ Prompt policy can follow the existing guidebook setting. Candidate:
 Default lean: Discover. “Known” lives with the guidebook when that exists. Matching itself does not depend on known-state.
 
 
+#### 10.1 Workpiece checkpoints (VISION)
+
+Opt-in per minigame definition (`Checkpoints.bEnabled`). Short crafts (Twist, Tie, Strip) default **off**. Long shaping crafts (Grind, Form / clay, later Hammer) default **on**. Hone does **not** use this — it already writes Current/Max on the same tool Instance. Knap / forge payloads wait; do not design them here.
+
+**Two objects (do not collapse them)**
+
+- **Player session** — still a short-lived object on `UCraftingComponent`. IMC, camera, engage, live presentation. Dies on success / cancel / fail / damage. Never saved.
+- **`ACraftWorkpieceActor`** — owned by `UCraftingSubsystem`. Not an Item, not ItemFactory, not `UItemInstance`. Exists only after the first checkpoint. This is what you hold, drop, and resume.
+
+**State on that actor**
+
+`FCraftWorkpieceState`:
+
+- `Recipe`
+- `Progress` `0–1` (also the morph weight if the live presentation uses morphs)
+- `StageIndex`
+- `bAfterFlip` (or equivalent pose flag) so resume does not replay Flip
+- `FailMeter` if the type uses one
+- Type payload later (knap / forge — parked)
+
+One workpiece *kind* per checkpoint-enabled recipe, authored on the minigame asset (stage meshes and/or a presentation SKM). Do not make `DA_Grind_25`. The finished product is still a normal item spawned at Progress = 1.
+
+**First checkpoint**
+
+Authored thresholds (progress crosses a value, or a named event). Not every stroke. Not a timer.
+
+1. Destroy the raw workpiece *item* through ItemFactory (the cobble / clay chunk that was bound).
+2. Spawn `ACraftWorkpieceActor` into that same hand or station slot. Player should not see a world drop + pickup.
+3. Write state. Show the stage mesh / morph for that Progress.
+4. Do not consume the tool / abrader / other ingredients.
+
+Later checkpoints only write state + appearance on the existing actor.
+
+**How it is held (OPEN implementation, locked ownership)**
+
+HeldItems / Q-place must be able to carry this actor the same way they carry a one-handed item (origin + a HoldPose, Physics Control on its primary mesh). It is not a second item system.
+
+Locked limits: no stacks, no container insert, no swing / damage primitives, StrikeMode none equivalent. Station slot may hold it so a half piece can sit on a bench.
+
+Exact interface is OPEN until checkpoints ship. Lean when it does: a small `IHoldable` that HeldItems can attach (primitive + Neutral/Extended poses). `AItemActor` can implement it later; `ACraftWorkpieceActor` implements it without an Item Instance. Do not wrap the workpiece in a dummy `UItemDefinition` just to reuse Factory. First-pass sketch in §11.4.1.
+
+**Appearance of the persistent actor**
+
+One path: the same presentation SKM + morph weights (`Progress`, plus HoldAndPop keys from events). The dropped / held workpiece is that SKM. Do not bake checkpoint static meshes. Do not put morphs on item `SM_Stone` / `SM_Clay` / `SM_PlantFiber`.
+
+Core Loop / A2 never spawns this actor. Session presentation, when used, is a follow-mesh on the live item (§11.4).
+
+**Cancel / damage**
+
+- Before first checkpoint: bindings untouched. No workpiece actor. A2 rule forever for recipes with checkpoints off.
+- After first checkpoint: session dies. Workpiece actor stays where it is with **last written** state. Unwritten progress is lost.
+- R and inbound damage use that same split.
+
+**Flip (vision, not A2, not shippable-required)**
+
+Flip is an authored intermission on the planted hand + workpiece. When it *starts*, write the checkpoint as **already after the flip** (`bAfterFlip`, after-flip morph / pose).
+
+If damage or R hits mid-clip: **stop the anim immediately**. Do not wait it out. Keep that after-flip checkpoint. Resume starts in the after-flip pose and does not play Flip again.
+
+**Resume (same recipe)**
+
+Snapshot:
+
+- Workpiece socket is an `ACraftWorkpieceActor` whose `Recipe` matches and `Progress < 1`
+- Other slots as a fresh craft (any Stone abrader)
+- Station identity unchanged
+
+Prompt: `[E] Resume Crafting: {DisplayName}`
+
+On E: new session, load state from the actor, presentation starts at that Progress / after-flip pose. Recipe freezes.
+
+**Success / fail**
+
+Success: destroy the workpiece actor, then consume abrader / tools as authored, spawn the product item via Factory.
+
+Fail: destroy the workpiece actor unless the recipe lists fail outputs (those pile as items). Last checkpoint does not protect a fail.
+
+**Clay in fire (lean, Fire system executes it)**
+
+Finished **green bowl item** is the only clay that hardens. Raw clay chunk and a Form workpiece actor do not.
+
+If either sits in a fire long enough to count as a harden attempt: auto-fail. Shard / pop VFX, actor or chunk gone. No shard item unless a later recipe wants scraps. Do not spawn a ruined bowl.
+
+**What this is not**
+
+- Not a serialized player session (no IMC / camera / engage saved).
+- Not an unfinished *item definition*.
+- Not Hone.
+- Not half-twisted cordage unless that recipe later opts in.
+- Not knap / forge design.
+
+
 ### 11. Minigames
 
-One session framework. Each recipe points at a **type** plus a tuning asset (locks, strengths, thresholds, presentation). Audio and VFX are **curated from meter events** (engage, valid stroke / slice / pull / pop / finish, fail tick). Item collision hits do not drive craft feedback.
+One session framework. Each recipe points at one **minigame definition** asset (§11.9): type + motion + appearance + events + optional checkpoints + type payload. Audio and VFX are **curated from meter events** (engage, valid stroke / slice / pull / pop / finish, fail tick, authored events). Item collision hits do not drive craft feedback.
+
+The C++ session is one interpreter. Types are data. Do not grow a new session class per craft.
 
 #### 11.1 Camera and craft frame
 
@@ -286,6 +394,7 @@ HeldItems craft API (design):
 
 - `BeginCraftMotion(Hand, Constraint)` — strength overrides, craft-space volume, default axis locks
 - `SetCraftAxisLocks(Hand, LockX, LockY, LockZ)` — click-lock changes
+- `PlayCraftIntermission(Hand, Montage, ItemCurve)` — vision/shippable events. Lifts locks for the clip so the held item can flip / turn with the hand, then restores the motion module’s locks
 - `EndCraftMotion(Hand)` — restore normal strengths and swing rules
 
 Swing orientation and collision damage stay off for the whole session.
@@ -303,9 +412,123 @@ Hands must not wander. Both hands XYZ-planted (or planted + a tiny authored offs
 **`PhysicsStrike`**
 Aim inside the box. Tool-hand mouse **hold** locks X and Y (aim frozen, Z free) for the slam. Release returns to aim. Used by knapping and forging.
 
-#### 11.4 Presentation meshes
+#### 11.4 Presentation and progress appearance
 
-Some types hide the bound item meshes for the session and spawn a presentation actor owned by CraftingComponent. It is not an Item, not in the factory, not pickupable. Bound Instances stay in the hands / slot until success consume. Inputs: `Progress`, engage state, type-specific phase. On cancel, destroy presentation and show the real meshes again. On success, destroy presentation then run the normal consume / spawn path.
+Some types hide bound item **render** meshes for the session and spawn a **presentation** owned by `UCraftingComponent`. It is not an Item, not in the factory, not pickupable, not what the player holds. Bound Item Instances and their `AItemActor`s stay in the hands / slot until a checkpoint transmute or a final consume.
+
+Inputs: `Progress`, engage, type phase, active event.
+
+On cancel: destroy presentation; show the bound item meshes again (A2) or the workpiece actor’s last written morphs (vision, after a checkpoint). On success: destroy presentation, then consume / spawn product items.
+
+**Follow target (locked for Core Loop / shippable):** attach or copy-transform the presentation SKM to the **workpiece item actor** (planted `AItemActor` primary mesh). Optional `PresentationOffset` on the minigame asset. If only the workpiece hides, the tool / abrader stays the live item mesh. Collision and Physics Control stay on the item actors. The presentation has no physics body.
+
+**Do not put shape keys or morphs on item static meshes.** Item DAs stay cobble / hank / finished product. Changing silhouette is always the presentation SKM (session), or the same SKM living on `ACraftWorkpieceActor` after a vision checkpoint.
+
+**Appearance mode** (per minigame):
+
+- `LiveMeshes` — real bound meshes. Core Loop Grind default. No presentation actor.
+- `Morph` — presentation SKM. Morph weights change the silhouette. Default for Grind shippable, Form, and any craft whose body wears or is pinched.
+- `SkeletalPhase` — presentation SKM. Bones / growing length / wrap turns follow **phase** (and may also use morphs for thickness). Twist, Tie, Strip peel strip.
+
+`SteppedMeshes` is **retired**. No stage static-mesh list. No bake-to-SM at checkpoints. Discrete *looks* are HoldAndPop morph keys, not mesh swaps.
+
+**Morph sample mode** (on the minigame asset; ignored if appearance is `LiveMeshes`):
+
+- `Lerp` — `Progress` continuously blends morph weights. Grind abrasion, clay pinch, stalk getting barer.
+- `HoldAndPop` — weights hold until an authored event (valid hammer strike, flake site). Then snap a key to 1 (or add a scar key). Do not lerp flake_N → flake_N+1.
+
+**Leaving matter** is not a morph. On a HoldAndPop event the session may spawn short-lived **flake debris** (pooled static meshes + impulse). Those are not Items and not Factory. Recipe fail/success shards stay `FCraftingOutput` items. Grind / Hone use dust Niagara only — no flake actors, or they read as knapping.
+
+| Craft | Sample | Leaving matter |
+|---|---|---|
+| Grind / Hone | Lerp | Dust only |
+| Form | Lerp | None (crumbs on fail only) |
+| Strip | Lerp stalk | Peel strip on the working hand |
+| Twist / Tie | SkeletalPhase ± morph | None |
+| Knap | HoldAndPop + scar keys | Flake debris on valid strike |
+| Forge | HoldAndPop squash | Sparks / scale particles |
+
+**Hide flags:** `HideWorkpiece`, `HideTool`. Grind presentation: hide workpiece render only. Twist / Strip / Tie: hide the ingredients the presentation replaces.
+
+**Player pose vs workpiece deform (locked):** two channels.
+
+- Physics crafts (Grind, Hone, Hammer): AnimRef plays a static **CraftStance** pose (or Neutral). Items move. Grip IK target stays the live item (`AnimRef` Hand relative to WeaponBone × item world). Presentation morphs on the planted item.
+- Guided crafts (Strip, Twist, Form, Tie): AnimRef plays an authored clip whose time is **phase** (cycles/slices) or **Progress**, per asset. Items planted, strengths near-max. Grip IK target is still the (possibly hidden) item actor. Presentation does the visible twist / peel / pinch.
+
+Do not snap hands to bones on the presentation SKM. Presentation may have `attach_planted` / `strand_root` / `peel_tip` as *follow* bones, not grip sockets.
+
+#### 11.4.1 First pass (Core Loop A2) vs later hold
+
+**A2 / first presentation pass — locked**
+
+The player holds only `AItemActor`. HeldItems does not learn a new type. Crafting skeletal mesh exists only as a session follow-mesh:
+
+1. Session starts. Bindings are the existing stone / fiber item actors.
+2. If appearance is not `LiveMeshes`, spawn presentation (component or a tiny non-pickupable actor) and attach it to the workpiece item’s primary mesh (`SnapToTargetIncludingScale` + `PresentationOffset`).
+3. `HideWorkpiece` → `SetVisibility(false)` on that primary mesh. Collision / simulate stay.
+4. Each tick: `SetMorphTarget` / set presentation anim time from session `Progress` / phase. Transform is the item’s; no extra copy if attached.
+5. Session ends: destroy presentation, `SetVisibility(true)` on whatever item actors still exist.
+
+Twist A2 uses this immediately (hide both fibers, presentation SKM on the planted fiber, or rooted at the working-hand item origin for strand roots). Grind A2 may skip presentation entirely (`LiveMeshes`).
+
+Sketch (session-owned, not a new item class):
+
+```cpp
+// Copyright (c) 2026 Christian Carroll. All Rights Reserved.
+
+/** Session-only follow mesh. Not holdable. Dies with the session. */
+UCLASS()
+class WOODCRAFTSURVIVAL_API ACraftPresentationActor : public AActor
+{
+	GENERATED_BODY()
+
+public:
+	ACraftPresentationActor();
+
+	void AttachToWorkpiece(AItemActor* Workpiece, const FTransform& Offset);
+	void SetProgress(float Progress01);
+	void SetPhase(float Phase01);
+	void ApplyEventMorphs(FName EventId);
+
+protected:
+	UPROPERTY(VisibleAnywhere)
+	TObjectPtr<USkeletalMeshComponent> Mesh;
+
+	TWeakObjectPtr<AItemActor> FollowItem;
+};
+```
+
+`UCraftingComponent` owns the pointer, calls attach on start, `SetProgress` from the interpreter tick, destroys on session end. HeldItems craft API is only `BeginCraftMotion` / locks / `EndCraftMotion` (and later `PlayCraftIntermission`). It never receives this actor.
+
+**Vision checkpoints — how hold works later**
+
+After the first checkpoint the planted *item* is Factory-destroyed and `ACraftWorkpieceActor` sits in that hand / slot. That actor must be carryable like a one-handed item (Physics Control on its primitive, Neutral + Extended poses, Q-place onto a station socket). It is still not an Item Instance.
+
+Do not implement this for A2. When it ships, extend HeldItems at the attach boundary, not by faking a definition:
+
+```cpp
+/** What HeldItems needs to grip something that is not an AItemActor. */
+class WOODCRAFTSURVIVAL_API IHoldable
+{
+	GENERATED_BODY()
+
+public:
+	virtual UPrimitiveComponent* GetHoldPrimitive() const = 0;
+	virtual UAnimSequence* GetNeutralHoldPose() const = 0;
+	virtual UAnimSequence* GetExtendedHoldPose() const = 0;
+	virtual bool CanSwing() const { return false; }
+	virtual bool CanStack() const { return false; }
+	virtual bool CanEnterContainer() const { return false; }
+};
+```
+
+- `ACraftWorkpieceActor` implements `IHoldable`. Root (or hold primitive) is the SKM or a simple collision body; morph weights live on the SKM from `FCraftWorkpieceState.Progress`. StrikeMode-none equivalent. No damage primitives.
+- `AItemActor` can implement the same interface later (poses from `UEquippableItemFragment`, primitive = primary mesh, CanSwing from StrikeMode). Until then HeldItems stays `AItemActor*`-only.
+- Snapshot matching for resume: Crafting reads “this socket is a workpiece actor for recipe R,” not `GetItemInstance()`. Hands / station slot become “holdable actor” pointers inside the session bindings, not only Item Instances.
+- Q-place / look-at pickup: find `IHoldable` in addition to `AItemActor`. Workpiece uses the shared station socket frame + an offset on the workpiece or minigame asset (not `UItemDefinition::PlacementOffsetTransform`).
+- Cancel after checkpoint: session dies, workpiece actor stays in the hand because it *is* what HeldItems is already holding. No item swap on cancel.
+
+Until that interface exists, never put the presentation follow-mesh into a hand.
 
 #### 11.5 Tuning fields (all types)
 
@@ -316,8 +539,9 @@ Some types hide the bound item meshes for the session and spawn a presentation a
 - Volume (box half-extents or radius + height)
 - `GestureRadius` (GuidedGesture)
 - Stroke / slice / pull distance and speed band
-- Optional presentation asset
+- Optional presentation SKM + appearance mode + morph sample mode + hide flags + PresentationOffset + morph key names
 - Optional fail-meter rate
+- Optional event list and checkpoint list (vision; ignored if empty)
 
 #### 11.6 Engage
 
@@ -329,13 +553,23 @@ Hammer uses the **tool-hand** mouse button for strike lock (LMB if the mallet is
 
 **Grind** — `PhysicsItem`, hands. Stone + Stone → Sharpened Stone.
 
-- Secondary (non-primary): stone face **up**, planted below, lock XYZ.
-- Primary: stone face **down**, above, lock Z. Only this hand is read for progress.
-- Real stone meshes. No presentation mesh unless poses cannot make the faces meet.
+- Secondary (non-primary) is the **workpiece**: stone face **up**, planted below, lock XYZ.
+- Primary is the **abrader**: stone face **down**, above, lock Z. Only this hand is read for progress.
 - Without Engage: primary sits slightly above; no progress.
 - Engage: lower primary onto the secondary (close the Z gap).
 - While Engage held, primary XY motion inside the box, speed in band: a stroke is travel `D` then a reverse. Each valid stroke adds progress and a grind cue.
 - Release Engage: lift, meter pauses.
+- Core Loop / A2: `LiveMeshes`. Nail grind *motion* (Engage gap, XY stroke band). Two cobbles the whole session. Cancel / damage returns both stones. Success consumes both, spawns Sharpened Stone. No presentation required. No Flip. No workpiece actor.
+- Shippable: `Morph` + `Lerp` presentation SKM attached to the planted stone. Hide workpiece render only. Abrader stays live `SM_Stone`. Dust while Engage + moving. Still no checkpoints. Flip waits.
+- Vision: same SKM on `ACraftWorkpieceActor` after first checkpoint (Factory-destroys planted Stone item). Resume + any Stone abrader. Flip event later (~0.5): write after-flip state when the clip *starts*; damage/R mid-clip cancels the anim and keeps that state. Crack on the abrader at success, then consume abrader + destroy workpiece actor.
+
+**Form** — `GuidedGesture`, hands. Clay → green Clay Bowl. Type parked; not Core Loop.
+
+- Workpiece is the clay. No abrader.
+- Both hands planted, strengths near-max. Mouse phases + Engage = pinch / roll cycle (one way → click → other way → release → repeat). Exact slice sizes OPEN.
+- Presentation `Morph`. Authored pinch clips follow gesture phase; morph weights follow Progress (ball → wall → rim).
+- Vision first checkpoint destroys the clay chunk item and spawns `ACraftWorkpieceActor`. Resume: `[E] Resume Crafting: Clay Bowl`.
+- Success: destroy workpiece actor, spawn green bowl *item*. Fire harden stays Fire system and requires that item. Unfinished workpiece or raw clay in a harden-fire: auto-fail, shards VFX, gone (§10.1).
 
 **Twist** — `GuidedGesture`, hands. Plant Fiber + Plant Fiber → Cordage.
 
@@ -354,7 +588,7 @@ Hammer uses the **tool-hand** mouse button for strike lock (LMB if the mallet is
 **Strip** — `GuidedGesture`, hands. Fibrous Stalks → Plant Fiber + Wood Scraps.
 
 - Other hand must be Unarmed. That Unarmed hand is the working hand.
-- Planted hand holds the stalk. Hide or swap the real stalk for a presentation stalk that gets barer as `Progress` rises.
+- Planted hand holds the stalk. Hide the real stalk render. Presentation SKM on that item; `Lerp` morph as `Progress` rises (barer stalk). Peel strip is extra presentation on the working hand, not a mesh swap.
 - Engage (LMB) = **grip a fiber strip**. Presentation strip attaches to the working hand.
 - While Engage held, the required gesture is a pull along the stalk axis of length `D` in the peel direction (authored offset, not a wobbly drag).
 - Valid pull: strip peels, add progress, peel cue. Release without `D`: strip snaps back, no progress.
@@ -366,6 +600,7 @@ Hammer uses the **tool-hand** mouse button for strike lock (LMB if the mallet is
 - Aim in the box. Tool-hand click-hold locks XY; slam on Z.
 - Progress if the tool passes through the strike slab at a legal speed.
 - Circles-on-flint / hot metal are presentation + cues, not a different hold.
+- Workpiece presentation: `Morph` + `HoldAndPop`. Valid strike snaps a flake/scar key and may spawn flake debris (not an Item). Forge uses squash keys + sparks instead of leaving flakes.
 - Optional later: fail meter on overstrike; wheel-reselect until 50 % as a flag; forge heat / reheat. Park those flags here; do not build them for Grind / Twist.
 
 **Flesh** — `PhysicsItem` on a surface, hide-frame station.
@@ -390,14 +625,60 @@ Hammer uses the **tool-hand** mouse button for strike lock (LMB if the mallet is
 - R / damage: end session, keep writes already applied.
 - No consume, no output item. Tuning authors `R` and `r` only.
 
-#### 11.8 Still parked
+#### 11.8 Authored events (VISION; shippable may use one)
 
-- Exact stroke counts, slice radians, peel `D`, site counts, hone `R` / `r`
-- Forge heat, knap/forge fail products, 50 % reselect flag
+A minigame may list events. The session fires them; it does not hardcode Flip into Grind.
+
+`FCraftMinigameEvent`:
+
+- Trigger: Progress cross, stroke index, Engage edge, Success, Fail
+- Id: Flip, Crack, Snap, plus cue ids
+- Optional arm montage (right-arm authored, existing LeftArm/RightArm slot + Mirror)
+- Optional item motion in craft space (curve, or follow notifies on that montage)
+- `bIntermission`: while the clip plays, minigame mouse / Engage are ignored and axis locks may lift so the held item can turn with the hand. When the clip ends, locks from the motion module return.
+
+Flip must move the **hand and the workpiece together**. Do not rotate only the presentation while the hidden body stays put. Write the after-flip checkpoint when the clip starts. Damage / R mid-clip: stop the anim, keep that checkpoint, resume in the after-flip pose.
+
+Flip waits until after A2 motion and after shippable grind morph. Do not block Grind on it.
+
+Crack / break-abrader is a Success event on Grind vision, then consume the abrader item and destroy the workpiece actor. The abrader does not become the product.
+
+#### 11.9 Minigame definition (all types, one asset shape)
+
+`UCraftingRecipe.Minigame` is a `UCraftingMinigameDefinition` (Primary Data Asset). One interpreter in `UCraftingComponent` reads it. Type-specific numbers live in a payload struct on that asset, not in a new C++ session class per type.
+
+Shared modules (every type uses the same fields; unused stay default):
+
+- **Identity:** `Type` (Grind, Twist, Tie, Strip, Hammer, Flesh, Hone, Form, …)
+- **Motion:** mode, planted vs working strengths, axis locks, craft view, volume, gesture / stroke / pull / slice numbers, Engage policy
+- **Appearance:** mode (`LiveMeshes` / `Morph` / `SkeletalPhase`), morph sample (`Lerp` / `HoldAndPop`), presentation SKM, hide flags, `PresentationOffset`, morph channel names
+- **Events:** array of `FCraftMinigameEvent` (optional morph key names + `bSpawnFlake`)
+- **Checkpoints:** `bEnabled`, write thresholds and/or event ids — vision. Workpiece appearance is the same presentation SKM + current weights. No stage SM list.
+- **Fail:** optional meter rate, fail outputs live on the recipe
+- **Workpiece:** which recipe slot is the workpiece (Role = Workpiece). Types with no changing body leave this unset
+
+Type payload (only the fields that type needs):
+
+- Grind: stroke `D`, speed band, Z gap, optional Flip progress
+- Twist / Tie: slice radians, grow / wrap presentation params
+- Strip: peel `D`, peel direction
+- Hammer: strike slab, lock-on-hold button, optional 50 % reselect flag, optional overstrike fail, flake debris on valid strike
+- Flesh: site count / layout, path `D`, empty-hide fail rate
+- Hone: `R`, `r` (writes go to Item §10, not to a workpiece state)
+- Form: pinch phase counts, morph channel names
+
+Runtime session still holds: frozen recipe, frozen bindings, Progress, fail meter, minigame phase, presentation actor pointer, “intermission playing.” That object dies on every session end. Workpiece state is the only thing that outlives it.
+
+#### 11.10 Still parked
+
+- Exact stroke counts, slice radians, peel `D`, site counts, hone `R` / `r`, Form pinch sizes
+- Forge heat / knap map payloads and fail products (wait)
+- 50 % reselect flag
 - AssistOffset two-hand IK (ItemAnimationPipeline)
 - Knife-on-stick shavings as its own type vs a short Strip / scrape reuse
 - Kindling vs Wood Scraps naming (Strip uses Wood Scraps until renamed)
-- Clay bowl minigame type (hands; fire harden is Fire system)
+- How HeldItems holds `ACraftWorkpieceActor` (`IHoldable` lean in §11.4.1; not A2 work)
+- Exact stroke / slice / peel / pinch / hone numbers (wait until the session foundation exists)
 
 
 ### 12. Input Mapping Context
@@ -422,14 +703,16 @@ Removing the Crafting IMC always returns the player to the default mapping.
 - Durability numbers written by recipes live on `UDurabilityItemFragment` / Instance state (ItemSystemImplementation.txt §10). Crafting applies `DurabilityCost` and, later, sharpening writes; it does not own dulling visuals
 - Station place / retrieve: Q-mode, `PlacementOffsetTransform`, shared ReleasePose — already locked on items. Crafting only *reads* the slot
 - Held stacks exist only in hands and never enter a station slot or a recipe
+- Vision checkpoints: first write Factory-destroys the workpiece *item* and CraftingSubsystem-spawns `ACraftWorkpieceActor` into that hand/slot. Later writes stay on that actor. Product items still go through Factory. A2 HeldItems stays `AItemActor` only. Workpiece hold uses `IHoldable` when checkpoints ship (§11.4.1).
 
 
 ### 14. Example bindings
 
 **Stone + Stone → Sharpened Stone** (hands, Grind, one output, auto-equip)
-- Two slots: Ingredient, Exact DA_Stone, held, consumed, cost 0
+- Core Loop: two Ingredient slots, Exact DA_Stone, held, consumed, cost 0
 - Snapshot: two Stones, both Neutral, no station
 - Success: both consumed, Sharpened Stone into primary, other hand Unarmed
+- Vision: planted slot Role = Workpiece. Fresh match is DA_Stone; resume match is `ACraftWorkpieceActor` for this recipe + any Stone abrader. Abrader `bConsumed` only on final success. First checkpoint destroys the planted Stone item.
 
 **Fibrous Stalks → Plant Fiber + Wood Scraps** (hands, Strip)
 - Slot: Ingredient, Exact DA_FibrousStalks, held, consumed
@@ -462,10 +745,40 @@ Removing the Crafting IMC always returns the player to the default mapping.
 
 Locked this pass: snapshot, Neutral-only prompt, wheel select, E start, lock-on-E, R / player-damage cancel, recipe + slot + output fields, single station pointer, no stacks, no fake station, consume / pile / auto-equip rules, subsystem vs session split, IMC split. Bound items do not leave sockets mid-session; multiplayer later locks those sockets for other players.
 
-Minigames (§11) locked at catalog level: modes PhysicsItem / GuidedGesture / PhysicsStrike; types Grind, Twist, Tie, Strip, Hammer, Flesh, Hone.
+Minigames (§11) locked at catalog level: modes PhysicsItem / GuidedGesture / PhysicsStrike; types Grind, Twist, Tie, Strip, Hammer, Flesh, Hone, Form (parked). One `UCraftingMinigameDefinition` shape (§11.9). Appearance modes LiveMeshes / Morph / SkeletalPhase (`SteppedMeshes` retired). Morph sample Lerp vs HoldAndPop. Item meshes do not carry morphs. Session presentation is a follow-mesh on the live item; player holds only `AItemActor` until vision checkpoints.
 
-Hone / grindstone locked: T3 copper first sharpenable, no-slot station, treadle presentation, `Sharpenable` match, live Current/Max writes, keep writes on cancel, auto-disengage and end when Current hits Max. Clay ware T1-accessible (bowl hands + fire; wheel later).
+Fidelity locked (§16): Core Loop A2 is grind motion on two live stones + Twist presentation. Cancel returns both stones. No checkpoints, no flip, no Form. Shippable adds Morph/SkeletalPhase presentation, still no save. Vision: `ACraftWorkpieceActor` after first checkpoint, resume prompt, Flip later (mid-hit cancels clip, keeps after-flip state). Clay in harden-fire auto-fails.
 
-OPEN: AssistOffset two-hand IK, discovery prompt setting, hide result Instance vs new def, knap/forge heat and overstrike products, exact stroke counts, Wood Scraps vs Kindling name, clay-bowl minigame type.
+Hone / grindstone locked: T3 copper first sharpenable, no-slot station, treadle presentation, `Sharpenable` match, live Current/Max writes, keep writes on cancel, auto-disengage and end when Current hits Max. Clay ware T1-accessible (bowl hands + fire; wheel later). Form type is the bowl minigame (not Core Loop).
+
+OPEN: AssistOffset two-hand IK, discovery prompt setting, hide result Instance vs new def, knap/forge payloads (visual language locked: HoldAndPop + flake debris), exact numbers (wait), Wood Scraps vs Kindling name, HeldItems `IHoldable` implementation for `ACraftWorkpieceActor` (lean in §11.4.1).
 
 Workbench locked at station/recipe level (§9): `DA_Structure_Workbench`, one slot, Tie hatchet first. Build graph and ghost apply: Notes/StructureSystem/StructureSystemDefinition.txt.
+
+
+### 16. Fidelity tiers (what to build when)
+
+Do not treat every sentence in §11 as A2 work.
+
+**Core Loop / Roadmap A2 — code this first**
+
+- Session, IMC, prompt, consume on success, cancel restores bindings.
+- One interpreter. Two minigame assets: Grind, Twist.
+- Grind = `PhysicsItem` + `LiveMeshes`. Two `SM_Stone`. Motion detection only (Engage, XY stroke band). No presentation required. No Flip. No workpiece actor. Cancel / damage returns both stones.
+- Twist = `GuidedGesture` + `SkeletalPhase` presentation (growing two-ply). Hide the two PlantFiber meshes.
+- Outputs as already locked.
+
+**Shippable (after the loop plays, before polish)**
+
+- Grind workpiece `Morph` + `Lerp` follow-mesh on the planted stone. Abrader stays live cobble.
+- Strip / Tie presentation SKMs. Form can land here or wait.
+- No checkpoints. No resume. Flip waits.
+
+**Vision (final)**
+
+- §10.1: first checkpoint Factory-destroys the workpiece item and spawns `ACraftWorkpieceActor` (CraftingSubsystem). `[E] Resume Crafting: {Name}`. Held via `IHoldable` (§11.4.1).
+- Flip later: after-flip state written when the clip starts; damage/R kills the clip, resume in that pose.
+- Same presentation SKM + morph weights on the persistent actor. No stage SM bake.
+- Clay / clay-workpiece in a harden-fire: auto-fail, shards, gone.
+- Knap / forge: HoldAndPop + flake debris / sparks. Payloads still parked.
+- Hone unchanged (live writes, no workpiece actor).
