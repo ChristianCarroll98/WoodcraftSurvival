@@ -623,25 +623,25 @@ bool UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand, FStr
 
 	// Linear: mild mass term. Acceleration drive already scales force with body mass.
 	const float MassScaleLinear = FMath::Clamp(
-		FMath::Pow(FMath::Max(EffectiveMass / GControlLinearMassRef, 0.f), GControlLinearMassExp),
-		GControlLinearMassScaleMin,
-		GControlLinearMassScaleMax);
+		FMath::Pow(FMath::Max(EffectiveMass / LinearMassRef, 0.f), LinearMassExp),
+		LinearMassScaleMin,
+		LinearMassScaleMax);
 
 	// Angular: mass term × COM lever (head offset from item origin). Caps are safety rails.
 	const float AngularMassTerm = FMath::Pow(
-		FMath::Max(EffectiveMass / GControlMassRef, 0.f), GControlMassExp);
+		FMath::Max(EffectiveMass / AngularMassRef, 0.f), AngularMassExp);
 	const float LeverCm = FVector::Dist(ItemMesh->GetCenterOfMass(), ItemMesh->GetComponentLocation());
 	const float AngularLeverTerm = 1.0f + FMath::Pow(
-		LeverCm / FMath::Max(GControlAngularLeverRef, 1.f), GControlAngularLeverExp);
+		LeverCm / FMath::Max(AngularLeverRef, 1.f), AngularLeverExp);
 	const float MassScale = FMath::Clamp(
 		AngularMassTerm * AngularLeverTerm,
-		GControlMassScaleMin,
-		GControlMassScaleMax);
+		AngularMassScaleMin,
+		AngularMassScaleMax);
 
 	FPhysicsControlData ControlData;
-	ControlData.LinearStrength = GControlLinearStrengthNeutral * MassScaleLinear;
+	ControlData.LinearStrength = LinearStrengthNeutral * MassScaleLinear;
 	ControlData.LinearDampingRatio = FMath::Max(1.0f, 1.4f + 0.3f * (MassScaleLinear - 1.0f));
-	ControlData.AngularStrength = GControlAngularStrengthNeutral * MassScale;
+	ControlData.AngularStrength = AngularStrengthNeutral * MassScale;
 	ControlData.AngularDampingRatio = FMath::Max(1.0f, 1.3f + 0.3f * (MassScale - 1.0f));
 	ControlData.bUseSkeletalAnimation = true;
 	ControlData.bDisableCollision = true;
@@ -828,11 +828,11 @@ void UHeldItemsComponent::UpdateControlStrengths(EHand Hand)
 	if (State.ActiveControl.IsNone() || !State.HeldItem) return;
 
 	const float AngLo = State.bExtended
-		? GControlAngularStrengthBaseline
-		: GControlAngularStrengthNeutral;
+		? AngularStrengthBaseline
+		: AngularStrengthNeutral;
 	const float LinLo = State.bExtended
-		? GControlLinearStrengthBaseline
-		: GControlLinearStrengthNeutral;
+		? LinearStrengthBaseline
+		: LinearStrengthNeutral;
 
 	float AngMul = AngLo;
 	float LinMul = LinLo;
@@ -840,10 +840,10 @@ void UHeldItemsComponent::UpdateControlStrengths(EHand Hand)
 	if (LookSpeed >= GMinLookSpeed)
 	{
 		const float LinearT = FMath::Clamp(
-			LookSpeed / FMath::Max(GControlStrengthFullLookSpeed, 1.f), 0.f, 1.f);
-		const float T = FMath::Pow(LinearT, GControlStrengthCurveExp);
-		AngMul = FMath::Lerp(AngLo, GControlAngularStrengthMax, T);
-		LinMul = FMath::Lerp(LinLo, GControlLinearStrengthMax, T);
+			LookSpeed / FMath::Max(StrengthFullLookSpeed, 1.f), 0.f, 1.f);
+		const float T = FMath::Pow(LinearT, StrengthCurveExp);
+		AngMul = FMath::Lerp(AngLo, AngularStrengthMax, T);
+		LinMul = FMath::Lerp(LinLo, LinearStrengthMax, T);
 	}
 
 	ApplyControlStrengths(Hand, AngMul, LinMul);

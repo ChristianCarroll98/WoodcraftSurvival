@@ -41,61 +41,6 @@ const float GSlashMaxAngleDeg = 85.f;
  *  Outside this → Blunt. */
 const float GPierceMaxAngleDeg = 35.f;
 
-/** Look-delta rate (LookDelta.Size() / DeltaTime) at which swipe strength reaches max.
- *  Tune from the on-screen “look speed max2s” print. Not item cm/s. */
-const float GControlStrengthFullLookSpeed = 240.f;
-
-/** Exponent on the 0–1 look-speed factor before lerping swipe strength. 1 = linear, 2+ = ease-in. */
-const float GControlStrengthCurveExp = 3.f;
-
-/** Angular mass (kg) at which the mass term of MassScale == 1. */
-const float GControlMassRef = 1.2f;
-
-/** Exponent on (mass / Ref) for the angular mass term. 0.5 keeps mass from dominating lever. */
-const float GControlMassExp = 0.5f;
-
-/** COM-to-origin distance (cm) at which the angular lever term is +1. Heavy heads scale here. */
-const float GControlAngularLeverRef = 25.f;
-
-/** Exponent on (lever / LeverRef) added into MassScale. 1 = linear with head offset. */
-const float GControlAngularLeverExp = 1.0f;
-
-/** Floor on angular MassScale. */
-const float GControlMassScaleMin = 0.5f;
-
-/** Safety rail only — curve should land inside this. */
-const float GControlMassScaleMax = 8.0f;
-
-/** Linear mass (kg) at which MassScaleLinear == 1. Stone hatchet ballpark. */
-const float GControlLinearMassRef = 1.67f;
-
-/** Exponent on (mass / LinearRef) for MassScaleLinear. Acceleration drive already tracks mass. */
-const float GControlLinearMassExp = 0.5f;
-
-/** Floor on MassScaleLinear. */
-const float GControlLinearMassScaleMin = 0.7f;
-
-/** Safety rail only — curve should land inside this. */
-const float GControlLinearMassScaleMax = 4.0f;
-
-/** Angular strength (× MassScale) while not extended. Softer than linear; hold without locking. */
-const float GControlAngularStrengthNeutral = 2.5f;
-
-/** Angular strength (× MassScale) while extended with no / slow look. Slight lag floor. */
-const float GControlAngularStrengthBaseline = 1.8f;
-
-/** Angular strength (× MassScale) at high look speed while extended. */
-const float GControlAngularStrengthMax = 11.0f;
-
-/** Linear strength (× MassScaleLinear) while not extended. Mostly planted, a little give. */
-const float GControlLinearStrengthNeutral = 5.5f;
-
-/** Linear strength (× MassScaleLinear) while extended with no / slow look. Tight in-hand. */
-const float GControlLinearStrengthBaseline = 8.0f;
-
-/** Linear strength (× MassScaleLinear) at high look speed while extended. */
-const float GControlLinearStrengthMax = 13.0f;
-
 /** Max wrist twist clockwise from neutral (degrees).
  *  From the player's view: negative Atan2 around WeaponBone +Z. */
 const float GWristLimitCWDeg = 105.f;

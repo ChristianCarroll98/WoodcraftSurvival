@@ -124,6 +124,81 @@ public:
 	TObjectPtr<UItemDefinition> UnarmedDefinition;
 
 
+	// ---------- Strength (tune on the Player BP / PIE, no C++ rebuild) ----------
+
+	/** Look-delta rate at which swipe strength reaches max. Tune from the cyan look-speed print. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Look", meta = (ClampMin = "1.0"))
+	float StrengthFullLookSpeed = 240.f;
+
+	/** Exponent on the 0–1 look-speed factor before lerping swipe strength. 1 = linear, 2+ = ease-in. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Look", meta = (ClampMin = "0.1"))
+	float StrengthCurveExp = 3.f;
+
+	/** Linear strength while not extended. Mostly planted, a little give. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Linear", meta = (ClampMin = "0.0"))
+	float LinearStrengthNeutral = 5.5f;
+
+	/** Linear strength while extended with no / slow look. Tight in-hand. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Linear", meta = (ClampMin = "0.0"))
+	float LinearStrengthBaseline = 8.0f;
+
+	/** Linear strength at high look speed while extended. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Linear", meta = (ClampMin = "0.0"))
+	float LinearStrengthMax = 13.0f;
+
+	/** Linear mass (kg) at which MassScaleLinear == 1. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Linear", meta = (ClampMin = "0.01"))
+	float LinearMassRef = 1.67f;
+
+	/** Exponent on (mass / LinearMassRef). Acceleration drive already tracks body mass. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Linear", meta = (ClampMin = "0.0"))
+	float LinearMassExp = 0.5f;
+
+	/** Floor on MassScaleLinear. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Linear", meta = (ClampMin = "0.01"))
+	float LinearMassScaleMin = 0.7f;
+
+	/** Safety rail on MassScaleLinear. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Linear", meta = (ClampMin = "0.01"))
+	float LinearMassScaleMax = 4.0f;
+
+	/** Angular strength while not extended. Softer than linear. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Angular", meta = (ClampMin = "0.0"))
+	float AngularStrengthNeutral = 2.5f;
+
+	/** Angular strength while extended with no / slow look. Slight lag floor. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Angular", meta = (ClampMin = "0.0"))
+	float AngularStrengthBaseline = 1.8f;
+
+	/** Angular strength at high look speed while extended. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Angular", meta = (ClampMin = "0.0"))
+	float AngularStrengthMax = 11.0f;
+
+	/** Angular mass (kg) at which the mass term of MassScale == 1. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Angular", meta = (ClampMin = "0.01"))
+	float AngularMassRef = 1.2f;
+
+	/** Exponent on (mass / AngularMassRef). 0.5 keeps mass from dominating lever. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Angular", meta = (ClampMin = "0.0"))
+	float AngularMassExp = 0.5f;
+
+	/** COM-to-origin distance (cm) at which the angular lever term is +1. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Angular", meta = (ClampMin = "1.0"))
+	float AngularLeverRef = 25.f;
+
+	/** Exponent on (lever / AngularLeverRef) added into MassScale. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Angular", meta = (ClampMin = "0.0"))
+	float AngularLeverExp = 1.0f;
+
+	/** Floor on angular MassScale. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Angular", meta = (ClampMin = "0.01"))
+	float AngularMassScaleMin = 0.5f;
+
+	/** Safety rail on angular MassScale. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Angular", meta = (ClampMin = "0.01"))
+	float AngularMassScaleMax = 8.0f;
+
+
 	// ---------- Run-Time Configuration ----------
 
 	/** Physics Control component used to create and remove controls. Assigned in the Player Blueprint. */
@@ -263,7 +338,7 @@ private:
 
 	/**
 	 * Applies mass-scaled linear + angular strengths (and the matching damping) to the
-	 * active Physics Control for this hand. Multipliers are the GControl* values.
+	 * active Physics Control for this hand. Multipliers are the Strength category values.
 	 */
 	void ApplyControlStrengths(EHand Hand, float AngularMultiplier, float LinearMultiplier);
 
