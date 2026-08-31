@@ -276,7 +276,7 @@ void UHeldItemsComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 			}
 			if (UStaticMeshComponent* Secondary = HandRight.HeldItem->GetItemSecondaryMesh())
 			{
-				Mass += Secondary->GetMass();
+				if (!Secondary->IsWelded()) Mass += Secondary->GetMass();
 			}
 		}
 		GEngine->AddOnScreenDebugMessage(102, 1.f, FColor::Orange,
@@ -614,22 +614,29 @@ bool UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand, FStr
 
 	const FName WeaponBoneName = GetWeaponBoneName(Hand);
 
-	// Effective mass = Primary + Secondary (constraint does not merge BodyInstances).
+	// Welded Secondary lives on Primary's BodyInstance. Only add Secondary when it is its own body.
 	float EffectiveMass = ItemMesh->GetMass();
 	if (UStaticMeshComponent* Secondary = Item->GetItemSecondaryMesh())
 	{
-		EffectiveMass += Secondary->GetMass();
+		if (!Secondary->IsWelded()) EffectiveMass += Secondary->GetMass();
 	}
 
-	// Softer strengths with reduced gravity; damping still rises with mass.
-	const float MassScale = FMath::Clamp(
-		FMath::Pow(FMath::Max(EffectiveMass / GControlMassRef, 0.f), GControlMassExp),
-		GControlMassScaleMin,
-		GControlMassScaleMax);
+	// Linear: mild mass term. Acceleration drive already scales force with body mass.
 	const float MassScaleLinear = FMath::Clamp(
 		FMath::Pow(FMath::Max(EffectiveMass / GControlLinearMassRef, 0.f), GControlLinearMassExp),
 		GControlLinearMassScaleMin,
 		GControlLinearMassScaleMax);
+
+	// Angular: mass term × COM lever (head offset from item origin). Caps are safety rails.
+	const float AngularMassTerm = FMath::Pow(
+		FMath::Max(EffectiveMass / GControlMassRef, 0.f), GControlMassExp);
+	const float LeverCm = FVector::Dist(ItemMesh->GetCenterOfMass(), ItemMesh->GetComponentLocation());
+	const float AngularLeverTerm = 1.0f + FMath::Pow(
+		LeverCm / FMath::Max(GControlAngularLeverRef, 1.f), GControlAngularLeverExp);
+	const float MassScale = FMath::Clamp(
+		AngularMassTerm * AngularLeverTerm,
+		GControlMassScaleMin,
+		GControlMassScaleMax);
 
 	FPhysicsControlData ControlData;
 	ControlData.LinearStrength = GControlLinearStrengthNeutral * MassScaleLinear;
@@ -645,10 +652,9 @@ bool UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand, FStr
 	if (GbDebugPrint && GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Cyan,
-			FString::Printf(TEXT("PhysControl mass=%.2f angS=%.2f linS=%.2f  L=%.1f A=%.1f  dampL=%.2f dampA=%.2f"),
-				EffectiveMass, MassScale, MassScaleLinear,
-				ControlData.LinearStrength, ControlData.AngularStrength,
-				ControlData.LinearDampingRatio, ControlData.AngularDampingRatio));
+			FString::Printf(TEXT("PhysControl mass=%.2f lever=%.1f angS=%.2f linS=%.2f  L=%.1f A=%.1f"),
+				EffectiveMass, LeverCm, MassScale, MassScaleLinear,
+				ControlData.LinearStrength, ControlData.AngularStrength));
 	}
 
 	FPhysicsControlTarget ControlTarget;

@@ -48,47 +48,53 @@ const float GControlStrengthFullLookSpeed = 240.f;
 /** Exponent on the 0–1 look-speed factor before lerping swipe strength. 1 = linear, 2+ = ease-in. */
 const float GControlStrengthCurveExp = 3.f;
 
-/** Angular mass (kg) at which MassScale == 1 before the exponent. */
-const float GControlMassRef = 0.6f;
+/** Angular mass (kg) at which the mass term of MassScale == 1. */
+const float GControlMassRef = 1.2f;
 
-/** Exponent on (mass / Ref) for angular MassScale. 1 = linear. */
-const float GControlMassExp = 1.0f;
+/** Exponent on (mass / Ref) for the angular mass term. 0.5 keeps mass from dominating lever. */
+const float GControlMassExp = 0.5f;
+
+/** COM-to-origin distance (cm) at which the angular lever term is +1. Heavy heads scale here. */
+const float GControlAngularLeverRef = 25.f;
+
+/** Exponent on (lever / LeverRef) added into MassScale. 1 = linear with head offset. */
+const float GControlAngularLeverExp = 1.0f;
 
 /** Floor on angular MassScale. */
-const float GControlMassScaleMin = 0.35f;
+const float GControlMassScaleMin = 0.5f;
 
-/** Cap on angular MassScale so very heavy items do not over-stiffen rotation. */
-const float GControlMassScaleMax = 6.0f;
+/** Safety rail only — curve should land inside this. */
+const float GControlMassScaleMax = 8.0f;
 
-/** Linear mass (kg) at which MassScaleLinear == 1 before the exponent. Pinned to the hatchet. */
+/** Linear mass (kg) at which MassScaleLinear == 1. Stone hatchet ballpark. */
 const float GControlLinearMassRef = 1.67f;
 
-/** Exponent on (mass / LinearRef) for MassScaleLinear. >1 keeps rocks/fists sloppy and climbs near tool mass. */
-const float GControlLinearMassExp = 3.0f;
+/** Exponent on (mass / LinearRef) for MassScaleLinear. Acceleration drive already tracks mass. */
+const float GControlLinearMassExp = 0.5f;
 
 /** Floor on MassScaleLinear. */
-const float GControlLinearMassScaleMin = 0.4f;
+const float GControlLinearMassScaleMin = 0.7f;
 
-/** Cap on MassScaleLinear. */
-const float GControlLinearMassScaleMax = 10.0f;
+/** Safety rail only — curve should land inside this. */
+const float GControlLinearMassScaleMax = 4.0f;
 
-/** Angular strength multiplier (× MassScale) while not extended — planted by the body, slight give. */
-const float GControlAngularStrengthNeutral = 6.f;
+/** Angular strength (× MassScale) while not extended. Softer than linear; hold without locking. */
+const float GControlAngularStrengthNeutral = 2.5f;
 
-/** Angular strength multiplier (× MassScale) while extended with no / slow look. Combat lag floor. */
-const float GControlAngularStrengthBaseline = 2.f;
+/** Angular strength (× MassScale) while extended with no / slow look. Slight lag floor. */
+const float GControlAngularStrengthBaseline = 1.8f;
 
-/** Angular strength multiplier (× MassScale) at high look speed while extended. */
-const float GControlAngularStrengthMax = 24.0f;
+/** Angular strength (× MassScale) at high look speed while extended. */
+const float GControlAngularStrengthMax = 11.0f;
 
-/** Linear strength multiplier (× MassScaleLinear) while not extended. */
-const float GControlLinearStrengthNeutral = 8.f;
+/** Linear strength (× MassScaleLinear) while not extended. Mostly planted, a little give. */
+const float GControlLinearStrengthNeutral = 5.5f;
 
-/** Linear strength multiplier (× MassScaleLinear) while extended with no / slow look. */
-const float GControlLinearStrengthBaseline = 5.f;
+/** Linear strength (× MassScaleLinear) while extended with no / slow look. Tight in-hand. */
+const float GControlLinearStrengthBaseline = 8.0f;
 
-/** Linear strength multiplier (× MassScaleLinear) at high look speed while extended. */
-const float GControlLinearStrengthMax = 16.0f;
+/** Linear strength (× MassScaleLinear) at high look speed while extended. */
+const float GControlLinearStrengthMax = 13.0f;
 
 /** Max wrist twist clockwise from neutral (degrees).
  *  From the player's view: negative Atan2 around WeaponBone +Z. */

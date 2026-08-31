@@ -60,15 +60,15 @@ struct FHandState
 	bool bProceduralOrientActive = false;
 
 	/**
-	 * Angular mass scale computed at attach:
-	 * Clamp(Pow(EffectiveMass / GControlMassRef, GControlMassExp), Min, Max).
+	 * Angular scale at attach:
+	 * Clamp(Pow(Mass / MassRef, MassExp) * (1 + Pow(COMLever / LeverRef, LeverExp)), Min, Max).
 	 */
 	float MassScale = 1.0f;
 
 	/**
-	 * Linear mass scale computed at attach:
-	 * Clamp(Pow(EffectiveMass / GControlLinearMassRef, GControlLinearMassExp), Min, Max).
-	 * Exp > 1 keeps compact items sloppy and climbs near tool mass.
+	 * Linear scale at attach:
+	 * Clamp(Pow(Mass / LinearRef, LinearExp), Min, Max).
+	 * Mild — acceleration drive already tracks body mass.
 	 */
 	float MassScaleLinear = 1.0f;
 
