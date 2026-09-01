@@ -162,6 +162,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Linear", meta = (ClampMin = "0.01"))
 	float LinearMassScaleMax = 4.0f;
 
+	/** Linear damping ratio at MassScaleLinear == 1. 1 = no overshoot. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Linear", meta = (ClampMin = "0.0"))
+	float LinearDampingRatio = 1.4f;
+
+	/** Added to LinearDampingRatio per (MassScaleLinear − 1). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Linear")
+	float LinearDampingMassSlope = 0.3f;
+
 	/** Angular strength while not extended. Softer than linear. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Angular", meta = (ClampMin = "0.0"))
 	float AngularStrengthNeutral = 2.5f;
@@ -197,6 +205,14 @@ public:
 	/** Safety rail on angular MassScale. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Angular", meta = (ClampMin = "0.01"))
 	float AngularMassScaleMax = 8.0f;
+
+	/** Angular damping ratio at MassScale == 1. 1 = no overshoot. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Angular", meta = (ClampMin = "0.0"))
+	float AngularDampingRatio = 1.3f;
+
+	/** Added to AngularDampingRatio per (MassScale − 1). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Angular")
+	float AngularDampingMassSlope = 0.3f;
 
 	/** Held-item gravity scale. 0 = no sag / no COM-couple from gravity. World drop restores full gravity. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength", meta = (ClampMin = "0.0"))

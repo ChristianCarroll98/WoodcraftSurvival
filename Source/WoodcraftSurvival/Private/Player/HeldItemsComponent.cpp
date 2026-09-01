@@ -643,9 +643,11 @@ bool UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand, FStr
 
 	FPhysicsControlData ControlData;
 	ControlData.LinearStrength = LinearStrengthNeutral * MassScaleLinear;
-	ControlData.LinearDampingRatio = FMath::Max(1.0f, 1.4f + 0.3f * (MassScaleLinear - 1.0f));
+	ControlData.LinearDampingRatio = FMath::Max(0.f,
+		LinearDampingRatio + LinearDampingMassSlope * (MassScaleLinear - 1.0f));
 	ControlData.AngularStrength = AngularStrengthNeutral * MassScale;
-	ControlData.AngularDampingRatio = FMath::Max(1.0f, 1.3f + 0.3f * (MassScale - 1.0f));
+	ControlData.AngularDampingRatio = FMath::Max(0.f,
+		AngularDampingRatio + AngularDampingMassSlope * (MassScale - 1.0f));
 	ControlData.bUseSkeletalAnimation = true;
 	ControlData.bDisableCollision = true;
 	ControlData.bUseCustomControlPoint = true;
@@ -803,8 +805,10 @@ void UHeldItemsComponent::ApplyControlStrengths(EHand Hand, float AngularMultipl
 	const FHandState& State = GetHandState(Hand);
 	if (State.ActiveControl.IsNone()) return;
 
-	const float DampingAngular = FMath::Max(1.0f, 1.3f + 0.3f * (State.MassScale - 1.0f));
-	const float DampingLinear  = FMath::Max(1.0f, 1.4f + 0.3f * (State.MassScaleLinear - 1.0f));
+	const float DampingAngular = FMath::Max(0.f,
+		AngularDampingRatio + AngularDampingMassSlope * (State.MassScale - 1.0f));
+	const float DampingLinear = FMath::Max(0.f,
+		LinearDampingRatio + LinearDampingMassSlope * (State.MassScaleLinear - 1.0f));
 
 	PhysicsControl->SetControlAngularData(
 		State.ActiveControl,
@@ -867,8 +871,10 @@ void UHeldItemsComponent::UpdateControlStrengths(EHand Hand)
 
 	if (GbDebugPrint && GEngine && Hand == EHand::Right)
 	{
-		const float DampA = FMath::Max(1.0f, 1.3f + 0.3f * (State.MassScale - 1.0f));
-		const float DampL = FMath::Max(1.0f, 1.4f + 0.3f * (State.MassScaleLinear - 1.0f));
+		const float DampA = FMath::Max(0.f,
+			AngularDampingRatio + AngularDampingMassSlope * (State.MassScale - 1.0f));
+		const float DampL = FMath::Max(0.f,
+			LinearDampingRatio + LinearDampingMassSlope * (State.MassScaleLinear - 1.0f));
 		const float AppliedA = AngMul * State.MassScale;
 		const float AppliedL = LinMul * State.MassScaleLinear;
 		GEngine->AddOnScreenDebugMessage(104, 1.f, FColor::Green,
