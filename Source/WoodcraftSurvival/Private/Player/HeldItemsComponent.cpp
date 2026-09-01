@@ -645,9 +645,8 @@ bool UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand, FStr
 	ControlData.AngularDampingRatio = FMath::Max(1.0f, 1.3f + 0.3f * (MassScale - 1.0f));
 	ControlData.bUseSkeletalAnimation = true;
 	ControlData.bDisableCollision = true;
-	ControlData.bUseCustomControlPoint = true;
-	// --- Get the wrist offset from the weapon bone for the custom control point so the item bends at the wrist
-	ControlData.CustomControlPoint = GetRelativeTransformBetweenWeaponAndHandBones(Hand).GetLocation();
+	// Idle drives COM. Wrist control point is applied only while procedural orient is on.
+	ControlData.bUseCustomControlPoint = false;
 
 	if (GbDebugPrint && GEngine)
 	{
@@ -677,12 +676,15 @@ bool UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand, FStr
 
 	FPhysicsControlModifierData ModData;
 	ModData.MovementType = EPhysicsMovementType::Simulated;
-	ModData.GravityMultiplier = 0.2f;
+	ModData.GravityMultiplier = GravityMultiplier;
 
 	PhysicsControl->CreateBodyModifier(ItemMesh, NAME_None, ModifierSet, ModData);
 	if (UStaticMeshComponent* Secondary = Item->GetItemSecondaryMesh())
 	{
-		PhysicsControl->CreateBodyModifier(Secondary, NAME_None, ModifierSet, ModData);
+		if (!Secondary->IsWelded())
+		{
+			PhysicsControl->CreateBodyModifier(Secondary, NAME_None, ModifierSet, ModData);
+		}
 	}
 
 	FHandState& State = GetHandState(Hand);
@@ -884,6 +886,7 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 			State.bProceduralOrientActive = false;
 			State.OrientEdgeSign = 1;
 			PhysicsControl->SetControlUseSkeletalAnimation(State.ActiveControl, true, 1.f);
+			PhysicsControl->ResetControlPoint(State.ActiveControl);
 			PhysicsControl->SetControlTargetPositionAndOrientation(
 				State.ActiveControl,
 				FVector::ZeroVector,
@@ -902,6 +905,9 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 	{
 		State.bProceduralOrientActive = true;
 		PhysicsControl->SetControlUseSkeletalAnimation(State.ActiveControl, false, 0.f);
+		PhysicsControl->SetControlPoint(
+			State.ActiveControl,
+			GetRelativeTransformBetweenWeaponAndHandBones(Hand).GetLocation());
 	}
 
 	// No look this frame → leave the last target so the item keeps momentum instead of hard-stopping.

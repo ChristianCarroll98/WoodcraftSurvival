@@ -198,6 +198,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Angular", meta = (ClampMin = "0.01"))
 	float AngularMassScaleMax = 8.0f;
 
+	/** Held-item gravity scale. 0 = no sag / no COM-couple from gravity. World drop restores full gravity. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength", meta = (ClampMin = "0.0"))
+	float GravityMultiplier = 0.f;
+
 
 	// ---------- Run-Time Configuration ----------
 
