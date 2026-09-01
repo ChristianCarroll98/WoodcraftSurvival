@@ -292,6 +292,9 @@ void UHeldItemsComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 	UpdateControlStrengths(EHand::Left);
 	UpdateControlStrengths(EHand::Right);
 
+	ApplyWristControlPoint(EHand::Left);
+	ApplyWristControlPoint(EHand::Right);
+
 	UpdateProceduralOrientation(EHand::Left, DeltaTime);
 	UpdateProceduralOrientation(EHand::Right, DeltaTime);
 }
@@ -645,8 +648,8 @@ bool UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand, FStr
 	ControlData.AngularDampingRatio = FMath::Max(1.0f, 1.3f + 0.3f * (MassScale - 1.0f));
 	ControlData.bUseSkeletalAnimation = true;
 	ControlData.bDisableCollision = true;
-	// Idle drives COM. Wrist control point is applied only while procedural orient is on.
-	ControlData.bUseCustomControlPoint = false;
+	ControlData.bUseCustomControlPoint = true;
+	ControlData.CustomControlPoint = GetRelativeTransformBetweenWeaponAndHandBones(Hand).GetLocation();
 
 	if (GbDebugPrint && GEngine)
 	{
@@ -657,6 +660,7 @@ bool UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand, FStr
 	}
 
 	FPhysicsControlTarget ControlTarget;
+	ControlTarget.bApplyControlPointToTarget = true;
 
 	// Create the control using the AnimRef mesh + correct weapon bone
 	FName NewControlName = PhysicsControl->CreateControl(
@@ -822,6 +826,17 @@ void UHeldItemsComponent::ApplyControlStrengths(EHand Hand, float AngularMultipl
 		false);
 }
 
+void UHeldItemsComponent::ApplyWristControlPoint(EHand Hand)
+{
+	if (Hand == EHand::None || !PhysicsControl) return;
+	const FHandState& State = GetHandState(Hand);
+	if (State.ActiveControl.IsNone()) return;
+
+	PhysicsControl->SetControlPoint(
+		State.ActiveControl,
+		GetRelativeTransformBetweenWeaponAndHandBones(Hand).GetLocation());
+}
+
 void UHeldItemsComponent::UpdateControlStrengths(EHand Hand)
 {
 	if (Hand == EHand::None || !PhysicsControl) return;
@@ -849,6 +864,24 @@ void UHeldItemsComponent::UpdateControlStrengths(EHand Hand)
 	}
 
 	ApplyControlStrengths(Hand, AngMul, LinMul);
+
+	if (GbDebugPrint && GEngine && Hand == EHand::Right)
+	{
+		const float DampA = FMath::Max(1.0f, 1.3f + 0.3f * (State.MassScale - 1.0f));
+		const float DampL = FMath::Max(1.0f, 1.4f + 0.3f * (State.MassScaleLinear - 1.0f));
+		const float AppliedA = AngMul * State.MassScale;
+		const float AppliedL = LinMul * State.MassScaleLinear;
+		GEngine->AddOnScreenDebugMessage(104, 1.f, FColor::Green,
+			FString::Printf(TEXT("R ctrl %s%s  lookT=%.2f  mul L=%.2f A=%.2f  scale L=%.2f A=%.2f"),
+				State.bExtended ? TEXT("EXT") : TEXT("NEU"),
+				State.bProceduralOrientActive ? TEXT(" ORIENT") : TEXT(""),
+				FMath::Clamp(LookSpeed / FMath::Max(StrengthFullLookSpeed, 1.f), 0.f, 1.f),
+				LinMul, AngMul,
+				State.MassScaleLinear, State.MassScale));
+		GEngine->AddOnScreenDebugMessage(105, 1.f, FColor::Green,
+			FString::Printf(TEXT("R applied  L=%.2f A=%.2f  damp L=%.2f A=%.2f"),
+				AppliedL, AppliedA, DampL, DampA));
+	}
 }
 
 void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTime)
@@ -886,7 +919,6 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 			State.bProceduralOrientActive = false;
 			State.OrientEdgeSign = 1;
 			PhysicsControl->SetControlUseSkeletalAnimation(State.ActiveControl, true, 1.f);
-			PhysicsControl->ResetControlPoint(State.ActiveControl);
 			PhysicsControl->SetControlTargetPositionAndOrientation(
 				State.ActiveControl,
 				FVector::ZeroVector,
@@ -905,9 +937,6 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 	{
 		State.bProceduralOrientActive = true;
 		PhysicsControl->SetControlUseSkeletalAnimation(State.ActiveControl, false, 0.f);
-		PhysicsControl->SetControlPoint(
-			State.ActiveControl,
-			GetRelativeTransformBetweenWeaponAndHandBones(Hand).GetLocation());
 	}
 
 	// No look this frame → leave the last target so the item keeps momentum instead of hard-stopping.

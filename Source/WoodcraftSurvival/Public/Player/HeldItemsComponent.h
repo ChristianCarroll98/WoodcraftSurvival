@@ -346,6 +346,12 @@ private:
 	 */
 	void ApplyControlStrengths(EHand Hand, float AngularMultiplier, float LinearMultiplier);
 
+	/**
+	 * Pins the Physics Control point to the AnimRef wrist (Hand relative to WeaponBone).
+	 * Item-local CP from the hold pose, not the live simulated mesh.
+	 */
+	void ApplyWristControlPoint(EHand Hand);
+
 	/** Returns a reference to the pending pickup data for the given hand. */
 	FPendingPickupData& GetPendingPickup(EHand Hand);
 
