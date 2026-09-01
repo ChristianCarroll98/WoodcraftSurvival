@@ -162,6 +162,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Linear", meta = (ClampMin = "0.01"))
 	float LinearMassScaleMax = 4.0f;
 
+	/** Multiplier on the computed linear mass scale. 0.5 = half the scale. Re-pickup to apply. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Linear", meta = (ClampMin = "0.0"))
+	float LinearMassScaleMul = 1.0f;
+
 	/** Linear damping ratio at MassScaleLinear == 1. 1 = no overshoot. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Linear", meta = (ClampMin = "0.0"))
 	float LinearDampingRatio = 1.4f;
@@ -205,6 +209,10 @@ public:
 	/** Safety rail on angular MassScale. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Angular", meta = (ClampMin = "0.01"))
 	float AngularMassScaleMax = 8.0f;
+
+	/** Multiplier on the computed angular mass scale. Re-pickup to apply. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Angular", meta = (ClampMin = "0.0"))
+	float AngularMassScaleMul = 1.0f;
 
 	/** Angular damping ratio at MassScale == 1. 1 = no overshoot. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Angular", meta = (ClampMin = "0.0"))

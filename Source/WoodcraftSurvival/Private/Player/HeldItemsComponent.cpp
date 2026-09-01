@@ -626,7 +626,7 @@ bool UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand, FStr
 
 	// Linear: mild mass term. Acceleration drive already scales force with body mass.
 	const float MassScaleLinear = FMath::Clamp(
-		FMath::Pow(FMath::Max(EffectiveMass / LinearMassRef, 0.f), LinearMassExp),
+		FMath::Pow(FMath::Max(EffectiveMass / LinearMassRef, 0.f), LinearMassExp) * LinearMassScaleMul,
 		LinearMassScaleMin,
 		LinearMassScaleMax);
 
@@ -637,7 +637,7 @@ bool UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand, FStr
 	const float AngularLeverTerm = 1.0f + FMath::Pow(
 		LeverCm / FMath::Max(AngularLeverRef, 1.f), AngularLeverExp);
 	const float MassScale = FMath::Clamp(
-		AngularMassTerm * AngularLeverTerm,
+		AngularMassTerm * AngularLeverTerm * AngularMassScaleMul,
 		AngularMassScaleMin,
 		AngularMassScaleMax);
 

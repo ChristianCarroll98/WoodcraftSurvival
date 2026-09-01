@@ -31,11 +31,11 @@ const float GMinLookSpeed = 50.f;
 
 /** Accepted half-angle (degrees) from the blade plane for Slash.
  *  Velocity farther off the plane than this (more face-on) is forced to Blunt. */
-const float GSlashMaxAngleFromPlaneDeg = 25.f;
+const float GSlashMaxAngleFromPlaneDeg = 30.f;
 
 /** Accepted half-angle (degrees) from preferred edge axis (+Y / ±Y) for Slash.
  *  Outside this → Blunt. Wide so lag / angled cuts still register. */
-const float GSlashMaxAngleDeg = 85.f;
+const float GSlashMaxAngleDeg = 90.f;
 
 /** Accepted half-angle (degrees) from tip axis (+Z) for Pierce.
  *  Outside this → Blunt. */
