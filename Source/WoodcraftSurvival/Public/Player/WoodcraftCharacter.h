@@ -7,6 +7,7 @@
 #include "WoodcraftCharacter.generated.h"
 
 class UHeldItemsComponent;
+class UCraftingComponent;
 
 UCLASS()
 class WOODCRAFTSURVIVAL_API AWoodcraftCharacter : public ACharacter
@@ -19,7 +20,11 @@ public:
 
 	/** Owns holding logic, extend functionality, constraint activation, etc. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Items|Holding")
-	TObjectPtr<UHeldItemsComponent> HeldItemComponent;
+	TObjectPtr<UHeldItemsComponent> HeldItemsComponent;
+
+	/** Owns recipe table, snapshot, match prompt, and the craft session. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Crafting")
+	TObjectPtr<UCraftingComponent> CraftingComponent;
 	
 	// Future: interaction traces, input helpers, etc. can live here or on the component
 

@@ -81,6 +81,50 @@ enum class EItemStrikeMode : uint8
 	Pierce		UMETA(DisplayName = "Pierce (+Z)"),
 };
 
+/** Role of one recipe slot. A2 recipes use Ingredient. */
+UENUM(BlueprintType)
+enum class ECraftingSlotRole : uint8
+{
+	Ingredient	UMETA(DisplayName = "Ingredient"),
+	Tool		UMETA(DisplayName = "Tool"),
+	Workpiece	UMETA(DisplayName = "Workpiece"),
+};
+
+/** How a recipe slot chooses a legal item. */
+UENUM(BlueprintType)
+enum class ECraftingSlotMatchMode : uint8
+{
+	ExactDefinition	UMETA(DisplayName = "Exact Definition"),
+	RequiredTag		UMETA(DisplayName = "Required Tag"),
+	Sharpenable		UMETA(DisplayName = "Sharpenable"),
+};
+
+/** HeldItems constraint family for a craft movement. */
+UENUM(BlueprintType)
+enum class ECraftingMotionMode : uint8
+{
+	Physics	UMETA(DisplayName = "Physics"),
+	Guided	UMETA(DisplayName = "Guided"),
+	Strike	UMETA(DisplayName = "Strike"),
+};
+
+/** How the session shows progress on the work. */
+UENUM(BlueprintType)
+enum class ECraftingAppearanceMode : uint8
+{
+	LiveMeshes		UMETA(DisplayName = "Live Meshes"),
+	Morph			UMETA(DisplayName = "Morph"),
+	SkeletalPhase	UMETA(DisplayName = "Skeletal Phase"),
+};
+
+/** How morph weights are sampled from progress. */
+UENUM(BlueprintType)
+enum class ECraftingMorphSampleMode : uint8
+{
+	Lerp		UMETA(DisplayName = "Lerp"),
+	HoldAndPop	UMETA(DisplayName = "Hold And Pop"),
+};
+
 
 // ---------- Custom Collision Channels ----------
 

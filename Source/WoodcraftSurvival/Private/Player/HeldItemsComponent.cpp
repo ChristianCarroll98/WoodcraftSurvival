@@ -1237,7 +1237,7 @@ AItemActor* UHeldItemsComponent::FindLookedAtItem(float Radius, float MaxDistanc
 	return nullptr;
 }
 
-const bool UHeldItemsComponent::GetIsUnarmed(EHand Hand) const
+bool UHeldItemsComponent::GetIsUnarmed(EHand Hand) const
 {
 	if (Hand == EHand::None) return false;
 
