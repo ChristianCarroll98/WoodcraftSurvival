@@ -34,16 +34,19 @@ Description:
 Notes/CraftingSystem/CraftingSystemImplementation.txt is far enough to implement hands crafting. Locked: UCraftingRecipeDefinition slots (Exact DA or tag, one instance per slot, Station unset = hands), UCraftingMinigameDefinition with one instanced UCraftMovement, UCraftingComponent as session owner, Factory-only consume/spawn, E start / R cancel / damage interrupt, GrindActive + CircleAlternate as the first two crafts. Out of that card: knap, forge, hone, workbench.
 
 
---- Backlog (priority order) ---
+--- In Progress ---
 
 Title: Crafting data + match prompt
 Size: XS
 Labels: feature
-Status: Backlog
+Status: In Progress
 Blocking: Crafting session + cancel; Ground recipe commit
 Blocked By:
 Description:
 A2.0 compile slice. Add UCraftingRecipeDefinition, UCraftingMinigameDefinition, UCraftMovement, UGrindActiveCraftMovement, UCircleAlternateCraftMovement, UCraftingComponent. Enums and ECraftingMotionMode in WoodcraftTypes.h. FindMatches on the recipe definition. FindMove<T>() on the minigame definition (same pattern as FindFragment<T>()). MotionMode property + GetMotionMode() on UCraftMovement; subclasses set the default. Component on AWoodcraftCharacter. Snapshot from HeldItems. Debug [E] Craft {Name} when both hands Neutral and a recipe matches. Author DA_Minigame_Grind (GrindActive module), DA_Minigame_Twist (CircleAlternate module), DA_Recipe_SharpenedStone, DA_Recipe_Cordage. Assign RecipeAssets on the player BP. No consume, no IMC, no player-input port.
+
+
+--- Backlog (priority order) ---
 
 Title: Crafting session + cancel
 Size: S
