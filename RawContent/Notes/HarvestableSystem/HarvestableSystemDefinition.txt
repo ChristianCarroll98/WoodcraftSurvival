@@ -15,7 +15,7 @@
 **UHarvestableDefinition** (Primary Data Asset)
 - Pure type data for a harvestable resource.
 - Contains an array of `UHarvestableFragment*` (EditInlineNew, Instanced).
-- Examples: DA_OakTree, DA_PineTree, DA_CopperVein, DA_ClayDeposit, DA_Stump_Generic, DA_Carrot, DA_BerryBush, etc.
+- Examples: DA_Harvestable_OakTree, DA_Harvestable_PineTree, DA_Harvestable_CopperVein, DA_Harvestable_ClayDeposit, DA_Harvestable_Stump_Generic, DA_Harvestable_Carrot, DA_Harvestable_BerryBush, etc.
 
 **UHarvestableFragment** (abstract base)
 - Lightweight, primarily pure data (EditDefaultsOnly).
@@ -56,7 +56,7 @@ Harvestables are **not** Items.
 
 - When a harvestable is fully (or partially) processed it **produces** one or more Items by calling into `UItemFactorySubsystem`.
 - Example transitions:
-  - Standing tree trunk dies → spawn DA_Log Item(s) + spawn Stump Harvestable.
+  - Standing tree trunk dies → spawn DA_Item_Log + spawn Stump Harvestable.
   - Log (now an Item) is further chopped → spawn Wood Chunk Items.
   - Ore vein depleted → spawn Ore Chunk Items.
   - Stump destroyed → spawn 2–3 Wood Chunk / Wood Scrap Items.
@@ -113,7 +113,7 @@ Tool impact logic then works uniformly against anything that implements the inte
 - When trunk health reaches zero:
   1. Play fall sequence (physics or animation + physics).
   2. Destroy / hide the standing tree Actor.
-  3. Spawn one or more `DA_Log` Items via ItemFactory.
+  3. Spawn one or more `DA_Item_Log` via ItemFactory.
   4. Spawn an `AStumpActor` (simple Harvestable).
 
 **Fallen Log**

@@ -19,9 +19,10 @@ if (GEngine) GEngine->AddOnScreenDebugMessage
 current issues/working task list:
 
 - NEXT: Roadmap A2 ground crafting. Spec: Notes/CraftingSystem/CraftingSystemImplementation.txt. T1 content (A1) is in-level and accepted.
-  - Hands recipes only. No station, no IHoldable, no ACraftWorkpieceActor.
-  - Order: session + prompt + Factory consume/spawn → Grind (two Stones, LiveMeshes) → Twist (two Plant Fiber, presentation SKM) → Strip (Fibrous Stalk + Unarmed → Plant Fiber only).
-  - Cancel / player damage returns the bound items. Wood Scraps / Kindling wait for fire.
+  - Hands recipes. `UCraftingComponent` owns recipe table, snapshot, prompt, session, interpreter. `UCraftingRecipeDefinition::FindMatches`.
+  - Assets: `DA_Recipe_SharpenedStone` + `DA_Minigame_Grind`; `DA_Recipe_Cordage` + `DA_Minigame_Twist`. Content uses `DA_Type_Name`.
+  - Order: A2.0 compile (DAs + snapshot debug prompt) → A2.1 session / IMC / R + damage cancel → A2.2 Factory consume/spawn + auto-equip → A2.3 Grind (`Physics`, LiveMeshes) → A2.4 Twist (`Guided`, presentation SKM).
+  - Strip (`DA_Item_FibrousStalk` + Unarmed → `DA_Item_PlantFiber`) after that PoC. Wood Scraps / Kindling wait for fire.
 - After A2 plays: A3 Structure scaffolding + placed Workbench + Tie hatchet. A4 player-built bench + two-hand logs.
 - Later polish (not A2): impact audio per resolved damage type; floating damage numbers; camera-delta bias; wrist limits on data assets; Stab impulse on extend. See ItemSystemImplementation §9.1 / designed list.
 
@@ -33,3 +34,5 @@ Architecture reminder:
 - Dual-mesh tools: Secondary WeldTo Primary. No Physics Constraint. Material overrides on the Definition for assembled ORM.
 - Q-mode place-on-socket and workbench slot land with A3, not A2.
 - Physical Materials = density / mass + future impact. Named primitives choose candidate damage type.
+- Content assets: `DA_Type_Name` (`DA_Item_Stone`, `DA_Harvestable_Nettle`, `DA_Recipe_SharpenedStone`, `DA_Minigame_Grind`, `DA_Structure_Workbench`).
+- Crafting motion modes: Physics, Guided, Strike. Enums in WoodcraftTypes.h. Session struct lives on CraftingComponent.h.

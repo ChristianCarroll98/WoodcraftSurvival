@@ -18,7 +18,7 @@ In
 - T1 item set as real data (stone / bone tech tier; there is no T0): Stone, Stick, SharpenedStone, PlantFiber, Cordage, StoneHatchet (dual-mesh: StickHandle Primary mesh + SharpenedStone Secondary). Handle is mesh-only — no Handle item DA. Copper Hatchet stays a T3 preview.
 - Harvestables that feed the set: existing TestTree (sticks + stump), loose stones, Nettle (low HP, Slash only — Blunt and Pierce in Immunities, WalkThrough collision fragment). Yields Fibrous Stalk.
 - Pickup / drop / extend / physics swing / incidence / orientation / damage + resistance (already live).
-- Ground crafting: Stone+Stone → SharpenedStone; Fibrous Stalk + Unarmed → PlantFiber; PlantFiber+PlantFiber → Cordage. Wood Scraps / Kindling wait for fire.
+- Ground crafting: `DA_Item_Stone`+`DA_Item_Stone` → `DA_Item_SharpenedStone`; `DA_Item_PlantFiber`+`DA_Item_PlantFiber` → `DA_Item_Cordage`; then `DA_Item_FibrousStalk` + Unarmed → `DA_Item_PlantFiber`. Wood Scraps / Kindling wait for fire.
 - Structure scaffolding (Definition / Instance / Actor + fragments), parallel to Items and Harvestables.
 - Thin Workbench: one slot socket, placed in the test level first. Hatchet recipe is bench-only.
 - StoneHatchet recipe: SharpenedStone + Stick + Cordage at Workbench.
@@ -55,9 +55,10 @@ A1. T1 content — DONE (2026-09-02)
 - In test level: pickup, Stone/Stick blunt swing, Sharpened Stone cuts TestTree and Nettle, Nettle WalkThrough + Fibrous Stalk yield.
 
 A2. Ground crafting
-- Recipe data asset, session owner, consume via ItemFactory, spawn result, cancel by release / player damage.
-- Hands recipes: Stone+Stone → SharpenedStone (Grind); Fibrous Stalk + Unarmed → PlantFiber (Strip, no Wood Scraps yet); PlantFiber+PlantFiber → Cordage (Twist).
-- One interpreter. Grind first (LiveMeshes), then Twist presentation, then Strip. No knapping or forging. No station.
+- `UCraftingRecipeDefinition` + `UCraftingMinigameDefinition` + `UCraftingComponent` (recipe table, snapshot, session, one interpreter).
+- Consume / spawn only through ItemFactory. R / player damage clears the session and leaves the bound items.
+- Hands recipes first: Grind (`DA_Item_Stone`+`DA_Item_Stone` → `DA_Item_SharpenedStone`, `Physics`, LiveMeshes) then Twist (`DA_Item_PlantFiber`+`DA_Item_PlantFiber` → `DA_Item_Cordage`, `Guided`, presentation SKM).
+- Strip after that PoC. Station / Tie / knap / forge / hone wait.
 
 A3. Structure scaffolding + placed Workbench
 - Structure Definition / Instance / Actor + fragment base.

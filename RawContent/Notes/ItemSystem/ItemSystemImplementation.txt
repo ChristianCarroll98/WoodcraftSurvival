@@ -132,7 +132,7 @@ Tech tier 1 is stone / bone (Vision). There is no T0 tier. Content slice A1 is t
 - Cordage — Equippable, `None`, no Damage fragment. Twisted product of two Plant Fiber.
 - Stone Hatchet — dual-mesh Definition. Primary = StickHandle static mesh (not a live Stick Instance, no Handle item DA). Secondary = `SM_SharpenedStone`. Optional `PrimaryMaterialOverride` / `SecondaryMaterialOverride` for assembled-contact ORM. Existing hatchet HoldPoses.
 
-Fiber-source tag stays on stalk-type items only (Nettle drop now; later yucca / bulrush). Recipes that want “any raw stalk” match that tag. Strip A2 matches Exact `DA_FibrousStalk` / `DA_FibrousStalks`.
+Fiber-source tag stays on stalk-type items only (Nettle drop now; later yucca / bulrush). Recipes that want “any raw stalk” match that tag. Strip matches Exact `DA_Item_FibrousStalk`.
 
 ### 4. Animation & Attachment Architecture (Locked)
 
@@ -283,7 +283,7 @@ Hand-held stacks are a lightweight, same-type-only special case managed entirely
 
 ### 8. Unarmed Handling (Locked)
 
-- Unarmed is a real item (`DA_Unarmed`).
+- Unarmed is a real item (`DA_Item_Unarmed`).
 - Store **only** the `UItemDefinition*` (no permanent Unarmed Instances).
 - On equip: `Factory->SpawnItemActorFromDefinition(UnarmedDefinition)` then normal attach path.
 - On replace with a real item: simply `Destroy()` the Unarmed actor.
@@ -346,7 +346,7 @@ All damage (Unarmed punch, spear tip, thrown rock, arrow, dropped item, etc.) us
 No activation flag or special-case damage path is required. Higher velocity from the impulse naturally increases impact severity.
 
 **Applies equally to**
-- Unarmed (fists) — just put a `UStabItemFragment` on `DA_Unarmed` with appropriate strength.
+- Unarmed (fists) — just put a `UStabItemFragment` on `DA_Item_Unarmed` with appropriate strength.
 - Spears, knives, sharpened sticks, etc.
 
 Future polish (not required for first version): direction bias enum, impulse application point (COM vs tip socket), temporary Physics Control strength modulation during the activation window, stamina cost; audio per resolved damage type; Valheim-style floating damage numbers (gray resist / white neutral / pale yellow weak / gray 0 immunity); optional camera-delta bias for orientation intent; expose wrist limits to the item data asset (especially two-handed); optional small post-IK wrist twist if pinch bothers.

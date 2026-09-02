@@ -193,8 +193,8 @@ The stump is itself a lightweight Harvestable that can later be destroyed for a 
    - Simple yield path that spawns Stick Items + Stump Harvestable and cleans up.
 
 5. **Data Assets + test**
-   - `DA_TestTree` (or DA_OakTree) with Health + Yield fragments.
-   - `DA_Stump_Generic`
+   - `DA_Harvestable_TestTree` (or DA_Harvestable_OakTree) with Health + Yield fragments.
+   - `DA_Harvestable_Stump_Generic`
    - Place a few in a test level, damage them, confirm sticks + stump appear.
 
 6. **CropHarvestableFragment collision override** (can be done in parallel or immediately after core works)
