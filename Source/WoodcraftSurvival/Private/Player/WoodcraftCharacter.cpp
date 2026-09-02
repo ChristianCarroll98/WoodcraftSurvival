@@ -2,7 +2,7 @@
 
 #include "Player/WoodcraftCharacter.h"
 #include "Player/HeldItemsComponent.h"
-#include "Crafting/CraftingComponent.h"
+#include "Player/CraftingComponent.h"
 
 // Sets default values
 AWoodcraftCharacter::AWoodcraftCharacter()

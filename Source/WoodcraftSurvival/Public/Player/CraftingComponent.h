@@ -26,15 +26,19 @@ public:
 	TArray<TSoftObjectPtr<UCraftingRecipeDefinition>> RecipeAssets;
 
 	virtual void BeginPlay() override;
-	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
 
 	void ResolveRecipeAssets();
+	void HandleHeldItemsChanged();
 	void RebuildSnapshot();
 	void RefreshMatches();
 	void UpdateDebugPrompt() const;
-	void FillHandSnapshot(EHand Hand, UHeldItemsComponent* HeldItems);
+	void FillHandSnapshot(EHand Hand);
+
+	UPROPERTY()
+	TObjectPtr<UHeldItemsComponent> HeldItems;
 
 	UPROPERTY()
 	TArray<TObjectPtr<UCraftingRecipeDefinition>> LoadedRecipes;

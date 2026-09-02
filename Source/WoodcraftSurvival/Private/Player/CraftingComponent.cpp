@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Christian Carroll. All Rights Reserved.
 
-#include "Crafting/CraftingComponent.h"
+#include "Player/CraftingComponent.h"
 #include "Items/ItemActor.h"
 #include "Items/ItemInstance.h"
 #include "Player/HeldItemsComponent.h"
@@ -12,19 +12,36 @@ namespace
 
 UCraftingComponent::UCraftingComponent()
 {
-	PrimaryComponentTick.bCanEverTick = true;
+	PrimaryComponentTick.bCanEverTick = false;
 }
 
 void UCraftingComponent::BeginPlay()
 {
 	Super::BeginPlay();
+
 	ResolveRecipeAssets();
+
+	HeldItems = GetOwner() ? GetOwner()->FindComponentByClass<UHeldItemsComponent>() : nullptr;
+	if (HeldItems)
+	{
+		HeldItems->OnHeldItemsChanged.AddUObject(this, &UCraftingComponent::HandleHeldItemsChanged);
+	}
+
+	HandleHeldItemsChanged();
 }
 
-void UCraftingComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+void UCraftingComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+	if (HeldItems)
+	{
+		HeldItems->OnHeldItemsChanged.RemoveAll(this);
+	}
 
+	Super::EndPlay(EndPlayReason);
+}
+
+void UCraftingComponent::HandleHeldItemsChanged()
+{
 	if (LoadedRecipes.Num() == 0 && RecipeAssets.Num() > 0)
 	{
 		ResolveRecipeAssets();
@@ -47,7 +64,7 @@ void UCraftingComponent::ResolveRecipeAssets()
 	}
 }
 
-void UCraftingComponent::FillHandSnapshot(EHand Hand, UHeldItemsComponent* HeldItems)
+void UCraftingComponent::FillHandSnapshot(EHand Hand)
 {
 	AItemActor* ItemActor = HeldItems ? HeldItems->GetHeldItem(Hand) : nullptr;
 	UItemInstance* Instance = ItemActor ? ItemActor->GetItemInstance() : nullptr;
@@ -77,12 +94,8 @@ void UCraftingComponent::FillHandSnapshot(EHand Hand, UHeldItemsComponent* HeldI
 
 void UCraftingComponent::RebuildSnapshot()
 {
-	UHeldItemsComponent* HeldItems = GetOwner()
-		? GetOwner()->FindComponentByClass<UHeldItemsComponent>()
-		: nullptr;
-
-	FillHandSnapshot(EHand::Left, HeldItems);
-	FillHandSnapshot(EHand::Right, HeldItems);
+	FillHandSnapshot(EHand::Left);
+	FillHandSnapshot(EHand::Right);
 
 	CurrentSnapshot.Station.Reset();
 	CurrentSnapshot.StationActor = nullptr;
@@ -132,7 +145,7 @@ void UCraftingComponent::UpdateDebugPrompt() const
 
 	GEngine->AddOnScreenDebugMessage(
 		CraftPromptMessageId,
-		0.25f,
+		10000.f,
 		FColor::Cyan,
 		FString::Printf(TEXT("[E] Craft %s"), *CraftName));
 }
