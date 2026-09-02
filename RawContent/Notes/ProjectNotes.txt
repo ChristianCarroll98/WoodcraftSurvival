@@ -16,44 +16,20 @@ if (GEngine) GEngine->AddOnScreenDebugMessage
 	TEXT("comment string") // comment FString. Can concatenate or add variables and format as long as its an FString.
 );
 
-reminder for next time:
-Model stone hatchet and fix materials for other existing assets (stick, hatchet, nettle plant, etc)
-
 current issues/working task list:
 
-
-- DONE: Procedural swing orientation (screen intent). Edged only. Gate: extended + owner-relative speed ≥ GMinItemSpeed. Drive: SetLookDelta → screen intent → WeaponBone Z. A/D skeletal. Strengths are not written here.
-- DONE: Procedural orient pivot is Hand_L/R (wrist). Axis stays WeaponBone +Z. Parent stays WeaponBone. Writes SetControlTargetPositionAndOrientation so the item origin orbits the wrist (TargetPos = RelLoc - R_rel.RotateVector(RelLoc)). Clear pos+ori on falling edge. [2026-08-29]
-- DONE: Control strengths in UpdateControlStrengths (all held items, including Unarmed / StrikeMode None). Tiers Neutral / Baseline / Max as GControlAngularStrength* + GControlLinearStrength*. Look-speed lerp uses GControlStrengthFullLookSpeed. Separate MassScale (angular, Ref 0.6) and MassScaleLinear (Ref 1.2). Constants in WoodcraftTypes.h.
-- DONE: Wrist limits on procedural orient. Asymmetric CW/CCW around neutral (projected WeaponBone +Y). Per-hand sign mapping (right vs left). Target stays in legal band via 1D scalar twist rate-limit. Flip preferred edge (±Y) with hysteresis (GWristHysteresisDeg). SingleEdged prefers +Y until forced; DoubleEdged stays on current while legal. OrientEdgeSign on FHandState. Globals for now (per-item later).
-- DONE: Arm follow in Control Rig (not C++): lerp animated pole toward Midpoint + RotateVector((0,-50,0), GripRotation). Wrist pinch on extreme side swings accepted (hold pose does not twist with the item).
-- Later polish: audio per resolved damage type; Valheim-style floating damage numbers (gray resist / white neutral / pale yellow weak / gray 0 immunity); optional camera-delta bias for orientation intent; tune cones/thresholds in WoodcraftTypes.h; expose wrist limits to data asset (esp. two-handed); optional small post-IK wrist twist if pinch bothers later; UStabItemFragment impulse on extend.
-- Explicitly deferred: separate head/handle Instances at runtime. Break results on DurabilityItemFragment are designed (see ItemSystemImplementation §10) but not implemented yet.
-- DONE: UCollisionHarvestableFragment — WalkThrough ignores Pawn + COLLISION_PLAYER after HarvestableProfile. Trees omit the fragment. Item channel stays Block (OnComponentHit).
-- Crafting vision spec written (2026-08-28): Notes/CraftingSystem/CraftingSystemImplementation.txt. Neutral-only [E] prompt, wheel select, lock-on-E, no stacks, single station DA, damage cancels session. §11 minigame catalog locked. Workbench + grindstone in §9.
-- Crafting minigame fidelity expanded (2026-08-30): presentation / events / checkpoints are VISION. Core Loop A2 = grind motion + Twist presentation, cancel returns both stones, no save, no flip. Vision checkpoint spawns ACraftWorkpieceActor (CraftingSubsystem), not an unfinished item. See Crafting §10.1, §16. Not an implement task until after A2.
-- Crafting presentation locked (2026-08-30): SteppedMeshes retired. Workpiece change is presentation SKM + morphs (Lerp or HoldAndPop). Session mesh follows the live item actor; player holds only AItemActor in A2. Knap chips = HoldAndPop + flake debris, not mesh swaps. IHoldable lean for later workpiece hold: Crafting §11.4 / §11.4.1.
-- Structure definition expanded (2026-08-28): Notes/StructureSystem/StructureSystemDefinition.txt. Sections + deps, count-1 apply, consume-on-ghost, ItemSlot only when finished. Workbench BOM 3 Log + 2 Cordage + 5 Stick. One static mesh per section; actor creates one component each. B-place / storage OPEN.
-- NEXT: T0 content for Core Loop Playable (see Notes/Roadmap.txt). Flat color only. Per-item Neutral + Extended HoldPoses with the mesh.
-  - Cordage mesh + unique BC/ORM in-engine (2026-08-30): hank, ~1300 tris, Edge + AO look accepted. Still need: scale up to match PlantFiber; Neutral + Extended poses if not authored yet. Green streak value on BC is polish.
-  - Items: Stone, Stick (update mesh), SharpenedStone, FibrousStalks (shared mesh/tag for stalk fiber sources), PlantFiber, Cordage, StoneHatchet (Primary = StickHandle static mesh, Secondary = stone head, existing dual-mesh constraint).
-  - Resources (fiber, stalks, cordage, stone): Equippable, StrikeMode None, no Damage fragment. Stalks carry a fiber-source tag.
-  - Harvestable: Nettle (Urtica dioica / subsp. gracilis look), low HP, Slash only (Blunt + Pierce in Immunities), Collision fragment WalkThrough. Yields FibrousStalks.
-  - After T0 is in-level: expand CraftingSystemImplementation.txt for ground-craft MVP, then Structure scaffolding + placed Workbench. Building + two-hand logs are the last Core Loop stage, not the first.
-- PlacementOffsetTransform planned on UItemDefinition (default Identity) against a shared station-socket frame. Item grip sockets are retired.
-- Q-mode place/drop locked (2026-08-26): drop commits on Q + mouse RELEASE. Hold Q + mouse extends (no swing) and preview-snaps to nearby station sockets. Release near a socket attaches the existing actor at SocketTransform × PlacementOffsetTransform. Pickup from a socket uses the same path as a ground item. Held stacks always drop the entire stack on release and never place onto sockets (stacks exist only in a hand). Implement with Roadmap A3 workbench, not before T0.
-- Pre-drop socket snap pose locked (2026-08-26): shared ReleasePose on HeldItemsComponent (not per-item). Palm away / letting go. Loose location-only IK toward the item — no exact grip snap, no item rotation copied onto the hand. Lost snap restores Extended + full grip. See ItemAnimationPipeline §6.1.
+- NEXT: Roadmap A2 ground crafting. Spec: Notes/CraftingSystem/CraftingSystemImplementation.txt. T1 content (A1) is in-level and accepted.
+  - Hands recipes only. No station, no IHoldable, no ACraftWorkpieceActor.
+  - Order: session + prompt + Factory consume/spawn → Grind (two Stones, LiveMeshes) → Twist (two Plant Fiber, presentation SKM) → Strip (Fibrous Stalk + Unarmed → Plant Fiber only).
+  - Cancel / player damage returns the bound items. Wood Scraps / Kindling wait for fire.
+- After A2 plays: A3 Structure scaffolding + placed Workbench + Tie hatchet. A4 player-built bench + two-hand logs.
+- Later polish (not A2): impact audio per resolved damage type; floating damage numbers; camera-delta bias; wrist limits on data assets; Stab impulse on extend. See ItemSystemImplementation §9.1 / designed list.
 
 Architecture reminder:
 - Fragments = data + minimal spawn/init hooks. No runtime work in fragments.
 - Actors stay thin. Behaviour lives in systems.
-- Same resistance shape will be reused on Creatures/Player later.
-- MVP first — no composite tools, no part durability until much later.
-- Physical Materials = single source of truth for density/mass + future impact/softness scales.
-- Dual-mesh tools: fixed Physics Constraint (not WeldTo). SecondaryRelativeTransform must be correct on the Item Definition.
-- Named primitives on Static Meshes drive candidate DamageType (multiple author names can map to one type). Incidence can demote Slash/Pierce → Blunt.
-- EItemStrikeMode on EquippableItemFragment drives both incidence axes and procedural orientation.
-- Per-hand state lives in FHandState on HeldItemsComponent (including LastItemVelocity for pre-bounce incidence + orientation).
-- Procedural orientation writes only TargetOrientation on the existing Physics Control (position stays skeletal + linear). Grip transform / arm IK continues to follow the live item.
-- Q-mode suppresses swing / procedural orient / collision damage. Place-on-socket is Q-hold preview + release commit; stacks never leave the hand except as a world drop.
-- Socket preview snap uses a shared ReleasePose + loose location-only IK (no grip rotation) so the FP wrist is not twisted to the socket.
+- Create / destroy item Instances only through UItemFactorySubsystem.
+- StrikeMode is orientation / incidence, not damage type. None = no orient (blunt). Stone is SingleEdged + Blunt primitives. T1 set: ItemSystemImplementation §3.
+- Dual-mesh tools: Secondary WeldTo Primary. No Physics Constraint. Material overrides on the Definition for assembled ORM.
+- Q-mode place-on-socket and workbench slot land with A3, not A2.
+- Physical Materials = density / mass + future impact. Named primitives choose candidate damage type.

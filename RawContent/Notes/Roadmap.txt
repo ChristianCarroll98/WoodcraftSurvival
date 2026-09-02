@@ -15,10 +15,10 @@ Current milestone: Core Loop Playable
 A short session that starts nearly empty and completes gather → first ground craft → harvest → station craft → better harvest, using the live physics swing / incidence / orientation path.
 
 In
-- T0 item set as real data: Stone, Stick, SharpenedStone, PlantFiber, Cordage, StoneHatchet (dual-mesh: StickHandle Primary + stone head Secondary). Copper Hatchet stays a T3 preview.
-- Harvestables that feed the set: existing TestTree (sticks + stump), loose stones, FibrousPlant (low HP, Slash only — Blunt and Pierce in Immunities).
+- T1 item set as real data (stone / bone tech tier; there is no T0): Stone, Stick, SharpenedStone, PlantFiber, Cordage, StoneHatchet (dual-mesh: StickHandle Primary mesh + SharpenedStone Secondary). Handle is mesh-only — no Handle item DA. Copper Hatchet stays a T3 preview.
+- Harvestables that feed the set: existing TestTree (sticks + stump), loose stones, Nettle (low HP, Slash only — Blunt and Pierce in Immunities, WalkThrough collision fragment). Yields Fibrous Stalk.
 - Pickup / drop / extend / physics swing / incidence / orientation / damage + resistance (already live).
-- Ground crafting: Stone+Stone → SharpenedStone; Fiber+Fiber → Cordage.
+- Ground crafting: Stone+Stone → SharpenedStone; Fibrous Stalk + Unarmed → PlantFiber; PlantFiber+PlantFiber → Cordage. Wood Scraps / Kindling wait for fire.
 - Structure scaffolding (Definition / Instance / Actor + fragments), parallel to Items and Harvestables.
 - Thin Workbench: one slot socket, placed in the test level first. Hatchet recipe is bench-only.
 - StoneHatchet recipe: SharpenedStone + Stick + Cordage at Workbench.
@@ -33,38 +33,38 @@ Out of this milestone
 - Flint knapping, forging, grindstone, leather, metals.
 
 Art rule for this milestone
-Flat readable color. Shared Wood / Stone Physical Materials. Correct scale, named collision primitives, HoldPose + ExtendedPose per item (authoring is cheap enough to do with the mesh). Unique ORM / detail normals wait for a polish pass. One stone + one wood mesh may run through the full import + sRGB-off ORM / Masks path once so the pipeline is locked.
+Readable color + authored ORM as assets are painted (pipeline locked: sRGB off, Masks). Shared Wood / Stone / Plant Physical Materials. Correct scale, named collision primitives, Neutral + Extended HoldPoses per item. No normal maps. Assembled hatchet may reuse `SM_SharpenedStone` with a second ORM / MI for wrap contact.
 
 Locked decisions (2026-08-26)
 - Item grip sockets are gone. Hold is HoldPose + item origin + dynamic grip (AnimRef Hand relative to WeaponBone × item world transform). Left-hand mesh scale X=-1 still applies.
 - Station / placement sockets are allowed. Workbench has one slot socket.
 - PlacementOffsetTransform lives on UItemDefinition (default Identity). Every station socket uses the same frame: origin on the surface, +Z up, +X forward. The item actor is placed at SocketTransform × PlacementOffsetTransform. Per-station special offsets are out until something actually needs them.
 - Place onto a socket: Q + mouse hold extends the item (no swing) and preview-snaps; commit on RELEASE. Retrieve from a socket uses the same pickup path as a ground item. Held stacks never place onto sockets — Q + mouse release drops the whole stack.
-- Cordage and other non-weapon resources: Equippable, StrikeMode None, no Damage fragment.
-- StoneHatchet Primary mesh is StickHandle (static mesh only), not a live Stick instance. Constraint path is the existing dual-mesh Physics Constraint.
+- Cordage, Plant Fiber, Fibrous Stalk: Equippable, StrikeMode None, no Damage fragment. Fiber-source tag on the stalk only.
+- Stick: Equippable, StrikeMode None, Damage fragment, blunt swing (no orient).
+- Stone: Equippable, StrikeMode SingleEdged, Damage fragment, Blunt primitives (orient a flat; hits stay blunt).
+- StoneHatchet Primary mesh is StickHandle (static mesh only), not a live Stick instance. Secondary is welded to Primary (`WeldTo`). Optional material overrides on the Definition.
 - Recipes list allowed crafting locations (Hands / Ground and station ids). Station fragments carry a station id. Detection uses looked-at station or the item already in its slot. Recipe assets own the recipe list; stations do not duplicate it.
 - Fragments stay data + spawn/init hooks on Structures, same as Items and Harvestables.
 - Sharpened stone can cut trees and the fibrous plant. Stone hatchet is gated on the workbench.
 
 Slices (do in order; each should be playable before the next starts)
 
-A1. T0 content
-- Model + data-author the T0 items and FibrousPlant placeholder.
-- Neutral + extended HoldPoses per basic item.
-- Drop in the test level. Confirm pickup, swing, tree cut with sharpened stone, plant harvest Slash-only.
+A1. T1 content — DONE (2026-09-02)
+- Model + data-author T1 items and Nettle. BC + ORM as painted. Neutral + Extended HoldPoses tested.
+- In test level: pickup, Stone/Stick blunt swing, Sharpened Stone cuts TestTree and Nettle, Nettle WalkThrough + Fibrous Stalk yield.
 
 A2. Ground crafting
-- Expand CraftingSystemImplementation.txt for the MVP only, then implement.
-- Recipe data asset, session owner, consume via ItemFactory, spawn result, cancel by release.
-- First two recipes: Stone+Stone → SharpenedStone; Fiber+Fiber → Cordage.
-- One minigame class, two tunings (grind / twist). No knapping or forging.
+- Recipe data asset, session owner, consume via ItemFactory, spawn result, cancel by release / player damage.
+- Hands recipes: Stone+Stone → SharpenedStone (Grind); Fibrous Stalk + Unarmed → PlantFiber (Strip, no Wood Scraps yet); PlantFiber+PlantFiber → Cordage (Twist).
+- One interpreter. Grind first (LiveMeshes), then Twist presentation, then Strip. No knapping or forging. No station.
 
 A3. Structure scaffolding + placed Workbench
 - Structure Definition / Instance / Actor + fragment base.
 - Workbench definition: station id + one slot.
 - Slot uses the shared socket frame + item PlacementOffsetTransform.
 - Place = Q + mouse hold (extend, no swing, preview snap) → release attach. Retrieve = same as ground pickup. Stacks cannot occupy the slot.
-- Third recipe: SharpenedStone + Stick + Cordage → StoneHatchet.
+- Bench recipe: SharpenedStone + Stick + Cordage → StoneHatchet.
 
 A4. Building + logs (final Core Loop stage)
 - Player-built workbench from the ghost graph in Notes/StructureSystem/StructureSystemDefinition.txt (3 Log + 2 Cordage + 5 Stick).

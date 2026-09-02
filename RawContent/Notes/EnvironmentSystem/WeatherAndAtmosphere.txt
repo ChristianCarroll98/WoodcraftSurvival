@@ -500,9 +500,9 @@ Project setting
 Actors stay thin. Fragments / biome assets stay data. No runtime work in data assets.
 
 
-17. T0 vs polish
+17. Core Loop vs polish
 
-T0 / Core Loop: default Unreal sun + whatever is already in the test level. No weather actor required.
+Core Loop: default Unreal sun + whatever is already in the test level. No weather actor required.
 
 After Core Loop (Roadmap E is day cycle; C is fire; weather can ride with E or just after):
 1. Time of day + clamped exposure + two-light moon (darkness target).

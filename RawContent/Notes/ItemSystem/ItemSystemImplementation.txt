@@ -114,6 +114,26 @@ PrimaryMeshComponent->SetCollisionResponseToChannel(TRACE_EQUIPPABLE, ECR_Block)
 - `bTwoHanded == true` → opposite hand becomes secondary.  
 - Player can hold two different one-handed items at the same time.
 
+**StrikeMode vs damage type (locked 2026-09-02)**  
+`EItemStrikeMode` is orientation / incidence preference, not the damage type. Named collision primitives still choose Slash / Pierce / Blunt.
+
+- `None` (`None / Blunt`): no procedural swing orientation. Slash/Pierce candidates demote to Blunt. Use on sticks, clubs, fiber, cordage, and other items that should not twist to a face.
+- `SingleEdged`: procedural orient to local +Y. Use on blades *and* on Stone — Stone keeps `Blunt` primitives so hits stay blunt, but SingleEdged turns a flat toward the target so the swing reads as a face strike.
+- `DoubleEdged` / `Pierce`: as in `WoodcraftTypes.h`.
+
+**T1 item authoring (Core Loop first set)**  
+Tech tier 1 is stone / bone (Vision). There is no T0 tier. Content slice A1 is this set:
+
+- Stone — Equippable, `SingleEdged`, Damage fragment, `Blunt` primitives, Stone PhysMat.
+- Stick — Equippable, `None`, Damage fragment, `Blunt` primitives, Wood PhysMat. Makeshift blunt swing, no orient.
+- Sharpened Stone — Equippable, `SingleEdged`, Damage fragment, Sharp/Slash primitive(s). Cuts TestTree and Nettle.
+- Fibrous Stalk — Equippable, `None`, no Damage fragment. `ItemTags` includes the fiber-source tag. Nettle yield.
+- Plant Fiber — Equippable, `None`, no Damage fragment. Split fibers. Does **not** carry the fiber-source tag.
+- Cordage — Equippable, `None`, no Damage fragment. Twisted product of two Plant Fiber.
+- Stone Hatchet — dual-mesh Definition. Primary = StickHandle static mesh (not a live Stick Instance, no Handle item DA). Secondary = `SM_SharpenedStone`. Optional `PrimaryMaterialOverride` / `SecondaryMaterialOverride` for assembled-contact ORM. Existing hatchet HoldPoses.
+
+Fiber-source tag stays on stalk-type items only (Nettle drop now; later yucca / bulrush). Recipes that want “any raw stalk” match that tag. Strip A2 matches Exact `DA_FibrousStalk` / `DA_FibrousStalks`.
+
 ### 4. Animation & Attachment Architecture (Locked)
 
 Two skeletal meshes on the player:
@@ -329,7 +349,7 @@ No activation flag or special-case damage path is required. Higher velocity from
 - Unarmed (fists) — just put a `UStabItemFragment` on `DA_Unarmed` with appropriate strength.
 - Spears, knives, sharpened sticks, etc.
 
-Future polish (not required for first version): direction bias enum, impulse application point (COM vs tip socket), temporary Physics Control strength modulation during the activation window, stamina cost.
+Future polish (not required for first version): direction bias enum, impulse application point (COM vs tip socket), temporary Physics Control strength modulation during the activation window, stamina cost; audio per resolved damage type; Valheim-style floating damage numbers (gray resist / white neutral / pale yellow weak / gray 0 immunity); optional camera-delta bias for orientation intent; expose wrist limits to the item data asset (especially two-handed); optional small post-IK wrist twist if pinch bothers.
 
 ### 10. Part Durability & Tool Break (Design Locked 2026-08-25)
 

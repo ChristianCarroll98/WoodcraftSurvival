@@ -14,7 +14,7 @@ Related
 - Notes/CreatureSystem/CreatureMaterialsAndAppearance.txt – color ranges, slots/roles, blink, eyeshine parameter.
 - Notes/ItemSystem/ItemMeshPhysicsAndImpact.txt – collision, phys mats, dual mesh.
 - Notes/HarvestableSystem/HarvestableSystemDefinition.txt – plant axis convention (+Z up, +Y forward).
-- Notes/Roadmap.txt – T0 is flat readable color; unique ORM is allowed as assets are authored.
+- Notes/Roadmap.txt – T1 / Core Loop first items: readable color + ORM as painted.
 
 
 1. Goals
@@ -121,7 +121,7 @@ Instance parameters (keep the list short):
 - Emissive color / strength (eyes, rare glowing bits)
 - Optional wetness scalar later (darken albedo a little, lower roughness a little)
 
-T0 may ship Base Color only on an instance, ORM slot empty / default roughness. Plug ORM in per asset as it is painted.
+A T1 instance may ship Base Color only, ORM slot empty / default roughness. Plug ORM in per asset as it is painted. Most T1 items now have unique BC + ORM.
 
 Master defaults (created 2026-08-30). Assign these as the Texture Sample defaults on the masters so an instance with no override is obvious and still valid:
 - `T_Default_BC` — purple / black checkerboard. Missing albedo.
@@ -148,15 +148,15 @@ Water / ice — out of scope here. Environment + a dedicated water material late
 Fire / embers / fireflies — Unlit emissive Niagara (or similar). Bloom on Fancy. Count LOD on Fast.
 
 
-6. Nettle (T0 plant example)
+6. Nettle (T1 plant example)
 Already modeled: 8-sided stem cylinder, opposing leaf pairs (~14–15), serrated edges, leaf cupping from modeled faces.
 - One mesh, two slots: stem → Opaque instance, leaves → Sheet instance.
 - Same Edge normals on both.
 - Do not rebuild as cards.
-- T0: Base Color. ORM when painted (stem rougher than leaves).
+- T1: Base Color + ORM when painted (stem rougher than leaves).
 - Polish: Sheet SSS / Two Sided Foliage on leaves only.
 
-Cordage (T0 item example)
+Cordage (T1 item example)
 Hank: two loops + a small waist wrap. Two hex plies, pair diameter 1 cm. ~1300 tris. Denser than Stone / Stick / PlantFiber; Edge facets still read. Do not spiral-coil a long two-ply path.
 - Opaque instance. Plant PhysMat. Simple `Blunt` capsule, not the visual mesh.
 - First asset to run the full unique BC + ORM import path (Masks / sRGB-off). Bake process is §3.
@@ -164,13 +164,13 @@ Hank: two loops + a small waist wrap. Two hex plies, pair diameter 1 cm. ~1300 t
 - Neutral grips the waist.
 
 
-7. T0 vs polish
-T0 (Core Loop content, Roadmap A1):
+7. T1 vs polish
+T1 (Core Loop content, Roadmap A1 — done 2026-09-02):
 - Edge normals.
 - Base Color.
 - Correct slot split (Opaque vs Sheet).
-- Shared Wood / Stone Physical Materials (physics doc).
-- ORM authored on new assets when it does not block playable content. Cordage ran the full import + Masks / sRGB-off path first so the pipeline is locked. Other T0 items may stay on `T_Default_ORM` until painted.
+- Shared Wood / Stone / Plant Physical Materials (physics doc).
+- ORM authored on new assets when it does not block playable content. Cordage ran the full import + Masks / sRGB-off path first so the pipeline is locked. Remaining parts may stay on `T_Default_ORM` until painted.
 
 Polish (after Core Loop, parallel with Environment presets):
 - ORM on remaining parts.
