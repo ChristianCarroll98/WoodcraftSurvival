@@ -16,27 +16,29 @@ if (GEngine) GEngine->AddOnScreenDebugMessage
 	TEXT("comment string") // comment FString. Can concatenate or add variables and format as long as its an FString.
 );
 
+reminder for next time:
+Model stone hatchet and fix materials for other existing assets (stick, hatchet, nettle plant, etc)
+
 current issues/working task list:
 
-- Collision damage path is live (held-only, impulse + speed gates, short cooldown). Stick works on TestTree.
-- DONE: Resistance data lives on HealthHarvestableFragment (defaults) → copied to UHarvestableInstance at creation. ApplyDamage multiplies by Instance->GetDamageMultiplier. Tree data asset: put Blunt in Immunities (or high positive modifier) so sticks stop killing trees.
-- DONE: Copper Hatchet dual-mesh via fixed UPhysicsConstraintComponent (Chaos WeldTo unreliable for runtime NewObject secondaries). Both meshes simulate; constraint locks all 6 DOF + SetDisableCollision(true). Feels heavier, hits register, head stays attached.
-- DONE: DamageItemFragment is pure “enable hit events” marker. DamageType from named collision primitives (Slash/Sharp/Blade → Slash, Pierce/Point → Pierce, else Blunt). Amount from impulse only (mass already in physics). Softness multipliers later on Physical Material.
-- DONE: Named shape extraction — ResolveShapeNameFromHit uses closest Box/Sphere/Sphyl to ImpactPoint.
-- DONE: Mass-scaled Physics Control + reduced gravity via Body Modifier on Primary+Secondary (HeldItemLeft/Right sets). Effective mass = Primary+Secondary. Modifiers destroyed on detach. Live strength/damping constants live in WoodcraftTypes.h.
-- DONE: Damage gated by GMinItemSpeed (world speed of hitting mesh) so continuous contact while pressed does not keep dealing damage. Sprinting into a target while extended can still hit.
-- DONE: Extended state on HeldItemsComponent (SetExtended / GetIsExtended per hand). Damage + procedural orient gated on extended. Anim extend flag still driven from Player BP. Stab impulse (UStabItemFragment) still needs work.
-- DONE: FHandState on HeldItemsComponent (HeldItem, PendingPickup, ActiveControl, bItemStuck, bExtended, LastItemVelocity, bProceduralOrientActive, MassScale, OrientEdgeSign). Tick samples primary-mesh velocity for pre-bounce incidence.
-- DONE: Incidence / angle → type conversion (model B). EItemStrikeMode on EquippableItemFragment (None, SingleEdged +Y, DoubleEdged ±Y, Pierce +Z). Outside cone → force Blunt. Incoming dir = LastItemVelocity → live vel → -NormalImpulse. Cone constants live in WoodcraftTypes.h.
-- DONE: Procedural swing orientation (screen intent). Edged only. Gate: extended + owner-relative speed ≥ GMinItemSpeed. Drive: SetLookDelta → screen intent → WeaponBone Z. A/D skeletal. Strength follows look speed × MassScale. Constants live in WoodcraftTypes.h.
+
+- DONE: Procedural swing orientation (screen intent). Edged only. Gate: extended + owner-relative speed ≥ GMinItemSpeed. Drive: SetLookDelta → screen intent → WeaponBone Z. A/D skeletal. Strengths are not written here.
+- DONE: Procedural orient pivot is Hand_L/R (wrist). Axis stays WeaponBone +Z. Parent stays WeaponBone. Writes SetControlTargetPositionAndOrientation so the item origin orbits the wrist (TargetPos = RelLoc - R_rel.RotateVector(RelLoc)). Clear pos+ori on falling edge. [2026-08-29]
+- DONE: Control strengths in UpdateControlStrengths (all held items, including Unarmed / StrikeMode None). Tiers Neutral / Baseline / Max as GControlAngularStrength* + GControlLinearStrength*. Look-speed lerp uses GControlStrengthFullLookSpeed. Separate MassScale (angular, Ref 0.6) and MassScaleLinear (Ref 1.2). Constants in WoodcraftTypes.h.
 - DONE: Wrist limits on procedural orient. Asymmetric CW/CCW around neutral (projected WeaponBone +Y). Per-hand sign mapping (right vs left). Target stays in legal band via 1D scalar twist rate-limit. Flip preferred edge (±Y) with hysteresis (GWristHysteresisDeg). SingleEdged prefers +Y until forced; DoubleEdged stays on current while legal. OrientEdgeSign on FHandState. Globals for now (per-item later).
 - DONE: Arm follow in Control Rig (not C++): lerp animated pole toward Midpoint + RotateVector((0,-50,0), GripRotation). Wrist pinch on extreme side swings accepted (hold pose does not twist with the item).
 - Later polish: audio per resolved damage type; Valheim-style floating damage numbers (gray resist / white neutral / pale yellow weak / gray 0 immunity); optional camera-delta bias for orientation intent; tune cones/thresholds in WoodcraftTypes.h; expose wrist limits to data asset (esp. two-handed); optional small post-IK wrist twist if pinch bothers later; UStabItemFragment impulse on extend.
 - Explicitly deferred: separate head/handle Instances at runtime. Break results on DurabilityItemFragment are designed (see ItemSystemImplementation §10) but not implemented yet.
+- DONE: UCollisionHarvestableFragment — WalkThrough ignores Pawn + COLLISION_PLAYER after HarvestableProfile. Trees omit the fragment. Item channel stays Block (OnComponentHit).
+- Crafting vision spec written (2026-08-28): Notes/CraftingSystem/CraftingSystemImplementation.txt. Neutral-only [E] prompt, wheel select, lock-on-E, no stacks, single station DA, damage cancels session. §11 minigame catalog locked. Workbench + grindstone in §9.
+- Crafting minigame fidelity expanded (2026-08-30): presentation / events / checkpoints are VISION. Core Loop A2 = grind motion + Twist presentation, cancel returns both stones, no save, no flip. Vision checkpoint spawns ACraftWorkpieceActor (CraftingSubsystem), not an unfinished item. See Crafting §10.1, §16. Not an implement task until after A2.
+- Crafting presentation locked (2026-08-30): SteppedMeshes retired. Workpiece change is presentation SKM + morphs (Lerp or HoldAndPop). Session mesh follows the live item actor; player holds only AItemActor in A2. Knap chips = HoldAndPop + flake debris, not mesh swaps. IHoldable lean for later workpiece hold: Crafting §11.4 / §11.4.1.
+- Structure definition expanded (2026-08-28): Notes/StructureSystem/StructureSystemDefinition.txt. Sections + deps, count-1 apply, consume-on-ghost, ItemSlot only when finished. Workbench BOM 3 Log + 2 Cordage + 5 Stick. One static mesh per section; actor creates one component each. B-place / storage OPEN.
 - NEXT: T0 content for Core Loop Playable (see Notes/Roadmap.txt). Flat color only. Per-item Neutral + Extended HoldPoses with the mesh.
-  - Items: Stone, Stick (update mesh), SharpenedStone, PlantFiber, Cordage, StoneHatchet (Primary = StickHandle static mesh, Secondary = stone head, existing dual-mesh constraint).
-  - Resources (fiber, cordage, stone): Equippable, StrikeMode None, no Damage fragment.
-  - Harvestable: FibrousPlant placeholder, low HP, Slash only (Blunt + Pierce in Immunities).
+  - Cordage mesh + unique BC/ORM in-engine (2026-08-30): hank, ~1300 tris, Edge + AO look accepted. Still need: scale up to match PlantFiber; Neutral + Extended poses if not authored yet. Green streak value on BC is polish.
+  - Items: Stone, Stick (update mesh), SharpenedStone, FibrousStalks (shared mesh/tag for stalk fiber sources), PlantFiber, Cordage, StoneHatchet (Primary = StickHandle static mesh, Secondary = stone head, existing dual-mesh constraint).
+  - Resources (fiber, stalks, cordage, stone): Equippable, StrikeMode None, no Damage fragment. Stalks carry a fiber-source tag.
+  - Harvestable: Nettle (Urtica dioica / subsp. gracilis look), low HP, Slash only (Blunt + Pierce in Immunities), Collision fragment WalkThrough. Yields FibrousStalks.
   - After T0 is in-level: expand CraftingSystemImplementation.txt for ground-craft MVP, then Structure scaffolding + placed Workbench. Building + two-hand logs are the last Core Loop stage, not the first.
 - PlacementOffsetTransform planned on UItemDefinition (default Identity) against a shared station-socket frame. Item grip sockets are retired.
 - Q-mode place/drop locked (2026-08-26): drop commits on Q + mouse RELEASE. Hold Q + mouse extends (no swing) and preview-snaps to nearby station sockets. Release near a socket attaches the existing actor at SocketTransform × PlacementOffsetTransform. Pickup from a socket uses the same path as a ground item. Held stacks always drop the entire stack on release and never place onto sockets (stacks exist only in a hand). Implement with Roadmap A3 workbench, not before T0.

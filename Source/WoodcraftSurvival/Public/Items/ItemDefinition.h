@@ -7,6 +7,7 @@
 #include "ItemDefinition.generated.h"
 
 class UPrimaryDataAsset;
+class UMaterialInterface;
 
 /**
  * Static definition of an item (the template).
@@ -33,6 +34,20 @@ public:
 	/** Relative transform of the secondary mesh from the primary mesh */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Visual|Collision")
 	FTransform SecondaryRelativeTransform = FTransform::Identity;
+
+	/**
+	 * Optional slot-0 override on PrimaryMesh. Empty = mesh asset default.
+	 * Use when the same static mesh is shared (e.g. assembled-only ORM).
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Visual|Collision")
+	TSoftObjectPtr<UMaterialInterface> PrimaryMaterialOverride;
+
+	/**
+	 * Optional slot-0 override on SecondaryMesh. Empty = mesh asset default.
+	 * StoneHatchet head: same SM_SharpenedStone, MI with assembled ORM.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Visual|Collision", meta = (EditCondition = "SecondaryMesh != nullptr"))
+	TSoftObjectPtr<UMaterialInterface> SecondaryMaterialOverride;
 
 	/** Display name for UI */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Visual|UI")

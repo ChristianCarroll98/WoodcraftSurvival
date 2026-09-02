@@ -60,10 +60,17 @@ struct FHandState
 	bool bProceduralOrientActive = false;
 
 	/**
-	 * Mass scale computed at attach (clamp EffectiveMass/0.6 to 1–6).
-	 * Used to scale Physics Control strengths including velocity-based orient strength.
+	 * Angular scale at attach:
+	 * Clamp(Pow(Mass / MassRef, MassExp) * (1 + Pow(COMLever / LeverRef, LeverExp)), Min, Max).
 	 */
 	float MassScale = 1.0f;
+
+	/**
+	 * Linear scale at attach:
+	 * Clamp(Pow(Mass / LinearRef, LinearExp), Min, Max).
+	 * Mild — acceleration drive already tracks body mass.
+	 */
+	float MassScaleLinear = 1.0f;
 
 	/**
 	 * Preferred edge side for procedural orientation: +1 = mesh +Y, −1 = mesh −Y.
@@ -115,6 +122,109 @@ public:
 	/** Definition used to spawn the Unarmed item when a hand is empty. */
 	UPROPERTY(EditDefaultsOnly, Category = "Configuration|Unarmed")
 	TObjectPtr<UItemDefinition> UnarmedDefinition;
+
+
+	// ---------- Strength (tune on the Player BP / PIE, no C++ rebuild) ----------
+
+	/** Look-delta rate at which swipe strength reaches max. Tune from the cyan look-speed print. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Look", meta = (ClampMin = "1.0"))
+	float StrengthFullLookSpeed = 240.f;
+
+	/** Exponent on the 0–1 look-speed factor before lerping swipe strength. 1 = linear, 2+ = ease-in. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Look", meta = (ClampMin = "0.1"))
+	float StrengthCurveExp = 3.f;
+
+	/** Linear strength while not extended. Mostly planted, a little give. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Linear", meta = (ClampMin = "0.0"))
+	float LinearStrengthNeutral = 5.5f;
+
+	/** Linear strength while extended with no / slow look. Tight in-hand. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Linear", meta = (ClampMin = "0.0"))
+	float LinearStrengthBaseline = 8.0f;
+
+	/** Linear strength at high look speed while extended. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Linear", meta = (ClampMin = "0.0"))
+	float LinearStrengthMax = 13.0f;
+
+	/** Linear mass (kg) at which MassScaleLinear == 1. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Linear", meta = (ClampMin = "0.01"))
+	float LinearMassRef = 1.67f;
+
+	/** Exponent on (mass / LinearMassRef). Acceleration drive already tracks body mass. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Linear", meta = (ClampMin = "0.0"))
+	float LinearMassExp = 0.5f;
+
+	/** Floor on MassScaleLinear. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Linear", meta = (ClampMin = "0.01"))
+	float LinearMassScaleMin = 0.7f;
+
+	/** Safety rail on MassScaleLinear. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Linear", meta = (ClampMin = "0.01"))
+	float LinearMassScaleMax = 4.0f;
+
+	/** Multiplier on the computed linear mass scale. 0.5 = half the scale. Re-pickup to apply. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Linear", meta = (ClampMin = "0.0"))
+	float LinearMassScaleMul = 1.0f;
+
+	/** Linear damping ratio at MassScaleLinear == 1. 1 = no overshoot. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Linear", meta = (ClampMin = "0.0"))
+	float LinearDampingRatio = 1.4f;
+
+	/** Added to LinearDampingRatio per (MassScaleLinear − 1). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Linear")
+	float LinearDampingMassSlope = 0.3f;
+
+	/** Angular strength while not extended. Softer than linear. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Angular", meta = (ClampMin = "0.0"))
+	float AngularStrengthNeutral = 2.5f;
+
+	/** Angular strength while extended with no / slow look. Slight lag floor. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Angular", meta = (ClampMin = "0.0"))
+	float AngularStrengthBaseline = 1.8f;
+
+	/** Angular strength at high look speed while extended. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Angular", meta = (ClampMin = "0.0"))
+	float AngularStrengthMax = 11.0f;
+
+	/** Angular mass (kg) at which the mass term of MassScale == 1. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Angular", meta = (ClampMin = "0.01"))
+	float AngularMassRef = 1.2f;
+
+	/** Exponent on (mass / AngularMassRef). 0.5 keeps mass from dominating lever. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Angular", meta = (ClampMin = "0.0"))
+	float AngularMassExp = 0.5f;
+
+	/** COM-to-origin distance (cm) at which the angular lever term is +1. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Angular", meta = (ClampMin = "1.0"))
+	float AngularLeverRef = 25.f;
+
+	/** Exponent on (lever / AngularLeverRef) added into MassScale. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Angular", meta = (ClampMin = "0.0"))
+	float AngularLeverExp = 1.0f;
+
+	/** Floor on angular MassScale. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Angular", meta = (ClampMin = "0.01"))
+	float AngularMassScaleMin = 0.5f;
+
+	/** Safety rail on angular MassScale. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Angular", meta = (ClampMin = "0.01"))
+	float AngularMassScaleMax = 8.0f;
+
+	/** Multiplier on the computed angular mass scale. Re-pickup to apply. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Angular", meta = (ClampMin = "0.0"))
+	float AngularMassScaleMul = 1.0f;
+
+	/** Angular damping ratio at MassScale == 1. 1 = no overshoot. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Angular", meta = (ClampMin = "0.0"))
+	float AngularDampingRatio = 1.3f;
+
+	/** Added to AngularDampingRatio per (MassScale − 1). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength|Angular")
+	float AngularDampingMassSlope = 0.3f;
+
+	/** Held-item gravity scale. 0 = no sag / no COM-couple from gravity. World drop restores full gravity. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Strength", meta = (ClampMin = "0.0"))
+	float GravityMultiplier = 0.f;
 
 
 	// ---------- Run-Time Configuration ----------
@@ -236,18 +346,35 @@ private:
 	void PreventItemStuck(EHand Hand);
 
 	/**
-	 * While extended and above GMinItemSpeed, drives the Physics Control angular
-	 * target so the preferred strike axis aligns with screen-space look intent (SetLookDelta).
-	 * Rotation is constrained to WeaponBone Z and rate-limited. Snaps back to skeletal when
-	 * relative speed falls under the threshold.
+	 * Ignore (stuck) or Block (free) world/item/harvestable responses on Primary and Secondary.
+	 * Secondary must be included — a dual-mesh head will hold the whole tool in a wall otherwise.
+	 */
+	void SetHeldItemStuckResponses(AItemActor* Item, bool bStuck);
+
+	/**
+	 * While extended and above GMinItemSpeed, drives the Physics Control target so the
+	 * preferred strike axis aligns with screen-space look intent (SetLookDelta).
+	 * Twist axis is WeaponBone +Z; pivot is the Hand bone (wrist). Strengths live in UpdateControlStrengths.
 	 */
 	void UpdateProceduralOrientation(EHand Hand, float DeltaTime);
 
 	/**
+	 * Neutral / extended-idle / look-speed swipe strengths for this hand.
+	 * Runs for every held item (including Unarmed and StrikeMode None). Not gated on edge orient.
+	 */
+	void UpdateControlStrengths(EHand Hand);
+
+	/**
 	 * Applies mass-scaled linear + angular strengths (and the matching damping) to the
-	 * active Physics Control for this hand. Multipliers are the GOrient* values (baseline or speed-lerped).
+	 * active Physics Control for this hand. Multipliers are the Strength category values.
 	 */
 	void ApplyControlStrengths(EHand Hand, float AngularMultiplier, float LinearMultiplier);
+
+	/**
+	 * Pins the Physics Control point to the AnimRef wrist (Hand relative to WeaponBone).
+	 * Item-local CP from the hold pose, not the live simulated mesh.
+	 */
+	void ApplyWristControlPoint(EHand Hand);
 
 	/** Returns a reference to the pending pickup data for the given hand. */
 	FPendingPickupData& GetPendingPickup(EHand Hand);

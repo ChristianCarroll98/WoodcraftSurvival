@@ -1,0 +1,192 @@
+Woodcraft Survival – Art Direction
+(Created 2026-08-27. Living document. Look and surface shading only.)
+
+Purpose
+- Owns the shared visual language for items, harvestables, creatures, structures, and the player mesh.
+- Export rules, material families, ORM, and how special surfaces (fur, leaves, membranes, eyes) should read.
+- Does not own weather, fog density, moon, or darkness. Those live in Notes/EnvironmentSystem/WeatherAndAtmosphere.txt.
+- Does not own creature tint / blink / tapetum implementation. Those live in Notes/CreatureSystem/CreatureMaterialsAndAppearance.txt.
+- Does not own Physical Materials (density / impact). Those stay on the physics side (ItemMeshPhysicsAndImpact.txt).
+- Polish-stage. Not on the Core Loop immediate task list.
+
+Related
+- Notes/EnvironmentSystem/WeatherAndAtmosphere.txt – weather, climate, fog, darkness, Fast vs Fancy lighting quality.
+- Notes/CreatureSystem/CreatureMaterialsAndAppearance.txt – color ranges, slots/roles, blink, eyeshine parameter.
+- Notes/ItemSystem/ItemMeshPhysicsAndImpact.txt – collision, phys mats, dual mesh.
+- Notes/HarvestableSystem/HarvestableSystemDefinition.txt – plant axis convention (+Z up, +Y forward).
+- Notes/Roadmap.txt – T0 is flat readable color; unique ORM is allowed as assets are authored.
+
+
+1. Goals
+- Low-poly, faceted lighting. Faces read from the highlight. Hard value breaks, no outline pass.
+- Rough surfaces look diffuse. Smooth surfaces hold a tight reflection. Nothing reads as default-plastic.
+- Same export smoothing on plants, items, creatures, and structures.
+- Unique albedo + ORM per object (or per material slot) is worth the authoring time.
+- Mood in the world comes from Environment air and lights, not from extra maps on every mesh.
+
+Non-goals
+- Normal maps (locked off).
+- Thin Translucent for leaves / membranes.
+- Strand hair, shell/fin fur, or a unique full material graph per asset.
+- Wet-weather shader suite. Optional later wetness scalar on the masters only.
+
+
+2. Mesh export (Blender 5.2 → UE 5.8)
+- FBX Normals: Edge (split face normals). Lighting uses these exported normals.
+- Closed volumes and thin sheets use the same smoothing rule.
+- Harvestable / plant meshes: +Z up, +Y forward (existing convention). Radial clumps may spawn with random yaw.
+- Item hold is origin + HoldPose, not a grip socket.
+- Unique atlases default 512. Size from world scale and camera distance. Author at ship resolution.
+- Shared atlas across slots of one mesh is fine when the parts are the same family (one wood, one stone, etc.).
+- Different families on one mesh get different slots (nettle stem vs leaves, hatchet handle vs head).
+
+
+3. No normal maps. Yes ORM.
+Locked 2026-08-27: do not author or import normal maps for this look. A detail normal smears the highlight across Edge splits.
+
+ORM is the roughness / metal / contact tool. Unreal pack:
+- R = Ambient Occlusion. Gentle. Skip on smooth simple stones. Paint a little in forks, bindings, bark splits, leaf axils.
+- G = Roughness. Primary look channel. High = light dies on the face. Low = tight highlight on that face.
+- B = Metallic. 0 on almost everything. Only real metals (copper, iron, later) go toward 1. Wet leaves and shiny chitin stay dielectric — darker and smoother, not metallic.
+
+Import: sRGB off, compression Masks. ProjectNotes already records this.
+
+Author roughness as a readable grayscale first, pack after. Per-part textures are expected (head vs handle, stem vs leaf).
+
+Starting roughness ranges (tune per asset, not locks):
+- Raw stone / bark / dry fiber / fur: 0.7–0.9 metallic 0
+- Carved wood, worn handle: 0.55–0.7 metallic 0
+- Fresh leaf / membrane: 0.35–0.55 metallic 0
+- Bone, flint flake, hard-smooth stone: 0.25–0.45 metallic 0
+- Eye / wet surface: 0.15–0.3 metallic 0
+- Copper / iron later: roughness 0.3–0.6, metallic 0.8–1 (tarnish vs polished is roughness)
+- Fur: 0.75–0.95 metallic 0
+
+Masters expose a roughness min/max remap so an instance can be tuned without repainting.
+
+Bake in Blender 5.2 (Cycles Emit). First pass locked from Cordage [2026-08-30]. Keep the bake material; do not rebuild it per asset.
+
+Shader (this is the bake material, not the look material):
+- Ambient Occlusion node → Color Ramp → R of Combine Color.
+- G = roughness from the ranges above (dry fiber / cordage started at 0.9).
+- B = metallic (0 on dielectrics).
+- Combine Color → Material Output Surface.
+- AO Distance is in scene meters. Cordage first bake used 0.5 m (bundle-contact, waist and loop-on-loop). That is large next to a ~6 cm hank. Drop toward 0.02–0.05 m when only a tight crease should darken (ply valley, bark split). Retune per asset; do not treat 0.5 m as a lock.
+
+Color Ramp (how to adjust it):
+- Blender AO is white = open, black = occluded. The ramp only remaps that.
+- Two stops are enough.
+- Left stop = floor. Do not leave it at black. Value ~0.6–0.7 means the darkest crease stays gray (gentle AO). Lower the floor only if forks / bindings vanish in-engine.
+- Right stop = cutoff. Put white at ~0.45–0.6 so only close faces contribute. Sliding this stop left tightens contact shadows; sliding it right floods the mesh with soft dirt.
+- If the whole object is muddy: raise the floor and/or shorten Distance. If creases are invisible: lower the floor a little or raise Distance. Do not add extra stops to "paint" AO.
+
+Target image:
+- Image Texture node, New, name `*_ORM`.
+- Color Space = Non-Color. Not sRGB.
+- Leave the node unconnected. It must be the selected node in the Shader Editor when you bake.
+- Resolution matches the albedo for that asset (256 was enough for PlantFiber / Cordage practice). 8-bit is fine.
+
+Bake:
+- Render engine Cycles. Bake Type = Emit.
+- Object selected in Object Mode. ORM image node selected.
+- Bake. Image Editor → Image → Save As.
+- Switch the object back to the look material after. The Emit graph is only a packer.
+
+Unreal import stays: sRGB off, compression Masks.
+
+Assembled-only AO (locked 2026-08-31): when a part mesh is reused on a tool (SharpenedStone as StoneHatchet Secondary), do not duplicate the mesh. Bake a second ORM with the handle + wrap visible as AO casters, same UVs. Assign that ORM on a second Material Instance. Point `SecondaryMaterialOverride` (or Primary) at that instance. Standalone item keeps the mesh default MI. StickHandle is hatchet-only — bake its ORM once in the assembled pose.
+
+
+4. Master materials (not one graph per thing)
+A unique Material graph per mesh is expensive (permutations, no shared change). A unique Material Instance + unique textures is the intended path.
+
+Two masters cover almost all authored meshes:
+- M_WoodcraftOpaque — Default Lit, Two Sided off. Tools, stems, trunks, stone, bark, bone, fur, player arms, structure wood/stone.
+- M_WoodcraftSheet — Two Sided on. Multiply tangent normal Z by TwoSidedSign. Until there is a normal map (there is not), feed constant (0,0,1). Leaves, membranes, any thin sheet. Opacity / SSS amount is thickness and scatter, not see-through.
+
+Optional third tiny master:
+- M_WoodcraftEye — Opaque with emissive. Or an Opaque instance with emissive enabled. Eyeshine strength is written by the creature appearance system from Environment darkness.
+
+Unlit emissive particles (fireflies, embers, sparks) are not these masters.
+
+Instance parameters (keep the list short):
+- Base Color texture
+- ORM texture
+- Tint
+- Roughness remap min/max
+- Metallic scale (default 1, unused on dielectrics)
+- AO strength
+- Subsurface amount / color (Sheet only, polish)
+- Fuzz / sheen (Opaque, fur / cloth later)
+- Emissive color / strength (eyes, rare glowing bits)
+- Optional wetness scalar later (darken albedo a little, lower roughness a little)
+
+T0 may ship Base Color only on an instance, ORM slot empty / default roughness. Plug ORM in per asset as it is painted.
+
+Master defaults (created 2026-08-30). Assign these as the Texture Sample defaults on the masters so an instance with no override is obvious and still valid:
+- `T_Default_BC` — purple / black checkerboard. Missing albedo.
+- `T_Default_ORM` — 1×1 pixel `(1.0, 0.5, 0.0)` = AO open, roughness 0.5, metallic 0. Import same as every ORM: sRGB off, Masks.
+
+
+5. Surface catalog
+Opaque solids — Default Lit, Two Sided off. Wood, stone, soil, tools, bark, bone, dry fiber, cordage (two-ply geo + blotchy albedo, very rough).
+
+Thin sheets — Sheet master. Nettle leaves, later foliage, wyvern membrane. Two Sided Foliage or Subsurface at polish. Not Thin Translucent.
+
+Fur — no strand hair. Paint coat in Base Color (roots darker, tips lighter). ORM high roughness, metallic 0, soft AO only where the coat parts. Optional fuzz/sheen on the Opaque instance at grazing angles. Wet fur later = darker multiply + slightly lower roughness. First real test is the wolf.
+
+Eyes — separate slot. Low roughness. Blink and tapetum parameters owned by CreatureMaterials. Darkness value owned by Environment.
+
+Membrane — Sheet slot on the creature (already in creature roles). Same TwoSidedSign rule.
+
+Metal — later tiers. Metallic high, roughness carries polish vs tarnish. Still no normal map.
+
+Ash / charcoal — very rough, low value, metallic 0.
+
+Water / ice — out of scope here. Environment + a dedicated water material later.
+
+Fire / embers / fireflies — Unlit emissive Niagara (or similar). Bloom on Fancy. Count LOD on Fast.
+
+
+6. Nettle (T0 plant example)
+Already modeled: 8-sided stem cylinder, opposing leaf pairs (~14–15), serrated edges, leaf cupping from modeled faces.
+- One mesh, two slots: stem → Opaque instance, leaves → Sheet instance.
+- Same Edge normals on both.
+- Do not rebuild as cards.
+- T0: Base Color. ORM when painted (stem rougher than leaves).
+- Polish: Sheet SSS / Two Sided Foliage on leaves only.
+
+Cordage (T0 item example)
+Hank: two loops + a small waist wrap. Two hex plies, pair diameter 1 cm. ~1300 tris. Denser than Stone / Stick / PlantFiber; Edge facets still read. Do not spiral-coil a long two-ply path.
+- Opaque instance. Plant PhysMat. Simple `Blunt` capsule, not the visual mesh.
+- First asset to run the full unique BC + ORM import path (Masks / sRGB-off). Bake process is §3.
+- Albedo: blotchy dry-fiber tan, optional khaki-sage streaks. No painted helix lines. Streak value / hank scale vs PlantFiber are polish — enlarge the mesh to match PlantFiber before spending more paint.
+- Neutral grips the waist.
+
+
+7. T0 vs polish
+T0 (Core Loop content, Roadmap A1):
+- Edge normals.
+- Base Color.
+- Correct slot split (Opaque vs Sheet).
+- Shared Wood / Stone Physical Materials (physics doc).
+- ORM authored on new assets when it does not block playable content. Cordage ran the full import + Masks / sRGB-off path first so the pipeline is locked. Other T0 items may stay on `T_Default_ORM` until painted.
+
+Polish (after Core Loop, parallel with Environment presets):
+- ORM on remaining parts.
+- Day/night and weather already driving lights (Environment doc).
+- Sheet subsurface.
+- Fur fuzz/sheen if the wolf still looks plastic at grazing angles.
+- Optional global wetness scalar on the masters.
+- Skip any map that softens Edge facets.
+
+LOD cost that matters more than atlas size: two-sided overdraw and particle / volume count. Cap those before raising texture resolution.
+
+
+8. Open points
+- Final master parameter names.
+- Whether eyes are a third master or an Opaque instance.
+- How hard biome should bias creature ColorRange weights at spawn (creature doc).
+- Whether AO is default-on or opt-in per instance.
+- Player-arm skin: stay Opaque roughness-only, or a light SSS later.
+- Packed texture layout if an asset needs a mask besides ORM (eye mask on creatures already planned as a separate slot or channel).

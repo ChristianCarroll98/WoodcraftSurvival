@@ -12,7 +12,7 @@
 #include "Core/Damage/DamageType_Slash.h"
 #include "Core/Damage/DamageType_Pierce.h"
 #include <Components/StaticMeshComponent.h>
-#include <PhysicsEngine/PhysicsConstraintComponent.h>
+#include <Materials/MaterialInterface.h>
 #include <PhysicsEngine/BodySetup.h>
 #include <DrawDebugHelpers.h>
 
@@ -47,6 +47,13 @@ void AItemActor::InitializeFromInstance(UItemInstance* Instance)
 	}
 
 	PrimaryMeshComponent->SetStaticMesh(PrimaryMesh);
+	if (!Instance->ItemDefinition->PrimaryMaterialOverride.IsNull())
+	{
+		if (UMaterialInterface* PrimaryOverride = Instance->ItemDefinition->PrimaryMaterialOverride.LoadSynchronous())
+		{
+			PrimaryMeshComponent->SetMaterial(0, PrimaryOverride);
+		}
+	}
 	PrimaryMeshComponent->SetSimulatePhysics(true);
 	PrimaryMeshComponent->SetUseCCD(true);
 	PrimaryMeshComponent->CanCharacterStepUpOn = ECB_No;
@@ -61,33 +68,35 @@ void AItemActor::InitializeFromInstance(UItemInstance* Instance)
 		{
 			SecondaryMeshComponent = NewObject<UStaticMeshComponent>(this, TEXT("SecondaryMeshComponent"));
 			SecondaryMeshComponent->SetStaticMesh(SecondaryMesh);
+			if (!Instance->ItemDefinition->SecondaryMaterialOverride.IsNull())
+			{
+				if (UMaterialInterface* SecondaryOverride = Instance->ItemDefinition->SecondaryMaterialOverride.LoadSynchronous())
+				{
+					SecondaryMeshComponent->SetMaterial(0, SecondaryOverride);
+				}
+			}
 			SecondaryMeshComponent->SetRelativeTransform(Instance->ItemDefinition->SecondaryRelativeTransform);
 			SecondaryMeshComponent->SetCollisionProfileName(TEXT("ItemProfile"));
+			SecondaryMeshComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+			SecondaryMeshComponent->CanCharacterStepUpOn = ECB_No;
+
+			// Do not give Secondary its own Chaos particle. Overlapping ItemProfile
+			// primitives on two simulating bodies depenetrate and the weld never sticks.
+			SecondaryMeshComponent->SetSimulatePhysics(false);
+			SecondaryMeshComponent->BodyInstance.bAutoWeld = true;
 
 			SecondaryMeshComponent->SetupAttachment(PrimaryMeshComponent);
 			SecondaryMeshComponent->RegisterComponent();
+			SecondaryMeshComponent->WeldTo(PrimaryMeshComponent);
 
-			SecondaryMeshComponent->SetSimulatePhysics(true);
-			SecondaryMeshComponent->SetUseCCD(true);
-			SecondaryMeshComponent->CanCharacterStepUpOn = ECB_No;
-			SecondaryMeshComponent->SetLinearDamping(0.05f);
-			SecondaryMeshComponent->SetAngularDamping(0.5f);
-
-			// Fixed constraint = rigid connection (Chaos-friendly dual-mesh)
-			UPhysicsConstraintComponent* Constraint = NewObject<UPhysicsConstraintComponent>(this,
-				TEXT("SecondaryConstraint"));
-			Constraint->SetupAttachment(PrimaryMeshComponent);
-			Constraint->RegisterComponent();
-			Constraint->SetConstrainedComponents(PrimaryMeshComponent, NAME_None, SecondaryMeshComponent,
-				NAME_None);
-			Constraint->SetDisableCollision(true);
-
-			Constraint->SetLinearXLimit(ELinearConstraintMotion::LCM_Locked, 0.f);
-			Constraint->SetLinearYLimit(ELinearConstraintMotion::LCM_Locked, 0.f);
-			Constraint->SetLinearZLimit(ELinearConstraintMotion::LCM_Locked, 0.f);
-			Constraint->SetAngularSwing1Limit(EAngularConstraintMotion::ACM_Locked, 0.f);
-			Constraint->SetAngularSwing2Limit(EAngularConstraintMotion::ACM_Locked, 0.f);
-			Constraint->SetAngularTwistLimit(EAngularConstraintMotion::ACM_Locked, 0.f);
+			if (GbDebugPrint && GEngine)
+			{
+				GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Cyan,
+					FString::Printf(TEXT("%s weld Secondary: %s  primaryMass=%.2f"),
+						*GetName(),
+						SecondaryMeshComponent->IsWelded() ? TEXT("OK") : TEXT("FAILED"),
+						PrimaryMeshComponent->GetMass()));
+			}
 		}
 	}
 
@@ -308,8 +317,7 @@ void AItemActor::OnItemMeshHit(UPrimitiveComponent* HitComp, AActor* OtherActor,
 	}
 
 	// Preferred strike axis for incidence + debug.
-	// Always taken from Primary (handle). HitComp is often the Secondary head, which can
-	// flex a few degrees relative to the handle under impact because the constraint is not perfectly rigid.
+	// Always taken from Primary (handle). HitComp is often the Secondary head.
 	// Orientation also drives Primary, so this keeps IncomingDir / StrikeDir in the same reference frame.
 	FVector StrikeDir = FVector::ZeroVector;
 	const UEquippableItemFragment* EquipFrag = ItemInstance->FindFragment<UEquippableItemFragment>();

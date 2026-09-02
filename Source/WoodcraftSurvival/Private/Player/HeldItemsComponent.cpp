@@ -276,7 +276,7 @@ void UHeldItemsComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 			}
 			if (UStaticMeshComponent* Secondary = HandRight.HeldItem->GetItemSecondaryMesh())
 			{
-				Mass += Secondary->GetMass();
+				if (!Secondary->IsWelded()) Mass += Secondary->GetMass();
 			}
 		}
 		GEngine->AddOnScreenDebugMessage(102, 1.f, FColor::Orange,
@@ -288,6 +288,12 @@ void UHeldItemsComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 
 	PreventItemStuck(EHand::Left);
 	PreventItemStuck(EHand::Right);
+
+	UpdateControlStrengths(EHand::Left);
+	UpdateControlStrengths(EHand::Right);
+
+	ApplyWristControlPoint(EHand::Left);
+	ApplyWristControlPoint(EHand::Right);
 
 	UpdateProceduralOrientation(EHand::Left, DeltaTime);
 	UpdateProceduralOrientation(EHand::Right, DeltaTime);
@@ -611,37 +617,52 @@ bool UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand, FStr
 
 	const FName WeaponBoneName = GetWeaponBoneName(Hand);
 
-	// Effective mass = Primary + Secondary (constraint does not merge BodyInstances).
+	// Welded Secondary lives on Primary's BodyInstance. Only add Secondary when it is its own body.
 	float EffectiveMass = ItemMesh->GetMass();
 	if (UStaticMeshComponent* Secondary = Item->GetItemSecondaryMesh())
 	{
-		EffectiveMass += Secondary->GetMass();
+		if (!Secondary->IsWelded()) EffectiveMass += Secondary->GetMass();
 	}
 
-	// Softer strengths with reduced gravity; damping still rises with mass.
-	const float MassScale = FMath::Clamp(EffectiveMass / 0.6f, 1.0f, 6.0f);
+	// Linear: mild mass term. Acceleration drive already scales force with body mass.
+	const float MassScaleLinear = FMath::Clamp(
+		FMath::Pow(FMath::Max(EffectiveMass / LinearMassRef, 0.f), LinearMassExp) * LinearMassScaleMul,
+		LinearMassScaleMin,
+		LinearMassScaleMax);
+
+	// Angular: mass term × COM lever (head offset from item origin). Caps are safety rails.
+	const float AngularMassTerm = FMath::Pow(
+		FMath::Max(EffectiveMass / AngularMassRef, 0.f), AngularMassExp);
+	const float LeverCm = FVector::Dist(ItemMesh->GetCenterOfMass(), ItemMesh->GetComponentLocation());
+	const float AngularLeverTerm = 1.0f + FMath::Pow(
+		LeverCm / FMath::Max(AngularLeverRef, 1.f), AngularLeverExp);
+	const float MassScale = FMath::Clamp(
+		AngularMassTerm * AngularLeverTerm * AngularMassScaleMul,
+		AngularMassScaleMin,
+		AngularMassScaleMax);
 
 	FPhysicsControlData ControlData;
-	ControlData.LinearStrength = GOrientLinearStrengthBaseline * MassScale;
-	ControlData.LinearDampingRatio = 1.4f + 0.3f * (MassScale - 1.0f);
-	ControlData.AngularStrength = GOrientStrengthBaseline * MassScale;
-	ControlData.AngularDampingRatio = 1.3f + 0.3f * (MassScale - 1.0f);
+	ControlData.LinearStrength = LinearStrengthNeutral * MassScaleLinear;
+	ControlData.LinearDampingRatio = FMath::Max(0.f,
+		LinearDampingRatio + LinearDampingMassSlope * (MassScaleLinear - 1.0f));
+	ControlData.AngularStrength = AngularStrengthNeutral * MassScale;
+	ControlData.AngularDampingRatio = FMath::Max(0.f,
+		AngularDampingRatio + AngularDampingMassSlope * (MassScale - 1.0f));
 	ControlData.bUseSkeletalAnimation = true;
 	ControlData.bDisableCollision = true;
 	ControlData.bUseCustomControlPoint = true;
-	// --- Get the wrist offset from the weapon bone for the custom control point so the item bends at the wrist
 	ControlData.CustomControlPoint = GetRelativeTransformBetweenWeaponAndHandBones(Hand).GetLocation();
 
 	if (GbDebugPrint && GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Cyan,
-			FString::Printf(TEXT("PhysControl mass=%.2f scale=%.2f  L=%.1f A=%.1f  dampL=%.2f dampA=%.2f"),
-				EffectiveMass, MassScale,
-				ControlData.LinearStrength, ControlData.AngularStrength,
-				ControlData.LinearDampingRatio, ControlData.AngularDampingRatio));
+			FString::Printf(TEXT("PhysControl mass=%.2f lever=%.1f angS=%.2f linS=%.2f  L=%.1f A=%.1f"),
+				EffectiveMass, LeverCm, MassScale, MassScaleLinear,
+				ControlData.LinearStrength, ControlData.AngularStrength));
 	}
 
 	FPhysicsControlTarget ControlTarget;
+	ControlTarget.bApplyControlPointToTarget = true;
 
 	// Create the control using the AnimRef mesh + correct weapon bone
 	FName NewControlName = PhysicsControl->CreateControl(
@@ -661,18 +682,22 @@ bool UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand, FStr
 
 	FPhysicsControlModifierData ModData;
 	ModData.MovementType = EPhysicsMovementType::Simulated;
-	ModData.GravityMultiplier = 0.2f;
+	ModData.GravityMultiplier = GravityMultiplier;
 
 	PhysicsControl->CreateBodyModifier(ItemMesh, NAME_None, ModifierSet, ModData);
 	if (UStaticMeshComponent* Secondary = Item->GetItemSecondaryMesh())
 	{
-		PhysicsControl->CreateBodyModifier(Secondary, NAME_None, ModifierSet, ModData);
+		if (!Secondary->IsWelded())
+		{
+			PhysicsControl->CreateBodyModifier(Secondary, NAME_None, ModifierSet, ModData);
+		}
 	}
 
 	FHandState& State = GetHandState(Hand);
 	State.HeldItem = Item;
 	State.ActiveControl = NewControlName;
 	State.MassScale = MassScale;
+	State.MassScaleLinear = MassScaleLinear;
 	State.LastItemVelocity = FVector::ZeroVector; // reset until next tick samples
 	return true;
 }
@@ -709,11 +734,33 @@ void UHeldItemsComponent::DetachItemFromControl(EHand Hand)
 			}
 			ItemMesh->SetCollisionResponseToChannel(COLLISION_PLAYER, ECollisionResponse::ECR_Block);
 		}
+		SetHeldItemStuckResponses(Item, false);
 	}
 
 	State.LastItemVelocity = FVector::ZeroVector;
 	State.bProceduralOrientActive = false;
 	State.OrientEdgeSign = 1;
+	State.bItemStuck = false;
+}
+
+void UHeldItemsComponent::SetHeldItemStuckResponses(AItemActor* Item, bool bStuck)
+{
+	if (!Item) return;
+
+	const ECollisionResponse Response = bStuck ? ECR_Ignore : ECR_Block;
+
+	auto Apply = [Response](UStaticMeshComponent* Mesh)
+	{
+		if (!Mesh) return;
+		Mesh->SetCollisionResponseToChannel(COLLISION_ITEM, Response);
+		Mesh->SetCollisionResponseToChannel(COLLISION_HARVESTABLE, Response);
+		Mesh->SetCollisionResponseToChannel(ECC_WorldStatic, Response);
+		Mesh->SetCollisionResponseToChannel(ECC_WorldDynamic, Response);
+		Mesh->WakeRigidBody();
+	};
+
+	Apply(Item->GetItemPrimaryMesh());
+	Apply(Item->GetItemSecondaryMesh());
 }
 
 void UHeldItemsComponent::PreventItemStuck(EHand Hand)
@@ -742,22 +789,12 @@ void UHeldItemsComponent::PreventItemStuck(EHand Hand)
 	if (Distance > EnterUnsafeDistance && !bItemStuck)
 	{
 		bItemStuck = true;
-		Mesh->SetCollisionResponseToChannel(COLLISION_ITEM, ECR_Ignore);
-		Mesh->SetCollisionResponseToChannel(COLLISION_HARVESTABLE, ECR_Ignore);
-		//Mesh->SetCollisionResponseToChannel(COLLISION_STRUCTURE, ECR_Ignore);
-		//Mesh->SetCollisionResponseToChannel(COLLISION_CREATURE, ECR_Ignore);
-		Mesh->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Ignore);
-		Mesh->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Ignore);
+		SetHeldItemStuckResponses(Item, true);
 	}
 	else if (Distance < ExitUnsafeDistance && bItemStuck)
 	{
 		bItemStuck = false;
-		Mesh->SetCollisionResponseToChannel(COLLISION_ITEM, ECR_Block);
-		Mesh->SetCollisionResponseToChannel(COLLISION_HARVESTABLE, ECR_Block);
-		//Mesh->SetCollisionResponseToChannel(COLLISION_STRUCTURE, ECR_Block);
-		//Mesh->SetCollisionResponseToChannel(COLLISION_CREATURE, ECR_Block);
-		Mesh->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
-		Mesh->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
+		SetHeldItemStuckResponses(Item, false);
 	}
 }
 
@@ -768,8 +805,10 @@ void UHeldItemsComponent::ApplyControlStrengths(EHand Hand, float AngularMultipl
 	const FHandState& State = GetHandState(Hand);
 	if (State.ActiveControl.IsNone()) return;
 
-	const float DampingAngular = 1.3f + 0.3f * (State.MassScale - 1.0f);
-	const float DampingLinear  = 1.4f + 0.3f * (State.MassScale - 1.0f);
+	const float DampingAngular = FMath::Max(0.f,
+		AngularDampingRatio + AngularDampingMassSlope * (State.MassScale - 1.0f));
+	const float DampingLinear = FMath::Max(0.f,
+		LinearDampingRatio + LinearDampingMassSlope * (State.MassScaleLinear - 1.0f));
 
 	PhysicsControl->SetControlAngularData(
 		State.ActiveControl,
@@ -782,13 +821,73 @@ void UHeldItemsComponent::ApplyControlStrengths(EHand Hand, float AngularMultipl
 		false);
 	PhysicsControl->SetControlLinearData(
 		State.ActiveControl,
-		LinearMultiplier * State.MassScale,
+		LinearMultiplier * State.MassScaleLinear,
 		DampingLinear,
 		0.f,
 		0.f,
 		true,
 		true,
 		false);
+}
+
+void UHeldItemsComponent::ApplyWristControlPoint(EHand Hand)
+{
+	if (Hand == EHand::None || !PhysicsControl) return;
+	const FHandState& State = GetHandState(Hand);
+	if (State.ActiveControl.IsNone()) return;
+
+	PhysicsControl->SetControlPoint(
+		State.ActiveControl,
+		GetRelativeTransformBetweenWeaponAndHandBones(Hand).GetLocation());
+}
+
+void UHeldItemsComponent::UpdateControlStrengths(EHand Hand)
+{
+	if (Hand == EHand::None || !PhysicsControl) return;
+
+	const FHandState& State = GetHandState(Hand);
+	if (State.ActiveControl.IsNone() || !State.HeldItem) return;
+
+	const float AngLo = State.bExtended
+		? AngularStrengthBaseline
+		: AngularStrengthNeutral;
+	const float LinLo = State.bExtended
+		? LinearStrengthBaseline
+		: LinearStrengthNeutral;
+
+	float AngMul = AngLo;
+	float LinMul = LinLo;
+
+	if (LookSpeed >= GMinLookSpeed)
+	{
+		const float LinearT = FMath::Clamp(
+			LookSpeed / FMath::Max(StrengthFullLookSpeed, 1.f), 0.f, 1.f);
+		const float T = FMath::Pow(LinearT, StrengthCurveExp);
+		AngMul = FMath::Lerp(AngLo, AngularStrengthMax, T);
+		LinMul = FMath::Lerp(LinLo, LinearStrengthMax, T);
+	}
+
+	ApplyControlStrengths(Hand, AngMul, LinMul);
+
+	if (GbDebugPrint && GEngine && Hand == EHand::Right)
+	{
+		const float DampA = FMath::Max(0.f,
+			AngularDampingRatio + AngularDampingMassSlope * (State.MassScale - 1.0f));
+		const float DampL = FMath::Max(0.f,
+			LinearDampingRatio + LinearDampingMassSlope * (State.MassScaleLinear - 1.0f));
+		const float AppliedA = AngMul * State.MassScale;
+		const float AppliedL = LinMul * State.MassScaleLinear;
+		GEngine->AddOnScreenDebugMessage(104, 1.f, FColor::Green,
+			FString::Printf(TEXT("R ctrl %s%s  lookT=%.2f  mul L=%.2f A=%.2f  scale L=%.2f A=%.2f"),
+				State.bExtended ? TEXT("EXT") : TEXT("NEU"),
+				State.bProceduralOrientActive ? TEXT(" ORIENT") : TEXT(""),
+				FMath::Clamp(LookSpeed / FMath::Max(StrengthFullLookSpeed, 1.f), 0.f, 1.f),
+				LinMul, AngMul,
+				State.MassScaleLinear, State.MassScale));
+		GEngine->AddOnScreenDebugMessage(105, 1.f, FColor::Green,
+			FString::Printf(TEXT("R applied  L=%.2f A=%.2f  damp L=%.2f A=%.2f"),
+				AppliedL, AppliedA, DampL, DampA));
+	}
 }
 
 void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTime)
@@ -826,9 +925,9 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 			State.bProceduralOrientActive = false;
 			State.OrientEdgeSign = 1;
 			PhysicsControl->SetControlUseSkeletalAnimation(State.ActiveControl, true, 1.f);
-			ApplyControlStrengths(Hand, GOrientStrengthBaseline, GOrientLinearStrengthBaseline);
-			PhysicsControl->SetControlTargetOrientation(
+			PhysicsControl->SetControlTargetPositionAndOrientation(
 				State.ActiveControl,
+				FVector::ZeroVector,
 				FRotator::ZeroRotator,
 				0.f,
 				true,
@@ -846,20 +945,10 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 		PhysicsControl->SetControlUseSkeletalAnimation(State.ActiveControl, false, 0.f);
 	}
 
-	// Strength follows camera/look rate, not leftover item speed.
-	// No look this frame → baseline so the item keeps momentum instead of hard-stopping.
+	// No look this frame → leave the last target so the item keeps momentum instead of hard-stopping.
 	if (LookSpeed < GMinLookSpeed)
 	{
-		ApplyControlStrengths(Hand, GOrientStrengthBaseline, GOrientLinearStrengthBaseline);
 		return;
-	}
-
-	{
-		const float LinearT = FMath::Clamp(LookSpeed / FMath::Max(GOrientStrengthFullLookSpeed, 1.f), 0.f, 1.f);
-		const float T = FMath::Pow(LinearT, GOrientStrengthCurveExp);
-		const float AngMul = FMath::Lerp(GOrientStrengthBaseline, GOrientStrengthMax, T);
-		const float LinMul = FMath::Lerp(GOrientLinearStrengthBaseline, GOrientLinearStrengthMax, T);
-		ApplyControlStrengths(Hand, AngMul, LinMul);
 	}
 
 	UStaticMeshComponent* Mesh = State.HeldItem->GetItemPrimaryMesh();
@@ -997,8 +1086,14 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 	const FQuat RelativeQuat = ParentWorldRot.Inverse() * DesiredWorldRot;
 	const FRotator RelativeRot = RelativeQuat.Rotator();
 
-	PhysicsControl->SetControlTargetOrientation(
+	// Pivot at the Hand bone (wrist). RelLoc is wrist in WeaponBone / item space.
+	// TargetPos orbits the item origin around that point so the wrist stays put.
+	const FVector RelLoc = GetRelativeTransformBetweenWeaponAndHandBones(Hand).GetLocation();
+	const FVector TargetPos = RelLoc - RelativeQuat.RotateVector(RelLoc);
+
+	PhysicsControl->SetControlTargetPositionAndOrientation(
 		State.ActiveControl,
+		TargetPos,
 		RelativeRot,
 		0.f,
 		true,
