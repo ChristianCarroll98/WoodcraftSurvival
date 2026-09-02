@@ -7,7 +7,7 @@ FILE STRUCTURE:   File structure design
 PLAYER:           Player input, animations, Physics-based item holding/swinging system using Physics Control Component, player survival considerations like food, water, temperature, illness, status effects, health, stamina, etc.
 UI:               Minimal UI, no large grids, items stackable into storage structures and when player holds stackables.
 ITEM SYSTEM:      C++ based item system including resources, weapons/tools, containers, clothing?
-CRAFTING SYSTEM:  process for crafting items and clothing, minigames, tactile feedback
+CRAFTING SYSTEM:  process for crafting items and clothing, minigames, tactile feedback. Spec: Notes/CraftingSystem/CraftingSystemImplementation.txt. Cards: Notes/Tasks.txt.
 STRUCTURE SYSTEM: Buildable structures including crafting, cooking, storage, shelter and decorative structures
 FOOD SYSTEM:      Dynamic food system with buffs and debuffs
 FIRE SYSTEM:      How starting fires and adding wood works
@@ -100,6 +100,7 @@ Detailed design lives in:
 CRAFTING SYSTEM:
 Implementation notes: Notes/CraftingSystem/CraftingSystemImplementation.txt
 Milestone sequence: Notes/Roadmap.txt
+Current task cards: Notes/Tasks.txt
 
 The player will craft items using resources gathered from the world. While both hands are Neutral (not extended) and the held items (plus optional station slot) match one or more recipes, a quiet bottom-middle prompt shows `[E] Craft [Item]`. Mouse wheel cycles matches the same way as container lists. E starts the craft: view and movement lock, a Crafting input context takes over, and the mouse drives a minigame. R cancels. Any damage the player takes also cancels. Full interaction and recipe rules: Notes/CraftingSystem/CraftingSystemImplementation.txt.
 

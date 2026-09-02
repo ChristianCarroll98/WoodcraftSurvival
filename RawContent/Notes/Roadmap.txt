@@ -4,7 +4,7 @@ Woodcraft Survival – Project Roadmap
 Purpose
 - This file is the high-level sequence of milestones. Look here when a task finishes and you need to choose the next slice.
 - System implementation docs (ItemSystem/, HarvestableSystem/, CraftingSystem/, later StructureSystem/, CreatureSystem/) own locked architecture and small tasks for that system.
-- ProjectNotes.txt owns the immediate working list only. Do not delete DONE lines from it without confirmation.
+- Notes/Tasks.txt owns the current working task cards. ProjectNotes.txt points there and keeps architecture reminders. Do not delete DONE lines from ProjectNotes without confirmation.
 
 Core loop
 Find loose resources → hold and swing a physical tool → harvest a standing resource into items → combine items into a better tool (hands, then a station) → harvest something the previous tool could not → repeat.

@@ -60,12 +60,11 @@ Enums live in `WoodcraftTypes.h`:
 
 - `ECraftingSlotRole` — Ingredient, Tool, Workpiece
 - `ECraftingSlotMatchMode` — ExactDefinition, RequiredTag, Sharpenable
-- `ECraftingMotionMode` — Physics, Guided, Strike
+- `ECraftingMotionMode` — Physics, Guided, Strike (HeldItems constraint family)
 - `ECraftingAppearanceMode` — LiveMeshes, Morph, SkeletalPhase
 - `ECraftingMorphSampleMode` — Lerp, HoldAndPop
-- `ECraftingMinigameType` — Grind, Twist, Tie, Strip, Hammer, Flesh, Hone, Form
 
-Structs live next to the type that owns them (`FCraftingSlot` / `FCraftingOutput` on the recipe header; payloads on the minigame header; snapshot / match / session on the component header).
+Structs live next to the type that owns them (`FCraftingSlot` / `FCraftingOutput` on the recipe header; snapshot / match / session on the component header). Movement numbers live on the movement classes.
 
 **`UCraftingRecipeDefinition`** (Primary Data Asset)
 One asset per craft (`DA_Recipe_SharpenedStone`, `DA_Recipe_Cordage`, `DA_Recipe_StoneHatchet`, …).
@@ -99,8 +98,31 @@ One instance per slot. There is no count field.
 A single-output recipe sets `bAutoEquip` true. Multi-output recipes flag at most one output. If `bAutoEquip` is false, that output piles.
 
 **`UCraftingMinigameDefinition`** (Primary Data Asset)
-Type + motion + appearance + events + optional checkpoints + type payload. See §11.9.
+Appearance, camera, presentation, and one instanced `UCraftMovement`. See §11.3 / §11.9.
 `GetPrimaryAssetId` type: `CraftingMinigame`.
+
+```cpp
+UPROPERTY(EditDefaultsOnly, Instanced, Category = "Minigame")
+TObjectPtr<UCraftMovement> Move;
+```
+
+`FindMove<T>()` on this asset matches `UItemDefinition::FindFragment<T>()`.
+
+**`UCraftMovement`** (abstract, `EditInlineNew`, `DefaultToInstanced`)
+Data only. Same rules as item fragments: numbers and restrictions, no Tick.
+Folder: `Public/Crafting/Movements/` (mirrors `Public/Items/Fragments/`).
+
+- `MotionMode` (`ECraftingMotionMode`) — Physics / Guided / Strike for HeldItems. Each subclass sets its default.
+- Shared constraint fields on the base: planted vs working strengths, axis locks, volume
+
+Concrete A2 classes:
+
+- `UGrindActiveCraftMovement` — `MotionMode` Physics. Stroke `D`, speed band, Z gap.
+- `UCircleAlternateCraftMovement` — `MotionMode` Guided. Slice radians, gesture radius.
+
+Later classes (same naming, add when that craft ships): `UGrindPassiveCraftMovement`, `UGrabPullCraftMovement`, `UCircleContinuousCraftMovement`, `UStrikeCraftMovement`.
+
+The interpreter on `UCraftingComponent` uses `FindMove<T>()` the same way items use `FindFragment<T>()`, then runs that move. Movement objects do not run the session.
 
 **`UCraftingComponent`** (on the player)
 Owns:
@@ -130,6 +152,9 @@ A2 / MVP file layout:
 
 - `Public/Crafting/CraftingRecipeDefinition.h` + `Private/Crafting/CraftingRecipeDefinition.cpp`
 - `Public/Crafting/CraftingMinigameDefinition.h` + `Private/Crafting/CraftingMinigameDefinition.cpp`
+- `Public/Crafting/Movements/CraftMovement.h`
+- `Public/Crafting/Movements/GrindActiveCraftMovement.h` + matching `.cpp` if needed
+- `Public/Crafting/Movements/CircleAlternateCraftMovement.h` + matching `.cpp` if needed
 - `Public/Crafting/CraftingComponent.h` + `Private/Crafting/CraftingComponent.cpp`
 - Crafting enums in `Public/Core/WoodcraftTypes.h`
 - `AWoodcraftCharacter` creates the component as a default subobject
@@ -311,16 +336,31 @@ HeldItems craft API:
 
 Swing orientation and collision damage stay off for the whole session. `SetExtended` is ignored while a session is live (Player BP gates extend on `IsSessionActive()`, component forces Neutral on start).
 
-#### 11.3 Motion modes
+#### 11.3 Movement modules and constraint families
+
+HeldItems constraint family (`ECraftingMotionMode` on `UCraftMovement`):
 
 **`Physics`**
-Working item moves inside a craft-space slab. Progress from that item’s motion. Planted hand locked. Strengths medium–high on the working hand, near-max on the planted hand. A2 Grind.
+Working item moves inside a craft-space slab. Planted hand locked. Strengths medium–high on the working hand, near-max on the planted hand.
 
 **`Guided`**
-Both hands XYZ-planted (working arm may get a tiny authored offset). Physics strengths near-max. Mouse is a 2D phase / stroke detector. Visible motion is a clamped authored offset or a short AnimRef loop whose phase follows the gesture. Presentation mesh does the twisting / peeling / wrapping. A2 Twist; later Strip / Tie / Form.
+Both hands XYZ-planted (working arm may get a tiny authored offset). Physics strengths near-max. Mouse is a 2D phase / stroke detector. Visible motion is a clamped authored offset or a short AnimRef loop.
 
 **`Strike`**
-Aim inside the box. Tool-hand mouse hold locks X and Y (aim frozen, Z free) for the slam. Release returns to aim. Later knap / forge.
+Aim inside the box. Tool-hand mouse hold locks X and Y (aim frozen, Z free) for the slam. Release returns to aim.
+
+Move classes (identity is the class; look up with `FindMove<T>()`):
+
+| Class | Family | Used by |
+|---|---|---|
+| `UGrindActiveCraftMovement` | Physics | Sharpened Stone |
+| `UGrindPassiveCraftMovement` | Physics | Hone / grindstone |
+| `UGrabPullCraftMovement` | Guided | Strip, later Form / knife-spear |
+| `UCircleAlternateCraftMovement` | Guided | Cordage |
+| `UCircleContinuousCraftMovement` | Guided | Tie hatchet |
+| `UStrikeCraftMovement` | Strike | Knap / forge |
+
+A2 authors GrindActive and CircleAlternate only. The component asks `FindMove<UGrindActiveCraftMovement>()`, then `FindMove<UCircleAlternateCraftMovement>()`, and runs the one that hits.
 
 #### 11.4 Presentation and progress appearance
 
@@ -348,20 +388,29 @@ Hide flags: `HideWorkpiece`, `HideTool`. Twist hides both fiber meshes. Grind A2
 
 HeldItems never receives the presentation actor. The player holds only `AItemActor` in A2.
 
-#### 11.5 Tuning fields (all types)
+#### 11.5 Tuning fields
 
-- `MotionMode`
-- `LinearStrength` / `AngularStrength` (optional planted vs working)
-- Working / planted axis locks
+On `UCraftingMinigameDefinition` (shared look / camera):
+
 - Craft view pitch / yaw offset / blend time
-- Volume (box half-extents or radius + height)
-- `GestureRadius` (Guided)
-- Stroke / slice / pull distance and speed band
-- Optional presentation SKM + appearance mode + morph sample mode + hide flags + PresentationOffset + morph key names
-- Optional fail-meter rate
-- Optional event list and checkpoint list (later)
+- Appearance mode, morph sample, presentation SKM, hide flags, `PresentationOffset`, morph channel names
+- Optional fail-meter rate, events, checkpoints (later)
 
-Exact stroke / slice / peel numbers wait until the session exists; author placeholders and tune in PIE.
+On `UCraftMovement` (shared restrictions):
+
+- Linear / angular strengths (planted vs working)
+- Working / planted axis locks
+- Volume (box half-extents or radius + height)
+
+On the concrete movement (gesture numbers):
+
+- GrindActive: stroke `D`, speed band, Z gap
+- CircleAlternate: slice radians, gesture radius
+- GrabPull (later): peel `D`, peel direction
+- GrindPassive (later): `R`, `r`
+- Strike (later): strike slab
+
+Exact numbers wait until the session exists; author placeholders and tune in PIE.
 
 #### 11.6 Engage
 
@@ -371,7 +420,7 @@ Strike uses the **tool-hand** mouse button for lock (LMB if the mallet is left, 
 
 #### 11.7 Types
 
-**Grind** — `Physics`, hands. `DA_Item_Stone` + `DA_Item_Stone` → `DA_Item_SharpenedStone`.
+**Grind** — `UGrindActiveCraftMovement`, hands. `DA_Item_Stone` + `DA_Item_Stone` → `DA_Item_SharpenedStone`.
 
 - Left (planted) is the workpiece: stone face up, lock XYZ.
 - Right (working) is the abrader: stone face down, lock Z. Only this hand is read for progress.
@@ -381,7 +430,7 @@ Strike uses the **tool-hand** mouse button for lock (LMB if the mallet is left, 
 - Release Engage: lift, meter pauses.
 - A2: `LiveMeshes`. Two cobbles the whole session. R / damage returns both stones. Success consumes both, spawns Sharpened Stone into the primary hand.
 
-**Twist** — `Guided`, hands. `DA_Item_PlantFiber` + `DA_Item_PlantFiber` → `DA_Item_Cordage`.
+**Twist** — `UCircleAlternateCraftMovement`, hands. `DA_Item_PlantFiber` + `DA_Item_PlantFiber` → `DA_Item_Cordage`.
 
 - Hide both fiber meshes. Presentation: two strands from the working wrist, finished two-ply growing outward as Progress goes `0 → 1`.
 - Both hands planted, strengths near-max. Working arm gets the small authored circle only.
@@ -389,21 +438,21 @@ Strike uses the **tool-hand** mouse button for lock (LMB if the mallet is left, 
 - Left planted on the growing end. Right is the circling hand.
 - A2: no Engage required (hands already planted). Cues on slice and on length-up.
 
-**Strip** — `Guided`, hands. `DA_Item_FibrousStalk` + Unarmed → `DA_Item_PlantFiber`.
+**Strip** — `UGrabPullCraftMovement`, hands. `DA_Item_FibrousStalk` + Unarmed → `DA_Item_PlantFiber`.
 
 - After the Grind + Twist PoC. Planted hand holds the stalk. Unarmed hand is the working / peel hand.
 - Engage = grip a fiber strip. Valid pull of length `D` along the stalk axis adds progress.
 - Success: consume stalk, spawn Plant Fiber. Wood Scraps waits for fire.
 
-**Tie** — `Guided`, workbench. Same circle slices as Twist. Wrap presentation. A3.
+**Tie** — `UCircleContinuousCraftMovement`, workbench. Wrap presentation. A3.
 
-**Form** — `Guided`, hands. Clay → green Clay Bowl. Later. Resumable.
+**Form** — `UGrabPullCraftMovement`, hands. Clay → green Clay Bowl. Later. Resumable.
 
-**Hammer** — `Strike`, station. Flint knapping and forging. Later. Resumable.
+**Hammer** — `UStrikeCraftMovement`, station. Flint knapping and forging. Later. Resumable.
 
-**Flesh** — `Physics` on a hide-frame station. Later.
+**Flesh** — later hide-frame station. Movement class when that craft is authored.
 
-**Hone** — `Physics`, grindstone. T3 copper. Live Current/Max writes on the same tool Instance.
+**Hone** — `UGrindPassiveCraftMovement`, grindstone. T3 copper. Live Current/Max writes on the same tool Instance.
 
 #### 11.8 Authored events (later)
 
@@ -411,23 +460,14 @@ A minigame may list events (`FCraftMinigameEvent`: trigger, id, optional arm mon
 
 #### 11.9 Minigame definition shape
 
-Shared modules on every `UCraftingMinigameDefinition`:
+On every `UCraftingMinigameDefinition`:
 
-- Identity: `Type`
-- Motion: mode, strengths, axis locks, craft view, volume, gesture / stroke / pull / slice numbers, Engage policy
+- One instanced `UCraftMovement` (`Move`). Look up with `FindMove<T>()`
 - Appearance: mode, morph sample, presentation SKM, hide flags, `PresentationOffset`, morph channel names
+- Craft view / blend
 - Events / checkpoints / fail: optional
-- Workpiece slot: optional (Role = Workpiece)
 
-Type payload (only the fields that type needs):
-
-- Grind: stroke `D`, speed band, Z gap
-- Twist / Tie: slice radians, grow / wrap presentation params
-- Strip: peel `D`, peel direction
-- Hammer: strike slab, lock-on-hold button
-- Flesh: site count / layout, path `D`, empty-hide fail rate
-- Hone: `R`, `r`
-- Form: pinch phase counts, morph channel names
+Gesture numbers and HeldItems restrictions live on the movement class, not as a second payload struct on the minigame asset.
 
 #### 11.10 Still parked
 
@@ -506,7 +546,7 @@ Removing the Crafting IMC returns the player to the default mapping.
 
 ### 15. Status
 
-Locked this pass: snapshot, Neutral-only prompt, wheel select, E start, lock-on-E, R / player-damage cancel, Engage-release pauses Grind, recipe + slot + output fields, single station pointer, one instance per slot, consume / pile / auto-equip order, component owns table + session + interpreter, IMC split, `DA_Type_Name`, `UCraftingRecipeDefinition` / `UCraftingMinigameDefinition`, motion modes Physics / Guided / Strike.
+Locked this pass: snapshot, Neutral-only prompt, wheel select, E start, lock-on-E, R / player-damage cancel, Engage-release pauses Grind, recipe + slot + output fields, single station pointer, one instance per slot, consume / pile / auto-equip order, component owns table + session + interpreter, IMC split, `DA_Type_Name`, `UCraftingRecipeDefinition` / `UCraftingMinigameDefinition`, `UCraftMovement` instanced modules (`FindMove<T>()`, `MotionMode` on the base), A2 movements GrindActive + CircleAlternate, constraint families Physics / Guided / Strike.
 
 A2 MVP recipes: Grind and Twist. Strip follows the PoC. Station / Tie is A3.
 
@@ -522,7 +562,8 @@ OPEN: AssistOffset two-hand IK, discovery prompt setting, hide result Instance v
 **Core Loop / Roadmap A2 — implement in this order**
 
 A2.0 First compile
-- Recipe definition, minigame definition, component (recipe table, snapshot, `FindMatches`, debug prompt)
+- Recipe definition, minigame definition, `UCraftMovement` + `UGrindActiveCraftMovement` + `UCircleAlternateCraftMovement`
+- Component (recipe table, snapshot, `FindMatches`, debug prompt)
 - Enums in `WoodcraftTypes.h`
 - Component default-subobject on `AWoodcraftCharacter`
 - PIE: two Neutral Stones show `[E] Craft Sharpened Stone`
