@@ -4,88 +4,118 @@ Woodcraft Survival – Github task tracker
 How this file is used
 - Tasks here track actual work steps derived from Roadmap.txt and the system implementation docs.
 - When a task is added, removed, split, or marked done in this file, say so in chat so the GitHub board can stay in sync. Do not silently drop a card that still exists on GitHub, and do not open a GitHub card that is not listed here first (or add it here in the same pass).
-- Status: OPEN, BLOCKED, DONE.
+- Status: Backlog, In Progress, Done.
 - Size: XS = 1 day, S = 2-3 days, M = 4-7 days, L = 8-14 days, XL = 15+ days.
 - Labels: art-assets, blocked, bug, documentation, feature, polish, tech-debt, ui.
+- Blocking = cards this task holds up. Blocked By = cards / work that must land first. Empty is OK.
 - Order below is do-first to do-last for the current milestone slice.
+
+Task template:
+Title:
+Size:
+Labels:
+Status:
+Blocking:
+Blocked By:
+Description:
 
 Milestone: Core Loop Playable (Roadmap A2–A4). This file starts with crafting-related cards only.
 
 
---- DONE ---
+--- Done ---
 
 Title: Crafting MVP design (doc only)
 Size: S
 Labels: documentation
-Status: DONE (2026-09-02)
+Status: Done (2026-09-02)
+Blocking:
+Blocked By:
 Description:
 Notes/CraftingSystem/CraftingSystemImplementation.txt is far enough to implement hands crafting. Locked: UCraftingRecipeDefinition slots (Exact DA or tag, one instance per slot, Station unset = hands), UCraftingMinigameDefinition with one instanced UCraftMovement, UCraftingComponent as session owner, Factory-only consume/spawn, E start / R cancel / damage interrupt, GrindActive + CircleAlternate as the first two crafts. Out of that card: knap, forge, hone, workbench.
 
 
---- OPEN (priority order) ---
+--- Backlog (priority order) ---
 
 Title: Crafting data + match prompt
 Size: XS
 Labels: feature
-Status: OPEN
+Status: Backlog
+Blocking: Crafting session + cancel; Ground recipe commit
+Blocked By:
 Description:
 A2.0 compile slice. Add UCraftingRecipeDefinition, UCraftingMinigameDefinition, UCraftMovement, UGrindActiveCraftMovement, UCircleAlternateCraftMovement, UCraftingComponent. Enums and ECraftingMotionMode in WoodcraftTypes.h. FindMatches on the recipe definition. FindMove<T>() on the minigame definition (same pattern as FindFragment<T>()). MotionMode property + GetMotionMode() on UCraftMovement; subclasses set the default. Component on AWoodcraftCharacter. Snapshot from HeldItems. Debug [E] Craft {Name} when both hands Neutral and a recipe matches. Author DA_Minigame_Grind (GrindActive module), DA_Minigame_Twist (CircleAlternate module), DA_Recipe_SharpenedStone, DA_Recipe_Cordage. Assign RecipeAssets on the player BP. No consume, no IMC, no player-input port.
 
 Title: Crafting session + cancel
 Size: S
 Labels: feature
-Status: OPEN
+Status: Backlog
+Blocking: GrindActive minigame; CircleAlternate minigame
+Blocked By: Crafting data + match prompt
 Description:
 A2.1. FCraftingSession on the component. E freezes the selected match. Push IMC_Crafting for the session (assign the IMC on the component / player BP). View lock after craft-frame blend. R and NotifyOwnerDamaged() clear the session and leave bound items. Wheel cycles matches while the prompt is up. Player BP wires E / wheel / R / LMB Engage to the component. Extend gated on IsSessionActive(). Gameplay input stays in the player BP.
 
 Title: Ground recipe commit
 Size: S
 Labels: feature
-Status: OPEN
+Status: Backlog
+Blocking: GrindActive minigame; CircleAlternate minigame
+Blocked By: Crafting data + match prompt
 Description:
 A2.2. ItemFactory DestroyItemActorAndInstance. HeldItems IsUnarmed, ReplaceHeldItem, GetDropTransform, IsHandStacked stub. Success order from the crafting spec: durability cost, Factory-destroy consumed bindings, spawn outputs, auto-equip at most one, pile the rest. Instant-success debug so two Stones become DA_Item_SharpenedStone and two Plant Fiber become DA_Item_Cordage before minigame motion exists.
 
 Title: GrindActive minigame
 Size: S
 Labels: feature
-Status: OPEN
+Status: Backlog
+Blocking: GrabPull strip
+Blocked By: Crafting session + cancel; Ground recipe commit
 Description:
 A2.3. HeldItems BeginCraftMotion / SetCraftAxisLocks / EndCraftMotion. Interpreter FindMove<UGrindActiveCraftMovement>() and run Physics grind: planted left XYZ, working right lock Z, Engage closes Z gap, XY stroke band adds progress, Engage release pauses. LiveMeshes. R returns both stones. Success uses the commit path. Tune D / speed band / Z gap on DA_Minigame_Grind in PIE.
 
 Title: Twist presentation mesh
 Size: S
 Labels: art-assets
-Status: OPEN
+Status: Backlog
+Blocking: CircleAlternate minigame
+Blocked By:
 Description:
 Skeletal mesh for CircleAlternate / cordage: two strands from the working wrist, two-ply growing with phase / Progress. Assign on DA_Minigame_Twist. Placeholder is acceptable to unblock the code card; replace with the real SKM when painted. Item meshes stay without morphs.
 
 Title: CircleAlternate minigame
 Size: S
 Labels: feature
-Status: OPEN
+Status: Backlog
+Blocking: GrabPull strip
+Blocked By: Crafting session + cancel; Ground recipe commit; Twist presentation mesh
 Description:
 A2.4. ACraftPresentationActor follow-mesh on the planted fiber. FindMove<UCircleAlternateCraftMovement>(). Guided plant, opposite-direction circle slices, hide both Plant Fiber renders. Destroy presentation and unhide leftovers on session end. Success consumes both fibers and auto-equips DA_Item_Cordage.
 
 Title: GrabPull strip
 Size: S
 Labels: feature
-Status: OPEN
+Status: Backlog
+Blocking:
+Blocked By: GrindActive minigame; CircleAlternate minigame
 Description:
 After the Grind + Twist PoC. Add UGrabPullCraftMovement. DA_Recipe_PlantFiber + DA_Minigame_Strip. Fibrous Stalk planted, Unarmed working hand, Engage grab, pull D along the stalk. Output DA_Item_PlantFiber only. Wood Scraps waits for fire.
 
 Title: Workbench slot + Tie
 Size: M
 Labels: feature, blocked
-Status: BLOCKED (Roadmap A3 Structure scaffolding + placed workbench)
+Status: Backlog
+Blocking:
+Blocked By: Roadmap A3 Structure scaffolding + placed workbench
 Description:
 Station snapshot (looked-at workbench or slotted item). DA_Recipe_StoneHatchet at DA_Structure_Workbench. Three Exact slots, any one may sit in the slot. Add UCircleContinuousCraftMovement. Wrap presentation. Success Factory-consumes Sharpened Stone + Stick + Cordage and spawns DA_Item_StoneHatchet (dual-mesh). Q-place onto the slot is Item + Structure work, not a crafting verb.
 
 
---- AFTER CORE LOOP (listed so it is not lost) ---
+--- After core loop (listed so it is not lost) ---
 
 Title: Player input into C++ parent
 Size: M
 Labels: tech-debt
-Status: OPEN
+Status: Backlog
+Blocking:
+Blocked By: Core loop playable (A2–A4)
 Description:
 Move Player BP input and BeginPlay IMC setup onto AWoodcraftCharacter once the core loop plays. Enhanced Input bindings in C++, gameplay vs crafting IMC ownership in C++. High priority after A2–A4, not a blocker for Grind / Twist.
