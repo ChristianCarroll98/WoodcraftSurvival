@@ -2,7 +2,6 @@
 
 #include "Player/CraftingComponent.h"
 #include "Items/ItemActor.h"
-#include "Items/ItemInstance.h"
 #include "Player/HeldItemsComponent.h"
 
 namespace
@@ -67,16 +66,12 @@ void UCraftingComponent::ResolveRecipeAssets()
 void UCraftingComponent::FillHandSnapshot(EHand Hand)
 {
 	AItemActor* ItemActor = HeldItems ? HeldItems->GetHeldItem(Hand) : nullptr;
-	UItemInstance* Instance = ItemActor ? ItemActor->GetItemInstance() : nullptr;
-	const UItemDefinition* Definition = Instance ? Instance->ItemDefinition.Get() : nullptr;
 	const bool bUnarmed = HeldItems && HeldItems->GetIsUnarmed(Hand);
 	const bool bExtended = HeldItems && HeldItems->GetIsExtended(Hand);
 
 	if (Hand == EHand::Left)
 	{
 		CurrentSnapshot.LeftActor = ItemActor;
-		CurrentSnapshot.LeftInstance = Instance;
-		CurrentSnapshot.LeftDefinition = Definition;
 		CurrentSnapshot.bLeftUnarmed = bUnarmed;
 		CurrentSnapshot.bLeftExtended = bExtended;
 		CurrentSnapshot.bLeftStacked = false;
@@ -84,8 +79,6 @@ void UCraftingComponent::FillHandSnapshot(EHand Hand)
 	else if (Hand == EHand::Right)
 	{
 		CurrentSnapshot.RightActor = ItemActor;
-		CurrentSnapshot.RightInstance = Instance;
-		CurrentSnapshot.RightDefinition = Definition;
 		CurrentSnapshot.bRightUnarmed = bUnarmed;
 		CurrentSnapshot.bRightExtended = bExtended;
 		CurrentSnapshot.bRightStacked = false;
@@ -99,7 +92,6 @@ void UCraftingComponent::RebuildSnapshot()
 
 	CurrentSnapshot.Station.Reset();
 	CurrentSnapshot.StationActor = nullptr;
-	CurrentSnapshot.StationInstance = nullptr;
 }
 
 void UCraftingComponent::RefreshMatches()

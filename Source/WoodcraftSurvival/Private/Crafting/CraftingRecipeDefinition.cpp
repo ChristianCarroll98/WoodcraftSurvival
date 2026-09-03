@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Christian Carroll. All Rights Reserved.
 
 #include "Crafting/CraftingRecipeDefinition.h"
+#include "Items/ItemActor.h"
 #include "Items/ItemDefinition.h"
 #include "Items/ItemInstance.h"
 
@@ -14,14 +15,6 @@ FPrimaryAssetId UCraftingRecipeDefinition::GetPrimaryAssetId() const
 	return FPrimaryAssetId(TEXT("CraftingRecipe"), GetFName());
 }
 
-static const UItemDefinition* GetSnapshotDefinition(const FCraftingSnapshot& Snapshot, EHand Hand, bool bStation)
-{
-	if (bStation) return Snapshot.StationInstance ? Snapshot.StationInstance->ItemDefinition.Get() : nullptr;
-	if (Hand == EHand::Left) return Snapshot.LeftDefinition;
-	if (Hand == EHand::Right) return Snapshot.RightDefinition;
-	return nullptr;
-}
-
 static AItemActor* GetSnapshotActor(const FCraftingSnapshot& Snapshot, EHand Hand, bool bStation)
 {
 	if (bStation) return Snapshot.StationActor;
@@ -30,19 +23,13 @@ static AItemActor* GetSnapshotActor(const FCraftingSnapshot& Snapshot, EHand Han
 	return nullptr;
 }
 
-static UItemInstance* GetSnapshotInstance(const FCraftingSnapshot& Snapshot, EHand Hand, bool bStation)
-{
-	if (bStation) return Snapshot.StationInstance;
-	if (Hand == EHand::Left) return Snapshot.LeftInstance;
-	if (Hand == EHand::Right) return Snapshot.RightInstance;
-	return nullptr;
-}
-
 static bool SnapshotHasItem(const FCraftingSnapshot& Snapshot, EHand Hand, bool bStation)
 {
-	if (bStation) return Snapshot.StationInstance != nullptr;
-	if (Hand == EHand::Left) return !Snapshot.bLeftUnarmed && Snapshot.LeftDefinition != nullptr;
-	if (Hand == EHand::Right) return !Snapshot.bRightUnarmed && Snapshot.RightDefinition != nullptr;
+	AItemActor* ItemActor = GetSnapshotActor(Snapshot, Hand, bStation);
+	if (!ItemActor || !ItemActor->GetItemInstance()) return false;
+	if (bStation) return true;
+	if (Hand == EHand::Left) return !Snapshot.bLeftUnarmed;
+	if (Hand == EHand::Right) return !Snapshot.bRightUnarmed;
 	return false;
 }
 
@@ -70,7 +57,7 @@ static bool TryBindRecipe(const UCraftingRecipeDefinition* Recipe, const FCrafti
 	if (Recipe->Slots.Num() == 0) return false;
 
 	const bool bHandsRecipe = Recipe->Station.IsNull();
-	const bool bSnapshotHasStation = !Snapshot.Station.IsNull() || Snapshot.StationInstance != nullptr;
+	const bool bSnapshotHasStation = !Snapshot.Station.IsNull() || Snapshot.StationActor != nullptr;
 	if (bHandsRecipe && bSnapshotHasStation) return false;
 	if (!bHandsRecipe && Snapshot.Station != Recipe->Station) return false;
 
@@ -84,7 +71,6 @@ static bool TryBindRecipe(const UCraftingRecipeDefinition* Recipe, const FCrafti
 		Binding.SlotIndex = SlotIndex;
 		Binding.Hand = Hand;
 		Binding.bStation = bStation;
-		Binding.Instance = GetSnapshotInstance(Snapshot, Hand, bStation);
 		Binding.Actor = GetSnapshotActor(Snapshot, Hand, bStation);
 		OutMatch.Bindings.Add(Binding);
 
@@ -98,7 +84,12 @@ static bool TryBindRecipe(const UCraftingRecipeDefinition* Recipe, const FCrafti
 		const int32 HandIndex = (Hand == EHand::Left) ? 0 : 1;
 		if (UsedHands[HandIndex]) return false;
 		if (!SnapshotHasItem(Snapshot, Hand, false)) return false;
-		if (!SlotMatchesDefinition(Slot, GetSnapshotDefinition(Snapshot, Hand, false))) return false;
+
+		AItemActor* ItemActor = GetSnapshotActor(Snapshot, Hand, false);
+		UItemInstance* Instance = ItemActor ? ItemActor->GetItemInstance() : nullptr;
+		const UItemDefinition* Definition = Instance ? Instance->ItemDefinition.Get() : nullptr;
+		if (!SlotMatchesDefinition(Slot, Definition)) return false;
+
 		BindSnapshotItem(SlotIndex, Hand, false);
 		return true;
 	};
@@ -124,8 +115,11 @@ static bool TryBindRecipe(const UCraftingRecipeDefinition* Recipe, const FCrafti
 		if (TryHand(SlotIndex, Slot, EHand::Left)) continue;
 		if (TryHand(SlotIndex, Slot, EHand::Right)) continue;
 
+		AItemActor* StationActor = GetSnapshotActor(Snapshot, EHand::None, true);
+		UItemInstance* StationInstance = StationActor ? StationActor->GetItemInstance() : nullptr;
+		const UItemDefinition* StationDefinition = StationInstance ? StationInstance->ItemDefinition.Get() : nullptr;
 		if (!bHandsRecipe && !bUsedStation && SnapshotHasItem(Snapshot, EHand::None, true)
-			&& SlotMatchesDefinition(Slot, GetSnapshotDefinition(Snapshot, EHand::None, true)))
+			&& SlotMatchesDefinition(Slot, StationDefinition))
 		{
 			BindSnapshotItem(SlotIndex, EHand::None, true);
 			continue;

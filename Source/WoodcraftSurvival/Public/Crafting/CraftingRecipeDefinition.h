@@ -11,7 +11,6 @@ class AItemActor;
 class UCraftingMinigameDefinition;
 class UCraftingRecipeDefinition;
 class UItemDefinition;
-class UItemInstance;
 
 /**
  * One input socket on a recipe.
@@ -71,12 +70,6 @@ struct FCraftingSnapshot
 	TObjectPtr<AItemActor> LeftActor;
 
 	UPROPERTY()
-	TObjectPtr<UItemInstance> LeftInstance;
-
-	UPROPERTY()
-	TObjectPtr<const UItemDefinition> LeftDefinition;
-
-	UPROPERTY()
 	bool bLeftUnarmed = true;
 
 	UPROPERTY()
@@ -87,12 +80,6 @@ struct FCraftingSnapshot
 
 	UPROPERTY()
 	TObjectPtr<AItemActor> RightActor;
-
-	UPROPERTY()
-	TObjectPtr<UItemInstance> RightInstance;
-
-	UPROPERTY()
-	TObjectPtr<const UItemDefinition> RightDefinition;
 
 	UPROPERTY()
 	bool bRightUnarmed = true;
@@ -109,12 +96,9 @@ struct FCraftingSnapshot
 
 	UPROPERTY()
 	TObjectPtr<AItemActor> StationActor;
-
-	UPROPERTY()
-	TObjectPtr<UItemInstance> StationInstance;
 };
 
-/** One recipe slot bound to one snapshot socket. */
+/** One recipe slot bound to a hand or station item actor. */
 USTRUCT(BlueprintType)
 struct FCraftingSlotBinding
 {
@@ -128,9 +112,6 @@ struct FCraftingSlotBinding
 
 	UPROPERTY()
 	bool bStation = false;
-
-	UPROPERTY()
-	TObjectPtr<UItemInstance> Instance;
 
 	UPROPERTY()
 	TObjectPtr<AItemActor> Actor;
