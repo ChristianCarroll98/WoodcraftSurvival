@@ -27,5 +27,5 @@ Architecture reminder:
 - StrikeMode is orientation / incidence, not damage type. None = no orient (blunt). Stone is SingleEdged + Blunt primitives. T1 set: ItemSystemImplementation §3.
 - Dual-mesh tools: Secondary WeldTo Primary. No Physics Constraint. Material overrides on the Definition for assembled ORM.
 - Physical Materials = density / mass + future impact. Named primitives choose candidate damage type.
-- Content assets: DA_Type_Name (DA_Item_Stone, DA_Harvestable_Nettle, DA_Recipe_SharpenedStone, DA_Minigame_Grind, DA_Structure_Workbench).
-- Crafting: UCraftingComponent owns table / snapshot / session. UCraftMovement modules are data. FindMove<T>(). MotionMode on the base. Enums in WoodcraftTypes.h.
+- Content assets: DA_Type_Name (DA_Item_Stone, DA_Harvestable_Nettle, DA_Recipe_SharpenedStone, DA_Minigame_Grind, DA_Structure_Workbench). Recipes sit next to the primary output item. Minigames live in Content/WoodcraftSurvival/Crafting/Minigames/.
+- Crafting: UCraftingComponent lives in Player/ next to HeldItems. Recipe / minigame / movement data stay under Crafting/. Snapshot rebuilds from HeldItems OnHeldItemsChanged (attach + Neutral/Extended), not Tick. UCraftMovement modules are data. FindMove<T>(). MotionMode on the base. Enums in WoodcraftTypes.h.

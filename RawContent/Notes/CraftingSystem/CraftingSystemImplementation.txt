@@ -64,7 +64,7 @@ Enums live in `WoodcraftTypes.h`:
 - `ECraftingAppearanceMode` — LiveMeshes, Morph, SkeletalPhase
 - `ECraftingMorphSampleMode` — Lerp, HoldAndPop
 
-Structs live next to the type that owns them (`FCraftingSlot` / `FCraftingOutput` on the recipe header; snapshot / match / session on the component header). Movement numbers live on the movement classes.
+Structs live next to the type that owns them (`FCraftingSlot` / `FCraftingOutput` / snapshot / match on the recipe header because `FindMatches` lives there; session on the component header). Movement numbers live on the movement classes.
 
 **`UCraftingRecipeDefinition`** (Primary Data Asset)
 One asset per craft (`DA_Recipe_SharpenedStone`, `DA_Recipe_Cordage`, `DA_Recipe_StoneHatchet`, …).
@@ -155,9 +155,10 @@ A2 / MVP file layout:
 - `Public/Crafting/Movements/CraftMovement.h`
 - `Public/Crafting/Movements/GrindActiveCraftMovement.h` + matching `.cpp` if needed
 - `Public/Crafting/Movements/CircleAlternateCraftMovement.h` + matching `.cpp` if needed
-- `Public/Crafting/CraftingComponent.h` + `Private/Crafting/CraftingComponent.cpp`
+- `Public/Player/CraftingComponent.h` + `Private/Player/CraftingComponent.cpp` (player-only, same folder as HeldItems)
 - Crafting enums in `Public/Core/WoodcraftTypes.h`
 - `AWoodcraftCharacter` creates the component as a default subobject
+- Content: `DA_Recipe_*` next to the primary output item. `DA_Minigame_*` in `Content/WoodcraftSurvival/Crafting/Minigames/`.
 
 
 ### 5. Matching and binding
@@ -509,7 +510,7 @@ Removing the Crafting IMC returns the player to the default mapping.
 - Station place / retrieve: Q-mode, `PlacementOffsetTransform`, shared ReleasePose. Crafting reads the slot.
 - Held stacks exist only in hands. `IsHandStacked(EHand)` can stub false until stacks ship.
 - Unarmed test: held definition == `UHeldItemsComponent::UnarmedDefinition` (`DA_Item_Unarmed`)
-- Snapshot dirty: component Tick compares last hand actors + extended flags, or rebuilds on attach / `SetExtended`
+- Snapshot dirty: `UHeldItemsComponent::OnHeldItemsChanged` after attach and after Neutral / Extended actually flips. Crafting does not Tick to rebuild. Station look-at dirties the same way when A3 exists.
 
 
 ### 14. Example bindings

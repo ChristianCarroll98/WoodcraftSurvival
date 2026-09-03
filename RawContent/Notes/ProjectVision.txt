@@ -24,9 +24,9 @@ Content/
 --Core/
 ---PhysMaterials/
 ---Game modes
---Data/
----Enums/
----other basic shared data type folders
+--Crafting/
+---Minigames/ DA_Minigame_Grind, DA_Minigame_Twist, Twist presentation SKM. Not in Core.
+--Dev/
 --Effects/
 ---item pickup outline material other shared materials or effects
 --Environment/
@@ -37,12 +37,13 @@ Content/
 ---Shared/ shared assets for resources like materials and such
 ---Resources/
 ----Stick/ specific resource item folders
------animations, materials, data asset, mesh, textures for stick
+-----animations, materials, data asset, mesh, textures for stick. DA_Recipe_* lives next to the primary output item (DA_Recipe_SharpenedStone with SharpenedStone, not with Stone).
 ---Weapons/
 ----Hatchets/ item type organization subfolder. May add similar organization for resources later.
 -----Shared/ shared assets for all hatchets
 ------CopperHatchet/ similar structure to Stick/ with only weapon specific assets
 ---Containers/ similar to Resources/ with container item specifics.
+--Harvestables/ standing resources (Nettle, TestTree, …), same per-type folder idea as Items
 --Player/
 ---Animation/ anims, control rig, anim BPs, Mirror data table
 ---Input/ input mapping contexts
