@@ -85,3 +85,4 @@ Parallel / anytime
 - Polish materials / ORM / audio / floating damage numbers.
 - Input move from Player BP into C++ when it starts to get in the way.
 - Asset Manager primary types (ItemDefinition, CraftingRecipe, CraftingMinigame, Harvestable). Optional later: scan-all recipes instead of CraftingComponent.RecipeAssets.
+- Move crafting snapshot matching into component instead of recipe (IF this design decision makes sense)
