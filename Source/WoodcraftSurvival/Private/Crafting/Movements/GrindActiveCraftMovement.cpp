@@ -4,6 +4,4 @@
 
 UGrindActiveCraftMovement::UGrindActiveCraftMovement()
 {
-	MotionMode = ECraftingMotionMode::Physics;
-	bWorkingLockZ = true;
 }

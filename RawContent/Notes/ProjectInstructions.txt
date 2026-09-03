@@ -5,7 +5,9 @@ The Notes folder contains living documents that outline the goals, lore, informa
 
 The Source folder contains my projects current source code with Private (.cpp) and Public (.h) separate subfolders as is common for UE5.8 C++ projects, however to reduce unnecessary token usage please only read relevant Source files when necessary, and if you make an update during a task please be sure to clearly inform me so I can update the file on my side as well. If you create any file or update the #include statements, be aware that the project looks from inside Public/ and Private/ folders, so start with my Items/ or Harvestables/ in the include statement, respect the file structure.
 
-start with ProjectVision.txt and ProjectNotes.txt. ProjectVision outlines all the systems for the project and should include links to relevant files. Project notes contains high level random notes and current task list, please update current task list as new immediate tasks are added, but confirm before deleting existing ones.
+start with ProjectVision.txt and ProjectNotes.txt. ProjectVision outlines all the systems for the project and should include links to relevant files. Project notes contains high level random notes. Tasks.txt contains current task list I sync to github. Please let me know if a task needs to be added or changed. Roadmat.txt holds more high level planning, so any not well defined or far-off tasks can go there instead as simple task descriptions.
+
+When updating notes, prefer only current locked information or notes on deferred or unknowns, prefer just "ABC" NOT "ABC, No XYZ" to prevent clutter. Notes should reflect current plans, ideas, or options, not a list of negatives from changed decisions.
 
 here is an example of a blank C++ file for my project for formatting reasons. Please ensure all proper modern UE5.8 C++ standards are followed. I prefer inline if statements for early exits or simple statements. I prefer brackets on new lines for full if statements. For internal class-only data structures or variables UPROPERTY is not needed but for anything exposed to UE5.8 it is.
 

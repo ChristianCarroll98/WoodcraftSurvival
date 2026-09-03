@@ -99,15 +99,6 @@ enum class ECraftingSlotMatchMode : uint8
 	Sharpenable		UMETA(DisplayName = "Sharpenable"),
 };
 
-/** HeldItems constraint family for a craft movement. */
-UENUM(BlueprintType)
-enum class ECraftingMotionMode : uint8
-{
-	Physics	UMETA(DisplayName = "Physics"),
-	Guided	UMETA(DisplayName = "Guided"),
-	Strike	UMETA(DisplayName = "Strike"),
-};
-
 /** How the session shows progress on the work. */
 UENUM(BlueprintType)
 enum class ECraftingAppearanceMode : uint8

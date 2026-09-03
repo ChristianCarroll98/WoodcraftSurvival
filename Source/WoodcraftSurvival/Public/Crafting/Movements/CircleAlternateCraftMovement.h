@@ -7,7 +7,7 @@
 
 /**
  * Opposite-direction circle slices (cordage twist).
- * MotionMode defaults to Guided.
+ * Guided / animation path. No HeldItems axis locks.
  */
 UCLASS(EditInlineNew, DefaultToInstanced)
 class WOODCRAFTSURVIVAL_API UCircleAlternateCraftMovement : public UCraftMovement

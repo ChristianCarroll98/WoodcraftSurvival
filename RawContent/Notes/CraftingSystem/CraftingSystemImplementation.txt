@@ -60,7 +60,6 @@ Enums live in `WoodcraftTypes.h`:
 
 - `ECraftingSlotRole` — Ingredient, Tool, Workpiece
 - `ECraftingSlotMatchMode` — ExactDefinition, RequiredTag, Sharpenable
-- `ECraftingMotionMode` — Physics, Guided, Strike (HeldItems constraint family)
 - `ECraftingAppearanceMode` — LiveMeshes, Morph, SkeletalPhase
 - `ECraftingMorphSampleMode` — Lerp, HoldAndPop
 
@@ -112,13 +111,12 @@ TObjectPtr<UCraftMovement> Move;
 Data only. Same rules as item fragments: numbers and restrictions, no Tick.
 Folder: `Public/Crafting/Movements/` (mirrors `Public/Items/Fragments/`).
 
-- `MotionMode` (`ECraftingMotionMode`) — Physics / Guided / Strike for HeldItems. Each subclass sets its default.
-- Shared constraint fields on the base: planted vs working strengths, axis locks, volume
+- No `MotionMode` enum. Interpreter uses `FindMove<T>()` and runs that class.
 
 Concrete A2 classes:
 
-- `UGrindActiveCraftMovement` — `MotionMode` Physics. Stroke `D`, speed band, Z gap.
-- `UCircleAlternateCraftMovement` — `MotionMode` Guided. Slice radians, gesture radius.
+- `UGrindActiveCraftMovement` — always in contact. Stroke `D`, travel volume, min speed (gate) / max speed (cap), planted vs working strengths.
+- `UCircleAlternateCraftMovement` — animation / mouse slices. Slice radians, gesture radius. No locks or strengths.
 
 Later classes (same naming, add when that craft ships): `UGrindPassiveCraftMovement`, `UGrabPullCraftMovement`, `UCircleContinuousCraftMovement`, `UStrikeCraftMovement`.
 
@@ -337,29 +335,18 @@ HeldItems craft API:
 
 Swing orientation and collision damage stay off for the whole session. `SetExtended` is ignored while a session is live (Player BP gates extend on `IsSessionActive()`, component forces Neutral on start).
 
-#### 11.3 Movement modules and constraint families
+#### 11.3 Movement modules
 
-HeldItems constraint family (`ECraftingMotionMode` on `UCraftMovement`):
+Identity is the class. Look up with `FindMove<T>()`. No motion-mode enum.
 
-**`Physics`**
-Working item moves inside a craft-space slab. Planted hand locked. Strengths medium–high on the working hand, near-max on the planted hand.
-
-**`Guided`**
-Both hands XYZ-planted (working arm may get a tiny authored offset). Physics strengths near-max. Mouse is a 2D phase / stroke detector. Visible motion is a clamped authored offset or a short AnimRef loop.
-
-**`Strike`**
-Aim inside the box. Tool-hand mouse hold locks X and Y (aim frozen, Z free) for the slam. Release returns to aim.
-
-Move classes (identity is the class; look up with `FindMove<T>()`):
-
-| Class | Family | Used by |
+| Class | Used by | Motion |
 |---|---|---|
-| `UGrindActiveCraftMovement` | Physics | Sharpened Stone |
-| `UGrindPassiveCraftMovement` | Physics | Hone / grindstone |
-| `UGrabPullCraftMovement` | Guided | Strip, later Form / knife-spear |
-| `UCircleAlternateCraftMovement` | Guided | Cordage |
-| `UCircleContinuousCraftMovement` | Guided | Tie hatchet |
-| `UStrikeCraftMovement` | Strike | Knap / forge |
+| `UGrindActiveCraftMovement` | Sharpened Stone | Physics travel in a slab. Always in contact. |
+| `UGrindPassiveCraftMovement` | Hone / grindstone | Physics. Click to engage. |
+| `UGrabPullCraftMovement` | Strip, later Form / knife-spear | Mouse angle cone + pull distance. |
+| `UCircleAlternateCraftMovement` | Cordage | Animation / opposite-direction slices. |
+| `UCircleContinuousCraftMovement` | Tie hatchet | Animation / continuous wrap. |
+| `UStrikeCraftMovement` | Knap / forge | Aim then slam. Hold-to-lock is session state. |
 
 A2 authors GrindActive and CircleAlternate only. The component asks `FindMove<UGrindActiveCraftMovement>()`, then `FindMove<UCircleAlternateCraftMovement>()`, and runs the one that hits.
 
@@ -397,38 +384,28 @@ On `UCraftingMinigameDefinition` (shared look / camera):
 - Appearance mode, morph sample, presentation SKM, hide flags, `PresentationOffset`, morph channel names
 - Optional fail-meter rate, events, checkpoints (later)
 
-On `UCraftMovement` (shared restrictions):
+On the concrete movement:
 
-- Linear / angular strengths (planted vs working)
-- Working / planted axis locks
-- Volume (box half-extents or radius + height)
-
-On the concrete movement (gesture numbers):
-
-- GrindActive: stroke `D`, speed band, Z gap
+- GrindActive: stroke `D`, travel volume, min speed (gate) / max speed (cap), planted vs working strengths
 - CircleAlternate: slice radians, gesture radius
-- GrabPull (later): peel `D`, peel direction
-- GrindPassive (later): `R`, `r`
-- Strike (later): strike slab
+- GrabPull (later): grab-start angle cone, pull direction, peel `D`
+- GrindPassive (later): click engage, hone `R` / `r`
+- Strike (later): strike slab; lock-on-hold is session state
 
 Exact numbers wait until the session exists; author placeholders and tune in PIE.
 
 #### 11.6 Engage
 
-Hands types use **Engage** (default LMB). Release lifts / lets go.
-
-Strike uses the **tool-hand** mouse button for lock (LMB if the mallet is left, RMB if right).
+Engage is per movement class. GrindActive is always in contact (no Engage). GrindPassive clicks to engage. GrabPull uses Engage to grab. Strike uses the tool-hand mouse button for lock (LMB if the mallet is left, RMB if right).
 
 #### 11.7 Types
 
 **Grind** — `UGrindActiveCraftMovement`, hands. `DA_Item_Stone` + `DA_Item_Stone` → `DA_Item_SharpenedStone`.
 
-- Left (planted) is the workpiece: stone face up, lock XYZ.
-- Right (working) is the abrader: stone face down, lock Z. Only this hand is read for progress.
-- Without Engage: primary sits slightly above; no progress.
-- Engage: lower primary onto the secondary (close the Z gap).
-- While Engage held, primary XY motion inside the box, speed in band: a stroke is travel `D` then a reverse. Each valid stroke adds progress and a grind cue.
-- Release Engage: lift, meter pauses.
+- Left (planted) is the workpiece: stone face up. Interpreter plants this hand.
+- Right (working) is the abrader: stone face down. Only this hand is read for progress.
+- Always in contact. No Engage lift / pause.
+- Working hand XY motion inside the volume. Speed below min: no progress. Speed above max: clamped. A stroke is travel `D` then a reverse. Each valid stroke adds progress and a grind cue.
 - A2: `LiveMeshes`. Two cobbles the whole session. R / damage returns both stones. Success consumes both, spawns Sharpened Stone into the primary hand.
 
 **Twist** — `UCircleAlternateCraftMovement`, hands. `DA_Item_PlantFiber` + `DA_Item_PlantFiber` → `DA_Item_Cordage`.
@@ -547,7 +524,7 @@ Removing the Crafting IMC returns the player to the default mapping.
 
 ### 15. Status
 
-Locked this pass: snapshot, Neutral-only prompt, wheel select, E start, lock-on-E, R / player-damage cancel, Engage-release pauses Grind, recipe + slot + output fields, single station pointer, one instance per slot, consume / pile / auto-equip order, component owns table + session + interpreter, IMC split, `DA_Type_Name`, `UCraftingRecipeDefinition` / `UCraftingMinigameDefinition`, `UCraftMovement` instanced modules (`FindMove<T>()`, `MotionMode` on the base), A2 movements GrindActive + CircleAlternate, constraint families Physics / Guided / Strike.
+Locked this pass: snapshot, Neutral-only prompt, wheel select, E start, lock-on-E, R / player-damage cancel, GrindActive always in contact, recipe + slot + output fields, single station pointer, one instance per slot, consume / pile / auto-equip order, component owns table + session + interpreter, IMC split, `DA_Type_Name`, `UCraftingRecipeDefinition` / `UCraftingMinigameDefinition`, `UCraftMovement` instanced modules (`FindMove<T>()` only, no MotionMode enum), A2 movements GrindActive + CircleAlternate.
 
 A2 MVP recipes: Grind and Twist. Strip follows the PoC. Station / Tie is A3.
 
@@ -577,8 +554,8 @@ A2.2 Factory commit
 - Success order in §7. Instant-success debug so two Stones become a Sharpened Stone before motion exists
 
 A2.3 Grind
-- HeldItems `BeginCraftMotion` / axis locks / `EndCraftMotion`
-- `Physics` + `LiveMeshes`. Engage, Z gap, XY stroke band
+- HeldItems `BeginCraftMotion` / `EndCraftMotion`
+- GrindActive + `LiveMeshes`. Always in contact. Volume + stroke `D` + speed gate/cap
 
 A2.4 Twist
 - `ACraftPresentationActor` follow-mesh. `Guided` + `SkeletalPhase`. Hide both fibers

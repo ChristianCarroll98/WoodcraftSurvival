@@ -73,7 +73,7 @@ Status: Backlog
 Blocking: GrabPull strip
 Blocked By: Crafting session + cancel; Ground recipe commit
 Description:
-A2.3. HeldItems BeginCraftMotion / SetCraftAxisLocks / EndCraftMotion. Interpreter FindMove<UGrindActiveCraftMovement>() and run Physics grind: planted left XYZ, working right lock Z, Engage closes Z gap, XY stroke band adds progress, Engage release pauses. LiveMeshes. R returns both stones. Success uses the commit path. Tune D / speed band / Z gap on DA_Minigame_Grind in PIE.
+A2.3. HeldItems BeginCraftMotion / EndCraftMotion. Interpreter FindMove<UGrindActiveCraftMovement>(). Always in contact. Planted left, working right inside the volume. XY travel D then reverse adds progress. Speed below min = no progress, above max = clamped. LiveMeshes. R returns both stones. Success uses the commit path. Tune D / volume / speeds / strengths on DA_Minigame_Grind in PIE.
 
 Title: Twist presentation mesh
 Size: S

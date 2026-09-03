@@ -7,7 +7,7 @@
 
 /**
  * Two-hand grind. Planted workpiece, working abrader.
- * MotionMode defaults to Physics.
+ * Always in contact. Progress from XY strokes while the session is live.
  */
 UCLASS(EditInlineNew, DefaultToInstanced)
 class WOODCRAFTSURVIVAL_API UGrindActiveCraftMovement : public UCraftMovement
@@ -22,15 +22,27 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grind", meta = (ClampMin = "0.1"))
 	float StrokeDistance = 8.f;
 
-	/** Minimum working-hand speed that still counts as a stroke. */
+	/** Half-extents of the working-hand travel box in craft space. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grind")
+	FVector WorkingVolumeHalfExtents = FVector(12.f, 12.f, 8.f);
+
+	/** Below this working-hand speed, no progress. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grind", meta = (ClampMin = "0.0"))
 	float MinStrokeSpeed = 20.f;
 
-	/** Maximum working-hand speed that still counts as a stroke. */
+	/** Detected stroke speed is clamped to this when applying progress. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grind", meta = (ClampMin = "0.0"))
 	float MaxStrokeSpeed = 200.f;
 
-	/** World Z gap closed when Engage is held. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grind", meta = (ClampMin = "0.0"))
-	float EngageZGap = 4.f;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grind|Strength")
+	float PlantedLinearStrength = 1000.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grind|Strength")
+	float PlantedAngularStrength = 1000.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grind|Strength")
+	float WorkingLinearStrength = 400.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grind|Strength")
+	float WorkingAngularStrength = 400.f;
 };
