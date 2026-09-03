@@ -14,7 +14,7 @@ FPrimaryAssetId UCraftingRecipeDefinition::GetPrimaryAssetId() const
 	return FPrimaryAssetId(TEXT("CraftingRecipe"), GetFName());
 }
 
-static const UItemDefinition* GetSocketDefinition(const FCraftingSnapshot& Snapshot, EHand Hand, bool bStation)
+static const UItemDefinition* GetSnapshotDefinition(const FCraftingSnapshot& Snapshot, EHand Hand, bool bStation)
 {
 	if (bStation) return Snapshot.StationInstance ? Snapshot.StationInstance->ItemDefinition.Get() : nullptr;
 	if (Hand == EHand::Left) return Snapshot.LeftDefinition;
@@ -22,7 +22,7 @@ static const UItemDefinition* GetSocketDefinition(const FCraftingSnapshot& Snaps
 	return nullptr;
 }
 
-static AItemActor* GetSocketActor(const FCraftingSnapshot& Snapshot, EHand Hand, bool bStation)
+static AItemActor* GetSnapshotActor(const FCraftingSnapshot& Snapshot, EHand Hand, bool bStation)
 {
 	if (bStation) return Snapshot.StationActor;
 	if (Hand == EHand::Left) return Snapshot.LeftActor;
@@ -30,7 +30,7 @@ static AItemActor* GetSocketActor(const FCraftingSnapshot& Snapshot, EHand Hand,
 	return nullptr;
 }
 
-static UItemInstance* GetSocketInstance(const FCraftingSnapshot& Snapshot, EHand Hand, bool bStation)
+static UItemInstance* GetSnapshotInstance(const FCraftingSnapshot& Snapshot, EHand Hand, bool bStation)
 {
 	if (bStation) return Snapshot.StationInstance;
 	if (Hand == EHand::Left) return Snapshot.LeftInstance;
@@ -38,7 +38,7 @@ static UItemInstance* GetSocketInstance(const FCraftingSnapshot& Snapshot, EHand
 	return nullptr;
 }
 
-static bool IsSocketFree(const FCraftingSnapshot& Snapshot, EHand Hand, bool bStation)
+static bool SnapshotHasItem(const FCraftingSnapshot& Snapshot, EHand Hand, bool bStation)
 {
 	if (bStation) return Snapshot.StationInstance != nullptr;
 	if (Hand == EHand::Left) return !Snapshot.bLeftUnarmed && Snapshot.LeftDefinition != nullptr;
@@ -78,14 +78,14 @@ static bool TryBindRecipe(const UCraftingRecipeDefinition* Recipe, const FCrafti
 	UsedHands.SetNumZeroed(2);
 	bool bUsedStation = false;
 
-	auto BindSocket = [&](int32 SlotIndex, EHand Hand, bool bStation)
+	auto BindSnapshotItem = [&](int32 SlotIndex, EHand Hand, bool bStation)
 	{
 		FCraftingSlotBinding Binding;
 		Binding.SlotIndex = SlotIndex;
 		Binding.Hand = Hand;
 		Binding.bStation = bStation;
-		Binding.Instance = GetSocketInstance(Snapshot, Hand, bStation);
-		Binding.Actor = GetSocketActor(Snapshot, Hand, bStation);
+		Binding.Instance = GetSnapshotInstance(Snapshot, Hand, bStation);
+		Binding.Actor = GetSnapshotActor(Snapshot, Hand, bStation);
 		OutMatch.Bindings.Add(Binding);
 
 		if (bStation) bUsedStation = true;
@@ -97,9 +97,9 @@ static bool TryBindRecipe(const UCraftingRecipeDefinition* Recipe, const FCrafti
 	{
 		const int32 HandIndex = (Hand == EHand::Left) ? 0 : 1;
 		if (UsedHands[HandIndex]) return false;
-		if (!IsSocketFree(Snapshot, Hand, false)) return false;
-		if (!SlotMatchesDefinition(Slot, GetSocketDefinition(Snapshot, Hand, false))) return false;
-		BindSocket(SlotIndex, Hand, false);
+		if (!SnapshotHasItem(Snapshot, Hand, false)) return false;
+		if (!SlotMatchesDefinition(Slot, GetSnapshotDefinition(Snapshot, Hand, false))) return false;
+		BindSnapshotItem(SlotIndex, Hand, false);
 		return true;
 	};
 
@@ -124,10 +124,10 @@ static bool TryBindRecipe(const UCraftingRecipeDefinition* Recipe, const FCrafti
 		if (TryHand(SlotIndex, Slot, EHand::Left)) continue;
 		if (TryHand(SlotIndex, Slot, EHand::Right)) continue;
 
-		if (!bHandsRecipe && !bUsedStation && IsSocketFree(Snapshot, EHand::None, true)
-			&& SlotMatchesDefinition(Slot, GetSocketDefinition(Snapshot, EHand::None, true)))
+		if (!bHandsRecipe && !bUsedStation && SnapshotHasItem(Snapshot, EHand::None, true)
+			&& SlotMatchesDefinition(Slot, GetSnapshotDefinition(Snapshot, EHand::None, true)))
 		{
-			BindSocket(SlotIndex, EHand::None, true);
+			BindSnapshotItem(SlotIndex, EHand::None, true);
 			continue;
 		}
 
