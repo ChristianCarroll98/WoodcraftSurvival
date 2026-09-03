@@ -1,5 +1,5 @@
 **Full Description of the Intended Item System**  
-*(Updated 2026-08-26 – Q-mode drop/place on mouse release + station socket snap locked; procedural swing orientation + incidence live; SetExtended live; Stab impulse still TODO; part durability / break results remain designed-not-implemented)*
+*(Updated 2026-08-26 – Q-mode drop/place on mouse release + station socket snap locked; procedural swing orientation + incidence live; SetExtended live. Stab impulse and part-break runtime: designed, deferred.)*
 
 ### 1. High-Level Goals
 - Fully data-driven item definitions using Primary Data Assets + Fragments.
@@ -122,15 +122,15 @@ PrimaryMeshComponent->SetCollisionResponseToChannel(TRACE_EQUIPPABLE, ECR_Block)
 - `DoubleEdged` / `Pierce`: as in `WoodcraftTypes.h`.
 
 **T1 item authoring (Core Loop first set)**  
-Tech tier 1 is stone / bone (Vision). There is no T0 tier. Content slice A1 is this set:
+Tech tier 1 is stone / bone (Vision). Content slice A1 is this set:
 
 - Stone — Equippable, `SingleEdged`, Damage fragment, `Blunt` primitives, Stone PhysMat.
-- Stick — Equippable, `None`, Damage fragment, `Blunt` primitives, Wood PhysMat. Makeshift blunt swing, no orient.
+- Stick — Equippable, `None`, Damage fragment, `Blunt` primitives, Wood PhysMat. Makeshift blunt swing.
 - Sharpened Stone — Equippable, `SingleEdged`, Damage fragment, Sharp/Slash primitive(s). Cuts TestTree and Nettle.
-- Fibrous Stalk — Equippable, `None`, no Damage fragment. `ItemTags` includes the fiber-source tag. Nettle yield.
-- Plant Fiber — Equippable, `None`, no Damage fragment. Split fibers. Does **not** carry the fiber-source tag.
-- Cordage — Equippable, `None`, no Damage fragment. Twisted product of two Plant Fiber.
-- Stone Hatchet — dual-mesh Definition. Primary = StickHandle static mesh (not a live Stick Instance, no Handle item DA). Secondary = `SM_SharpenedStone`. Optional `PrimaryMaterialOverride` / `SecondaryMaterialOverride` for assembled-contact ORM. Existing hatchet HoldPoses.
+- Fibrous Stalk — Equippable, `None`. `ItemTags` includes the fiber-source tag. Nettle yield.
+- Plant Fiber — Equippable, `None`. Split fibers.
+- Cordage — Equippable, `None`. Twisted product of two Plant Fiber.
+- Stone Hatchet — dual-mesh Definition. Primary = StickHandle static mesh. Secondary = `SM_SharpenedStone`. Optional `PrimaryMaterialOverride` / `SecondaryMaterialOverride` for assembled-contact ORM. Existing hatchet HoldPoses.
 
 Fiber-source tag stays on stalk-type items only (Nettle drop now; later yucca / bulrush). Recipes that want “any raw stalk” match that tag. Strip matches Exact `DA_Item_FibrousStalk`.
 
@@ -170,7 +170,7 @@ Left-hand IK works without extra transform mirroring.
 - Hysteresis (enter ~55, exit ~40 — tune as needed).
 - When stuck: changes collision **responses** on WorldStatic, WorldDynamic, and custom channels (macros) COLLISION_ITEM and later COLLISION_STRUCTURE/COLLISION_CREATURE to `Ignore`.  
 - When free: restores them to `Block`.  
-- **Never** uses `SetCollisionEnabled(NoCollision)` — that invalidates Physics Control bodies.
+- Collision responses only; Physics Control bodies stay enabled.
 - Light Control Rig stretch on the visible arms so the hand stays visually glued.
 
 ### 6. UHeldItemsComponent Responsibilities
@@ -457,7 +457,7 @@ Until the relevant break condition is met the head stays attached and simply bec
 - **Basic TryPickup / TryDrop / TryPickupOrDrop + GetIsUnarmed** (sphere sweep on TRACE_EQUIPPABLE)
 - Hybrid collision setup (Item profile + EquippableItemFragment sets TRACE_EQUIPPABLE = Block)
 - Pickup and drop fully functional end-to-end (including left-hand mirroring)
-- Held Stacks design locked (stack place-on-socket is out; stacks drop whole on Q + mouse release)
+- Held Stacks design locked (stacks drop whole on Q + mouse release)
 - Q-mode drop/place-on-socket design locked (commit on release; pickup from socket = ground pickup)
 - EquippableItemFragment already carries NeutralPose / ExtendedPose soft refs
 - Collision damage + incidence + procedural swing orientation (live)
@@ -481,4 +481,4 @@ Until the relevant break condition is met the head stays attached and simply bec
 
 ---
 
-This document reflects the design state as of 2026-08-26. Core pickup/drop, collision hybrid (Primary + Secondary `TRACE_EQUIPPABLE`), Unarmed, Held Stacks, `SetExtended`, collision damage/incidence, and procedural swing orientation are live. Q-mode place-on-socket (extend + preview snap while held, commit attach or world drop on release; stacks always drop, never socket) is designed, not implemented. Stab impulse, part-durability runtime, and sharpening remain future work.
+This document reflects the design state as of 2026-08-26. Core pickup/drop, collision hybrid (Primary + Secondary `TRACE_EQUIPPABLE`), Unarmed, Held Stacks, `SetExtended`, collision damage/incidence, and procedural swing orientation are live. Q-mode place-on-socket (extend + preview snap while held, commit attach or world drop on release) is designed. Stab impulse, part-durability runtime, and sharpening: later.

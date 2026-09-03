@@ -44,9 +44,9 @@ It sits alongside:
 **Pipeline split (locked):**  
 - **Blender** = deform skeleton, weights, authored animation (including simple IK for posing).  
 - **Unreal** = Control Rig / AnimBP for runtime foot plant, terrain adaptation, and later complex contacts (e.g. wyvern climbing).  
-Do not rely on importing Blender IK constraints.
+Export deform bones only.
 
-Fully **manual** rigging (no Rigify meta-rig as the production path).
+Fully **manual** rigging.
 
 #### 2.2 Core Hierarchy Philosophy
 

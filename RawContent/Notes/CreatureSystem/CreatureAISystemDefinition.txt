@@ -10,7 +10,7 @@ It is intended to sit alongside the item and harvestable system definition docum
 
 ### 1. High-Level Goals
 
-- Multidimensional interactions (not simple “attack on sight”).
+- Multidimensional interactions.
 - Combat is risky, avoidable, and high-reward. Strong player agency (fight, avoid, prepare, exploit environment).
 - Readable, telegraphed creature behavior.
 - Highly extendable and maintainable for a solo developer with limited AI experience.
@@ -18,7 +18,7 @@ It is intended to sit alongside the item and harvestable system definition docum
 - Data-driven: new creatures after the foundation wolf should be mostly Definition + mesh/animations + 0–2 unique Linked Assets or Tasks.
 - Prefer composition and data over deep inheritance.
 
-The **wolf** is the foundation creature that proves every shared system. Pack-specific logic is explicitly deferred until basic solo behaviors are solid.
+The **wolf** is the foundation creature that proves every shared system. Pack-specific logic: after solo behaviors are solid.
 
 ---
 
@@ -89,7 +89,7 @@ The central runtime brain. Direct analogue of `UItemInstance`.
 
 #### 4.1 Creature-Specific Runtime Data & Optional Components
 
-**Goal:** Support different tracking needs across many species without subclassing `UCreatureInstance` or `ACreatureActor` and without putting species-specific function calls on the base types.
+**Goal:** Support different tracking needs across many species. Data on Instance + State Tree; base types stay generic.
 
 **Persistent data (preferred)**  
 Lives on `UCreatureInstance` so it survives distance despawn/promote:
@@ -135,7 +135,7 @@ This keeps the base Instance and Actor free of species-specific methods while st
 
 **Perception**  
 Use Unreal’s built-in **AI Perception Component**.  
-Start with Sight only. Keep configuration simple for the wolf. Hearing can be added later.
+Start with Sight only. Keep configuration simple for the wolf. Hearing: later.
 
 Perception events feed the Instance:
 - Newly sensed actors are added or refreshed in the Awareness list.
@@ -145,7 +145,7 @@ Perception events feed the Instance:
 - **Primary Focus** – Almost always one main actor the creature is actively dealing with. Drives most State Tree decisions and the strongest Look-At.
 - **Awareness List** – Small (target 4–8 entries), short-lived working memory of recently perceived actors. Each entry holds the actor, last evaluation, timestamp, and simple category flags (Threat, Ally, Prey, Neutral, …). Entries decay and are pruned.
 
-No heavy long-term individual recognition in the foundation system.
+Foundation: awareness list + primary focus. Long-term individual recognition: later.
 
 ---
 

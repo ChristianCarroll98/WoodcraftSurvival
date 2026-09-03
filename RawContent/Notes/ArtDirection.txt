@@ -4,10 +4,10 @@ Woodcraft Survival – Art Direction
 Purpose
 - Owns the shared visual language for items, harvestables, creatures, structures, and the player mesh.
 - Export rules, material families, ORM, and how special surfaces (fur, leaves, membranes, eyes) should read.
-- Does not own weather, fog density, moon, or darkness. Those live in Notes/EnvironmentSystem/WeatherAndAtmosphere.txt.
-- Does not own creature tint / blink / tapetum implementation. Those live in Notes/CreatureSystem/CreatureMaterialsAndAppearance.txt.
-- Does not own Physical Materials (density / impact). Those stay on the physics side (ItemMeshPhysicsAndImpact.txt).
-- Polish-stage. Not on the Core Loop immediate task list.
+- Weather, fog, moon, darkness: Notes/EnvironmentSystem/WeatherAndAtmosphere.txt.
+- Creature tint / blink / tapetum: Notes/CreatureSystem/CreatureMaterialsAndAppearance.txt.
+- Physical Materials (density / impact): ItemMeshPhysicsAndImpact.txt.
+- Polish-stage. After Core Loop on the task list.
 
 Related
 - Notes/EnvironmentSystem/WeatherAndAtmosphere.txt – weather, climate, fog, darkness, Fast vs Fancy lighting quality.
@@ -18,31 +18,32 @@ Related
 
 
 1. Goals
-- Low-poly, faceted lighting. Faces read from the highlight. Hard value breaks, no outline pass.
+- Low-poly, faceted lighting. Faces read from the highlight. Hard value breaks.
 - Rough surfaces look diffuse. Smooth surfaces hold a tight reflection. Nothing reads as default-plastic.
 - Same export smoothing on plants, items, creatures, and structures.
 - Unique albedo + ORM per object (or per material slot) is worth the authoring time.
 - Mood in the world comes from Environment air and lights, not from extra maps on every mesh.
 
-Non-goals
-- Normal maps (locked off).
-- Thin Translucent for leaves / membranes.
-- Strand hair, shell/fin fur, or a unique full material graph per asset.
-- Wet-weather shader suite. Optional later wetness scalar on the masters only.
+Locked look
+- Faceted Edge normals. ORM for roughness / metal / contact.
+- Leaves / membranes: Sheet master (two-sided, thickness / scatter).
+- Fur: paint coat in Base Color + high roughness; optional fuzz/sheen later.
+- Unique Material Instance + unique textures per asset. Shared masters.
+- Optional later wetness scalar on the masters.
 
 
 2. Mesh export (Blender 5.2 → UE 5.8)
 - FBX Normals: Edge (split face normals). Lighting uses these exported normals.
 - Closed volumes and thin sheets use the same smoothing rule.
 - Harvestable / plant meshes: +Z up, +Y forward (existing convention). Radial clumps may spawn with random yaw.
-- Item hold is origin + HoldPose, not a grip socket.
+- Item hold is origin + HoldPose.
 - Unique atlases default 512. Size from world scale and camera distance. Author at ship resolution.
 - Shared atlas across slots of one mesh is fine when the parts are the same family (one wood, one stone, etc.).
 - Different families on one mesh get different slots (nettle stem vs leaves, hatchet handle vs head).
 
 
-3. No normal maps. Yes ORM.
-Locked 2026-08-27: do not author or import normal maps for this look. A detail normal smears the highlight across Edge splits.
+3. ORM
+Locked 2026-08-27: faceted look from exported Edge normals + ORM. A detail normal smears the highlight across Edge splits.
 
 ORM is the roughness / metal / contact tool. Unreal pack:
 - R = Ambient Occlusion. Gentle. Skip on smooth simple stones. Paint a little in forks, bindings, bark splits, leaf axils.
@@ -102,7 +103,7 @@ A unique Material graph per mesh is expensive (permutations, no shared change). 
 
 Two masters cover almost all authored meshes:
 - M_WoodcraftOpaque — Default Lit, Two Sided off. Tools, stems, trunks, stone, bark, bone, fur, player arms, structure wood/stone.
-- M_WoodcraftSheet — Two Sided on. Multiply tangent normal Z by TwoSidedSign. Until there is a normal map (there is not), feed constant (0,0,1). Leaves, membranes, any thin sheet. Opacity / SSS amount is thickness and scatter, not see-through.
+- M_WoodcraftSheet — Two Sided on. Multiply tangent normal Z by TwoSidedSign. Feed constant (0,0,1). Leaves, membranes, any thin sheet. Opacity / SSS amount is thickness and scatter.
 
 Optional third tiny master:
 - M_WoodcraftEye — Opaque with emissive. Or an Opaque instance with emissive enabled. Eyeshine strength is written by the creature appearance system from Environment darkness.
@@ -131,15 +132,15 @@ Master defaults (created 2026-08-30). Assign these as the Texture Sample default
 5. Surface catalog
 Opaque solids — Default Lit, Two Sided off. Wood, stone, soil, tools, bark, bone, dry fiber, cordage (two-ply geo + blotchy albedo, very rough).
 
-Thin sheets — Sheet master. Nettle leaves, later foliage, wyvern membrane. Two Sided Foliage or Subsurface at polish. Not Thin Translucent.
+Thin sheets — Sheet master. Nettle leaves, later foliage, wyvern membrane. Two Sided Foliage or Subsurface at polish.
 
-Fur — no strand hair. Paint coat in Base Color (roots darker, tips lighter). ORM high roughness, metallic 0, soft AO only where the coat parts. Optional fuzz/sheen on the Opaque instance at grazing angles. Wet fur later = darker multiply + slightly lower roughness. First real test is the wolf.
+Fur — paint coat in Base Color (roots darker, tips lighter). ORM high roughness, metallic 0, soft AO only where the coat parts. Optional fuzz/sheen on the Opaque instance at grazing angles. Wet fur later = darker multiply + slightly lower roughness. First real test is the wolf.
 
 Eyes — separate slot. Low roughness. Blink and tapetum parameters owned by CreatureMaterials. Darkness value owned by Environment.
 
 Membrane — Sheet slot on the creature (already in creature roles). Same TwoSidedSign rule.
 
-Metal — later tiers. Metallic high, roughness carries polish vs tarnish. Still no normal map.
+Metal — later tiers. Metallic high, roughness carries polish vs tarnish.
 
 Ash / charcoal — very rough, low value, metallic 0.
 
@@ -152,15 +153,14 @@ Fire / embers / fireflies — Unlit emissive Niagara (or similar). Bloom on Fanc
 Already modeled: 8-sided stem cylinder, opposing leaf pairs (~14–15), serrated edges, leaf cupping from modeled faces.
 - One mesh, two slots: stem → Opaque instance, leaves → Sheet instance.
 - Same Edge normals on both.
-- Do not rebuild as cards.
 - T1: Base Color + ORM when painted (stem rougher than leaves).
 - Polish: Sheet SSS / Two Sided Foliage on leaves only.
 
 Cordage (T1 item example)
-Hank: two loops + a small waist wrap. Two hex plies, pair diameter 1 cm. ~1300 tris. Denser than Stone / Stick / PlantFiber; Edge facets still read. Do not spiral-coil a long two-ply path.
-- Opaque instance. Plant PhysMat. Simple `Blunt` capsule, not the visual mesh.
+Hank: two loops + a small waist wrap. Two hex plies, pair diameter 1 cm. ~1300 tris. Denser than Stone / Stick / PlantFiber; Edge facets still read.
+- Opaque instance. Plant PhysMat. Simple `Blunt` capsule.
 - First asset to run the full unique BC + ORM import path (Masks / sRGB-off). Bake process is §3.
-- Albedo: blotchy dry-fiber tan, optional khaki-sage streaks. No painted helix lines. Streak value / hank scale vs PlantFiber are polish — enlarge the mesh to match PlantFiber before spending more paint.
+- Albedo: blotchy dry-fiber tan, optional khaki-sage streaks. Streak value / hank scale vs PlantFiber are polish — enlarge the mesh to match PlantFiber before spending more paint.
 - Neutral grips the waist.
 
 
@@ -178,7 +178,7 @@ Polish (after Core Loop, parallel with Environment presets):
 - Sheet subsurface.
 - Fur fuzz/sheen if the wolf still looks plastic at grazing angles.
 - Optional global wetness scalar on the masters.
-- Skip any map that softens Edge facets.
+- Keep Edge facets readable.
 
 LOD cost that matters more than atlas size: two-sided overdraw and particle / volume count. Cap those before raising texture resolution.
 

@@ -52,7 +52,7 @@ void                  PromoteToInstance(AHarvestableActor* Actor); // creates In
 
 ### 3. Relationship to the Item System
 
-Harvestables are **not** Items.
+Harvestables produce Items. Pickup, hold, storage, and crafting stay on the Item system.
 
 - When a harvestable is fully (or partially) processed it **produces** one or more Items by calling into `UItemFactorySubsystem`.
 - Example transitions:
@@ -72,7 +72,7 @@ Most trees and simple deposits placed by world generation have no unique state a
 
 Rule:
 - World generation (or foliage systems) may spawn a pure `AHarvestableActor` that only stores a soft/hard reference to its `UHarvestableDefinition`.
-- No `UHarvestableInstance` is created yet.
+- World-gen actors start Definition-only.
 - On the first meaningful interaction (first damage that changes state, or any event that needs persistence), the Actor calls `PromoteToInstance()`.
 - From that point the Instance owns the runtime data and the Actor simply references it.
 
@@ -156,7 +156,7 @@ Crops are a first-class use of the Harvestable system.
 #### 7.3 Planting (MVP)
 
 - Direct planting on the ground is supported.
-- No tilling or terrain modification for the first version.
+- MVP: plant on ground.
 - Each crop authors a `MinPlantDistance` (cm). On plant attempt a simple overlap check rejects placement if another crop is too close.
   - Dense small crops (carrot, radish-type): ~12–18 cm
   - Medium: ~20–30 cm
@@ -175,7 +175,7 @@ Default ordered stages (per-crop overrides allowed):
 4. **Flowering** (optional)
 5. **Fruiting** and/or **Seeding**
 
-- No fully invisible germinating phase. A tiny sprout appears right away for clear player feedback.
+- A tiny sprout appears right away for clear player feedback.
 - During Sprout and early Growing, relative scale (and optionally material parameters) is driven by progress inside the stage for smooth visual growth.
 - Hard mesh swaps occur at major stage boundaries when geometry needs to change.
 - Early-stage meshes (tiny sprout / seedling) can be shared across many crop species.
@@ -200,7 +200,7 @@ When Progress ≥ 1.0 the plant advances stage, resets Progress, and updates mes
 - Perfect conditions can reduce total time by roughly ¼–⅓.
 - Poor conditions slow growth significantly or halt it (multipliers approach zero).
 
-Soil quality for MVP is sampled once from the biome / microbiome at plant location and stored on the Instance. No ongoing voxel soil simulation.
+Soil quality for MVP is sampled once from the biome / microbiome at plant location and stored on the Instance.
 
 Water level and consumption exist as future extension points; they are not required for the first playable crops.
 
