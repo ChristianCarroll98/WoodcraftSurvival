@@ -3,9 +3,6 @@
 
 Authoritative description of how item-driven hold poses and temporary montages (pickup, drop, future swings) are handled between `UHeldItemsComponent`, the C++ AnimInstance, and the FPArms AnimBP.
 
-Replaces earlier experimental approaches (per-arm sub-AnimBPs, large animation structs, Player-BP-owned montage references).
-
----
 
 ### 1. Goals
 
@@ -152,11 +149,11 @@ Exact blend timings remain open for tuning by the user on the montage assets.
 
 ### 6.1 Pre-drop socket snap pose (locked 2026-08-26)
 
-While Q + mouse is held and the item is preview-snapped to a station socket, that arm does **not** keep the item’s Neutral/Extended HoldPose.
+While Q + mouse is held and the item is preview-snapped to a station socket, that arm uses the shared ReleasePose.
 
 - Push one shared **ReleasePose** from `UHeldItemsComponent` (palm facing away from the item, hand opening as if placing it down). Not authored per item.
 - Visible-arm Control Rig still reaches toward the item so the hand stays in the neighborhood of the placed mesh.
-- **Location only, and loose** — do not exact-snap the hand to the dynamic grip target. Do **not** copy item rotation into the hand (no `AnimRef Hand relative to WeaponBone` rotation × item world rot). Full grip rotation is what mangles the wrist when the socket orientation disagrees with a hold pose.
+- **Location only, and loose** — hand stays near the placed mesh. Grip rotation stays off while snapped so the wrist follows the place, not the hold pose.
 - The item itself stays at `SocketTransform × PlacementOffsetTransform`. The arm yields to the item, not the other way around.
 - When the preview snap is lost (still holding Q + mouse, no socket in range): restore that hand’s Extended HoldPose and the normal full grip (position + rotation).
 - On release commit (socket attach or world drop): existing drop montage / EquipUnarmed path.
@@ -189,4 +186,4 @@ This pose is presentation only. It does not change pickup, place, or stack rules
 
 ---
 
-*Locked 2026-08-15. Updated 2026-08-26 with pre-drop socket-snap ReleasePose (shared, location-only loose IK, no grip rotation). Fragment renamed to UEquippableItemFragment 2026-08-19. Update when open points are resolved or when two-handed / swing support is designed.*
+*Locked 2026-08-15. Updated 2026-08-26 with pre-drop socket-snap ReleasePose (shared, location-only loose IK). Update when open points are resolved or when two-handed / swing support is designed.*

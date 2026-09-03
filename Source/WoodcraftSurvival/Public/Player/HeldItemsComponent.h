@@ -13,6 +13,8 @@ class UItemDefinition;
 class UItemFactorySubsystem;
 class UFPArmsAnimInstance;
 
+DECLARE_MULTICAST_DELEGATE(FOnHeldItemsChanged);
+
 /** Temporary data for an in-progress pickup animation on one hand. */
 struct FPendingPickupData
 {
@@ -272,6 +274,13 @@ public:
 	UFUNCTION(BlueprintPure, Category = "CoreAPI")
 	bool GetIsExtended(EHand Hand) const;
 
+	/** Returns true if the item in the given hand is the Unarmed item. */
+	UFUNCTION(BlueprintPure, Category = "CoreAPI")
+	bool GetIsUnarmed(EHand Hand) const;
+
+	/** Fires after a hand item changes or Neutral / Extended flips. */
+	FOnHeldItemsChanged OnHeldItemsChanged;
+
 	/** Returns which hand is holding the given item, or EHand::None. */
 	UFUNCTION(BlueprintPure, Category = "CoreAPI")
 	EHand GetHandHoldingItem(const AItemActor* Item) const;
@@ -405,9 +414,6 @@ private:
 
 	/** Returns the item actor that the player is currently looking at, within the specified max distance. */
 	AItemActor* FindLookedAtItem(float Radius = 5.f, float MaxDistance = 250.f) const;
-
-	/** Returns true if the item in the given hand is the Unarmed item. */
-	const bool GetIsUnarmed(EHand Hand) const;
 
 	/** Plays pickup montage for the specified hand */
 	bool PlayPickupMontage(EHand Hand, FString& OutResult) const;

@@ -71,7 +71,12 @@ AItemActor* UHeldItemsComponent::GetHeldItem(EHand Hand) const
 void UHeldItemsComponent::SetExtended(EHand Hand, bool bExtended)
 {
 	if (Hand == EHand::None) return;
-	GetHandState(Hand).bExtended = bExtended;
+
+	FHandState& State = GetHandState(Hand);
+	if (State.bExtended == bExtended) return;
+
+	State.bExtended = bExtended;
+	OnHeldItemsChanged.Broadcast();
 }
 
 bool UHeldItemsComponent::GetIsExtended(EHand Hand) const
@@ -699,6 +704,7 @@ bool UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand, FStr
 	State.MassScale = MassScale;
 	State.MassScaleLinear = MassScaleLinear;
 	State.LastItemVelocity = FVector::ZeroVector; // reset until next tick samples
+	OnHeldItemsChanged.Broadcast();
 	return true;
 }
 
@@ -1237,7 +1243,7 @@ AItemActor* UHeldItemsComponent::FindLookedAtItem(float Radius, float MaxDistanc
 	return nullptr;
 }
 
-const bool UHeldItemsComponent::GetIsUnarmed(EHand Hand) const
+bool UHeldItemsComponent::GetIsUnarmed(EHand Hand) const
 {
 	if (Hand == EHand::None) return false;
 

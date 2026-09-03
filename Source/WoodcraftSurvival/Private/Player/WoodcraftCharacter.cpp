@@ -2,6 +2,7 @@
 
 #include "Player/WoodcraftCharacter.h"
 #include "Player/HeldItemsComponent.h"
+#include "Player/CraftingComponent.h"
 
 // Sets default values
 AWoodcraftCharacter::AWoodcraftCharacter()
@@ -9,7 +10,8 @@ AWoodcraftCharacter::AWoodcraftCharacter()
  	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
 
-	HeldItemComponent = CreateDefaultSubobject<UHeldItemsComponent>(TEXT("HeldItemsComponent"));
+	HeldItemsComponent = CreateDefaultSubobject<UHeldItemsComponent>(TEXT("HeldItemsComponent"));
+	CraftingComponent = CreateDefaultSubobject<UCraftingComponent>(TEXT("CraftingComponent"));
 }
 
 // Called when the game starts or when spawned

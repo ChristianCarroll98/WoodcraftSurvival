@@ -1,7 +1,7 @@
 **Structure System – Definition**
-*(Updated 2026-08-28. Building, sections, sockets, workbench example. Not a C++ implementation plan.)*
+*(Updated 2026-08-28. Building, sections, sockets, workbench example.)*
 
-This file owns structures and building. Crafting states what a station must provide (Notes/CraftingSystem/CraftingSystemImplementation.txt §9) and owns craft recipes / minigames. Items own Q-mode, hold, and `PlacementOffsetTransform` (Notes/ItemSystem/ItemSystemImplementation.txt). Do not duplicate those — reference them.
+This file owns structures and building. Crafting states what a station must provide (Notes/CraftingSystem/CraftingSystemImplementation.txt §9) and owns craft recipes / minigames. Items own Q-mode, hold, and `PlacementOffsetTransform` (Notes/ItemSystem/ItemSystemImplementation.txt).
 
 Open sections are marked OPEN. Workbench build graph below replaces the old linear 6-step list.
 
@@ -10,9 +10,9 @@ Open sections are marked OPEN. Workbench build graph below replaces the old line
 
 - Player-placed and world-placed structures: stations, storage, shelter, cooking, decorative, later farming boxes.
 - Data-driven like Items / Harvestables: Definition → Instance → Actor + fragments. Fragments stay data + spawn/init. Actors stay thin.
-- Place a ghost blueprint, then apply raw items to sections. Adding *is* the shaping. No intermediate “hewn part” crafts unless a later structure needs them.
-- One actor from ghost through finished. Not a pile of part-actors snapped together.
-- Ghost fills in **per section** as each apply commits. The structure does not stay fully ghostly until 100% and then pop.
+- Place a ghost blueprint, then apply raw items to sections. Adding *is* the shaping. Hewn-part crafts only if a later structure needs them.
+- One actor from ghost through finished.
+- Ghost fills in **per section** as each apply commits.
 - Finished crafting stations expose what Crafting already specified: the structure DA is the station identity, and zero or one item slot.
 
 
@@ -27,16 +27,16 @@ Open sections are marked OPEN. Workbench build graph below replaces the old line
 | Fire fuel, burn stages, ash / charcoal | Fire (when that doc exists) |
 | Two-hand log carry | Items / Player (A4) |
 
-Hammer + `B` ghost-place mode: OPEN (Vision). First workbench cannot require a crafted mallet — mallet is after the hatchet, hatchet is after the bench.
+Hammer + `B` ghost-place mode: OPEN (Vision). First workbench: place without a crafted mallet (mallet is after the hatchet).
 
 
 ### 3. Sections (build graph)
 
-A structure is a set of **sections**, not a numbered queue.
+A structure is a set of **sections**.
 
 Each section:
 
-- One allowed item match: exact item DA **or** a tag. Not both.
+- One allowed item match: exact item DA or a tag.
 - Count **1**. One apply fills it.
 - Need two logs or two materials → two sections.
 - `DependsOn`: other section ids. All must be full before this section is available.
@@ -45,7 +45,7 @@ Each section:
 
 A section is empty or full. Available = empty and every dependency is full. Several sections can be available at once.
 
-Later structures may allow a set on one section (Log **or** Wood Chunk). Not needed for the workbench.
+Later structures may allow a set on one section (Log or Wood Chunk). Workbench sections stay single-match.
 
 Apply never parks an item on a ghost. Q-release on a valid section consumes and destroys that Instance (ItemFactory teardown) and fills the section.
 
@@ -59,7 +59,7 @@ Unbuilt sections use one shared ghost material, tinted:
 - **Green tint** — Q-extend preview on the look-at available section that matches the held item. Same material.
 - **Real material + Block collision** — section full.
 
-Ghosts do **not** socket-snap the held item. Q-extend is the same as a ground-drop extend. Release on a valid green section → consume + fill. Otherwise → world drop. Stacks always world-drop.
+Ghost apply uses Q-extend like a ground drop. Release on a valid green section → consume + fill. Otherwise → world drop. Stacks world-drop.
 
 While looking at the structure, a vertical checklist on one side (default **left**). Whole graph, not only live sections.
 
@@ -89,7 +89,7 @@ Socket kinds:
 | **Attachment** | Child structure (rack over fire). | Later. Not an item socket. |
 | **Anim pivot** | Grindstone axle, etc. | Visual only. Q-place never sees it. |
 
-There is no BuildAccept socket. Ghost apply is consume + section fill.
+Ghost apply is consume + section fill.
 
 Workbench: one ItemSlot, marked flat patch on the top, no divot. Back-edge stick rail is mesh only until a second slot exists. Grindstone: zero ItemSlots.
 
@@ -108,7 +108,7 @@ HeldItems does **not** look up mesh socket names. It talks to the looked-at `ASt
 
 Each tick while Q is held, HeldItems asks the look-at structure:
 
-1. Unfinished → `TryGetApplySection(HeldItem)` — if a section is available, matches the item, and is under the look hit: green that section. Do **not** move the item to a socket TM.
+1. Unfinished → `TryGetApplySection(HeldItem)` — if a section is available, matches the item, and is under the look hit: green that section. Item stays in-hand until release consume.
 2. Finished + empty ItemSlot → `TryGetItemSlotWorldTransform(OutSocketTM)` — preview-snap the live item actor to `OutSocketTM × PlacementOffsetTransform` (existing Item Q-place path, ReleasePose, location-only IK).
 3. Else → no target; release is a world drop.
 
@@ -122,7 +122,7 @@ On Q-release:
 
 Same path as a ground item. The item actor is the target, not the socket.
 
-If that actor is attached to a structure slot, `TryPickup` detaches it and the structure clears `SlotItem`. HeldItems should notify the attach-parent structure (`NotifySlotEmptied`) so occupancy cannot desync. Do not make pickup depend on reading a socket TM — the item is already in the world at the composed transform.
+If that actor is attached to a structure slot, `TryPickup` detaches it and the structure clears `SlotItem`. HeldItems should notify the attach-parent structure (`NotifySlotEmptied`) so occupancy cannot desync. Pickup uses the item actor in the world at the composed transform.
 
 **API sketch (design, names OPEN)**
 
@@ -136,7 +136,7 @@ AStructureActor / IStructurePlaceTarget
   UItemInstance* GetSlotItem() const;
 ```
 
-`TryGetItemSlotWorldTransform` returns the **socket frame**, not the final item TM. HeldItems applies `PlacementOffsetTransform`. Crafting never calls this; it only reads `GetSlotItem` + station identity.
+`TryGetItemSlotWorldTransform` returns the **socket frame**. HeldItems applies `PlacementOffsetTransform`. Crafting reads `GetSlotItem` + station identity.
 
 
 ### 7. Architecture sketch
@@ -169,12 +169,12 @@ FStructureSection
 
 Fragments may create **extra** components in `OnSpawned` (grindstone wheel + axle later). That hook is still data + init only — no fragment tick. A component the fragment adds may tick (spin while hone Engage is held). Crafting owns when the wheel should spin; the fragment only makes the moving piece exist. Those extras are not sections and not ItemSlots.
 
-Do not put `TObjectPtr<UStaticMeshComponent>` on the definition. Do not require a hand-authored component list on a Blueprint for the data to be valid. A preview BP is fine for art; runtime source of truth is the DA.
+Section meshes live on the actor. A preview BP is fine for art; runtime source of truth is the DA.
 
 
 ### 8. Workbench
 
-`DA_Structure_Workbench`. T1. First slotted station. Hands recipes are not valid here. First craft recipe: Tie (Sharpened Stone + Stick + Cordage → Stone Hatchet) — authored in Crafting.
+`DA_Structure_Workbench`. T1. First slotted station. First craft recipe: Tie (Sharpened Stone + Stick + Cordage → Stone Hatchet) — authored in Crafting.
 
 Roadmap A3 may spawn a **finished** bench (all sections full, `Slot` live). A4 is player-built from a ghost. Logs need two-hand carry (A4).
 
@@ -211,7 +211,7 @@ Campfire: Structure would own the placed actor + sections; Fire would own fuel a
 
 - A3: `UStructureDefinition` / Instance / Actor + Station fragment. Finished workbench in the test level. One `Slot`. Q-place / pickup per §6.
 - A4: ghost place (mode OPEN), section apply + consume, workbench graph in §8, two-hand logs.
-- Not in Core Loop: shelter set, degradation, storage retrieve, grindstone build, salvage.
+- Deferred: shelter set, degradation, storage retrieve, grindstone build, salvage.
 
 
 ### 11. OPEN

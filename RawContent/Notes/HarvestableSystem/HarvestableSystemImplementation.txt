@@ -13,7 +13,7 @@ This mirrors the Item convention (`UEquippableItemFragment`, etc.) and keeps the
 - `AHarvestableActor` is the current world representation and **may** be destroyed and later recreated from an Instance (streaming, save/load, density management).
 - Support lazy Instance creation for dense world-generated resources (trees, rocks, ore, etc.).
 - Player-planted crops always create an Instance immediately.
-- When a harvestable is processed it **produces Items** via `UItemFactorySubsystem`. It is never itself an Item.
+- When a harvestable is processed it **produces Items** via `UItemFactorySubsystem`.
 - Clean separation of concerns:
   - **Data** → Definitions + Fragments
   - **Runtime state** → `UHarvestableInstance` (long-lived, lazy)
@@ -78,7 +78,7 @@ void                  PromoteToInstance(AHarvestableActor* Actor); // creates In
 ### 3. Lifetime & Lazy Instance Rules (Locked)
 
 - World generation and foliage systems may spawn pure `AHarvestableActor`s that only reference a Definition.
-- No `UHarvestableInstance` exists yet → minimal memory cost for dense forests.
+- World-gen actors start Definition-only → minimal memory cost for dense forests.
 - On the first meaningful interaction (damage that changes health, any event that needs to be saved, etc.) the Actor calls `PromoteToInstance()`.
 - From that point the Instance owns all mutable runtime data and the Actor simply references it.
 - Player-planted crops **always** create the Instance at plant time (they carry unique growth state from day zero).
@@ -92,7 +92,7 @@ Exactly the same philosophy as the Item system.
   - Object Type = `Harvestable` (custom)
   - Collision Enabled = QueryAndPhysics
   - Sensible default responses that make standing trees / stumps / rocks solid (Block WorldStatic, WorldDynamic, Pawn, Item, etc.).
-  - Does **not** respond to `TRACE_EQUIPPABLE` by default.
+  - Profile is for standing resources (trees, stumps, rocks).
 
 - In `AHarvestableActor` initialization the Primary Mesh receives:
   ```cpp
@@ -169,7 +169,7 @@ When trunk health reaches zero:
 
 The stump is itself a lightweight Harvestable that can later be destroyed for a few more sticks or wood scraps.
 
-**Note:** A proper Log Item (with branch-removal rules, two-handed carry, size decisions, etc.) is explicitly deferred. Sticks prove the full pipeline immediately.
+**Deferred:** Log Item (branch-removal, two-handed carry, size). Sticks prove the full pipeline.
 
 ### 8. Implementation Order (Recommended)
 
@@ -200,7 +200,7 @@ The stump is itself a lightweight Harvestable that can later be destroyed for a 
 6. **CropHarvestableFragment collision override** (can be done in parallel or immediately after core works)
    - Prove that fragments can change collision responses cleanly.
 
-### 9. Future / Not in MVP (documented so they are not lost)
+### 9. Deferred
 
 - Progressive trunk damage via shape keys or material parameters.
 - Independent branch health / removal (hit branch → spawn sticks + hide branch mesh / shape key).
@@ -216,7 +216,7 @@ The stump is itself a lightweight Harvestable that can later be destroyed for a 
 ### 10. Open Questions (still small)
 
 - Exact shape of `FDamageInfo` and where final damage calculation lives (tool vs shared helper vs fragment).
-- Whether `AHarvestableActor` should support a Secondary mesh from day one (probably not needed for MVP trees).
+- Whether `AHarvestableActor` should support a Secondary mesh for complex trees.
 - Exact folder layout under Content (Environment/Harvestables/ vs top-level Harvestables/).
 - Whether the Factory should eventually own a registry of all live Instances for save/load and density management.
 

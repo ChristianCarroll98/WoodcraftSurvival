@@ -31,19 +31,19 @@ Status: Done (2026-09-02)
 Blocking:
 Blocked By:
 Description:
-Notes/CraftingSystem/CraftingSystemImplementation.txt is far enough to implement hands crafting. Locked: UCraftingRecipeDefinition slots (Exact DA or tag, one instance per slot, Station unset = hands), UCraftingMinigameDefinition with one instanced UCraftMovement, UCraftingComponent as session owner, Factory-only consume/spawn, E start / R cancel / damage interrupt, GrindActive + CircleAlternate as the first two crafts. Out of that card: knap, forge, hone, workbench.
-
-
---- In Progress ---
+Notes/CraftingSystem/CraftingSystemImplementation.txt is far enough to implement hands crafting. Locked: UCraftingRecipeDefinition slots (Exact DA or tag, one instance per slot, Station unset = hands), UCraftingMinigameDefinition with one instanced UCraftMovement, UCraftingComponent as session owner, Factory-only consume/spawn, E start / R cancel / damage interrupt, GrindActive + CircleAlternate as the first two crafts. Knap, forge, hone, workbench: later cards.
 
 Title: Crafting data + match prompt
 Size: XS
 Labels: feature
-Status: In Progress
+Status: Done (2026-09-02)
 Blocking: Crafting session + cancel; Ground recipe commit
 Blocked By:
 Description:
-A2.0 compile slice. Add UCraftingRecipeDefinition, UCraftingMinigameDefinition, UCraftMovement, UGrindActiveCraftMovement, UCircleAlternateCraftMovement, UCraftingComponent. Enums and ECraftingMotionMode in WoodcraftTypes.h. FindMatches on the recipe definition. FindMove<T>() on the minigame definition (same pattern as FindFragment<T>()). MotionMode property + GetMotionMode() on UCraftMovement; subclasses set the default. Component on AWoodcraftCharacter. Snapshot from HeldItems. Debug [E] Craft {Name} when both hands Neutral and a recipe matches. Author DA_Minigame_Grind (GrindActive module), DA_Minigame_Twist (CircleAlternate module), DA_Recipe_SharpenedStone, DA_Recipe_Cordage. Assign RecipeAssets on the player BP. No consume, no IMC, no player-input port.
+A2.0 compile slice. Add UCraftingRecipeDefinition, UCraftingMinigameDefinition, UCraftMovement, UGrindActiveCraftMovement, UCircleAlternateCraftMovement, UCraftingComponent. Crafting enums in WoodcraftTypes.h. FindMatches on the recipe definition. FindMove<T>() on the minigame definition (same pattern as FindFragment<T>()). Component on AWoodcraftCharacter. Snapshot from HeldItems. Debug [E] Craft {Name} when both hands Neutral and a recipe matches. Author DA_Minigame_Grind (GrindActive module), DA_Minigame_Twist (CircleAlternate module), DA_Recipe_SharpenedStone, DA_Recipe_Cordage. Assign RecipeAssets on the player BP. Consume, IMC, and player-input port: later cards.
+
+
+--- In Progress ---
 
 
 --- Backlog (priority order) ---
@@ -73,7 +73,7 @@ Status: Backlog
 Blocking: GrabPull strip
 Blocked By: Crafting session + cancel; Ground recipe commit
 Description:
-A2.3. HeldItems BeginCraftMotion / SetCraftAxisLocks / EndCraftMotion. Interpreter FindMove<UGrindActiveCraftMovement>() and run Physics grind: planted left XYZ, working right lock Z, Engage closes Z gap, XY stroke band adds progress, Engage release pauses. LiveMeshes. R returns both stones. Success uses the commit path. Tune D / speed band / Z gap on DA_Minigame_Grind in PIE.
+A2.3. HeldItems BeginCraftMotion / EndCraftMotion. Interpreter FindMove<UGrindActiveCraftMovement>(). Always in contact. Planted left, working right inside the volume. XY travel D then reverse adds progress. Speed below min = no progress, above max = clamped. LiveMeshes. R returns both stones. Success uses the commit path. Tune D / volume / speeds / strengths on DA_Minigame_Grind in PIE.
 
 Title: Twist presentation mesh
 Size: S
@@ -100,7 +100,7 @@ Status: Backlog
 Blocking:
 Blocked By: GrindActive minigame; CircleAlternate minigame
 Description:
-After the Grind + Twist PoC. Add UGrabPullCraftMovement. DA_Recipe_PlantFiber + DA_Minigame_Strip. Fibrous Stalk planted, Unarmed working hand, Engage grab, pull D along the stalk. Output DA_Item_PlantFiber only. Wood Scraps waits for fire.
+After the Grind + Twist PoC. Add UGrabPullCraftMovement. DA_Recipe_PlantFiber + DA_Minigame_Strip. Fibrous Stalk planted, Unarmed working hand, Engage grab, pull D along the stalk. Output DA_Item_PlantFiber. Wood Scraps / Kindling: fire system.
 
 Title: Workbench slot + Tie
 Size: M
