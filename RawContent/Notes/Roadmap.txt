@@ -57,7 +57,7 @@ A3. Structure scaffolding + placed Workbench
 - Workbench definition: station id + one slot.
 - Slot uses the shared socket frame + item PlacementOffsetTransform.
 - Place = Q + mouse hold (extend, preview snap) → release attach. Retrieve = same as ground pickup. Slot accepts a single item.
-- Bench recipe: SharpenedStone + Stick + Cordage → StoneHatchet.
+- Bench recipe: SharpenedStone + Stick + Cordage → StoneHatchet. One session, three minigame stages (Split / Seat / Wrap).
 
 A4. Building + logs (final Core Loop stage)
 - Player-built workbench from the ghost graph in Notes/StructureSystem/StructureSystemDefinition.txt (3 Log + 2 Cordage + 5 Stick).

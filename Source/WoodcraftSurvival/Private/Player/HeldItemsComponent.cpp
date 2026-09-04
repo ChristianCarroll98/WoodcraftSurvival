@@ -246,7 +246,7 @@ void UHeldItemsComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 
 	LookSpeed = LookDelta.Size() / FMath::Max(DeltaTime, 0.0001f);
 
-	if (GbDebugPrint && GEngine)
+	if (GbDebugSwing && GEngine)
 	{
 		FVector RelativeVel = HandRight.LastItemVelocity;
 		if (const AActor* OwnerActor = GetOwner())
@@ -658,7 +658,7 @@ bool UHeldItemsComponent::AttachItemToControl(AItemActor* Item, EHand Hand, FStr
 	ControlData.bUseCustomControlPoint = true;
 	ControlData.CustomControlPoint = GetRelativeTransformBetweenWeaponAndHandBones(Hand).GetLocation();
 
-	if (GbDebugPrint && GEngine)
+	if (GbDebugSwing && GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 3.0f, FColor::Cyan,
 			FString::Printf(TEXT("PhysControl mass=%.2f lever=%.1f angS=%.2f linS=%.2f  L=%.1f A=%.1f"),
@@ -875,7 +875,7 @@ void UHeldItemsComponent::UpdateControlStrengths(EHand Hand)
 
 	ApplyControlStrengths(Hand, AngMul, LinMul);
 
-	if (GbDebugPrint && GEngine && Hand == EHand::Right)
+	if (GbDebugSwing && GEngine && Hand == EHand::Right)
 	{
 		const float DampA = FMath::Max(0.f,
 			AngularDampingRatio + AngularDampingMassSlope * (State.MassScale - 1.0f));
@@ -1109,7 +1109,7 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 
 	// Debug: RGB at grip/control point — blue (Z) should stay locked to WeaponBone Z
 	// + wrist-limit arrows: Neutral (green), CW limit (cyan), CCW limit (yellow)
-	if (GbDebugDraw)
+	if (GbDebugSwing)
 	{
 		if (UWorld* World = GetWorld())
 		{

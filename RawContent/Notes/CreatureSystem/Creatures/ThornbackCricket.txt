@@ -1,0 +1,181 @@
+**Thornback – Comprehensive Reference Notes**
+*Woodcraft Survival – UE 5.8 / Blender 5.2*
+*(Created 2026-09-04)*
+
+Species-specific reference for the Thornback, an oversized armored bush cricket of lush grassland. Sits alongside `Wolf.txt`, `DesertWyvern.txt`, `FireSalamander.txt`, and `MarshwispSpider.txt`.
+
+Related:
+- `../CreatureAISystemDefinition.txt`
+- `../CreatureMaterialsAndAppearance.txt`
+- `../CreatureRiggingAndAnimation.txt`
+- `Notes/ArtDirection.txt` – faceted chitin, dielectric / metallic 0
+- Clothing / armor implementation — gauntlet and greave crafts wait on that pass
+
+Real-world references (scale, silhouette, and habit): armored bush crickets / armored katydids of southern Africa, especially *Acanthoplus discoidalis* and nearby Hetrodinae. Spiny pronotum, flightless, omnivorous, congregates on food, hard bite, stridulates. The fantasy step is size: the pronotum comes off large enough to become a forearm or shin plate.
+
+Implementation is after the wolf foundation and after the first clothing system. Harvest item and recipes can be authored when clothing exists.
+
+---
+
+### Section 1: Lore, Morphology, and Behavior
+
+**Evolutionary Origins**
+The Thornback is a scaled armored bush cricket. Ancestral hetrodines already lived in open grass, carried a thorned pronotum as a shield against birds and small mammals, ate almost anything they could catch or find, and piled onto carcasses. In this world that body plan ran larger in the lush grassland belt — more plant bulk, more mid-size carcasses.
+
+A heavy, flightless, spiny orthopteran that wins by numbers and by being miserable to grab.
+
+**Size (adult)**
+- Body length: about 2–2.5 ft (0.6–0.75 m).
+- Height at the pronotum in a normal stand: about 1–1.5 ft (0.3–0.45 m).
+- Pronotum plate: forearm-length, the harvest target. Roughly 12–16 in along the shield.
+- Hind femora thick and long; cocked they rise above the grass.
+- Females a little larger, with a visible ovipositor. Males slimmer, louder stridulation.
+- One mesh is enough for the first pass; sex can be tint plus a small extra (ovipositor) later.
+
+Small-to-medium. One animal is a pest. Four to eight on a carcass is the threat.
+
+**Appearance (read at distance, then close)**
+Signature read: a medium carcass in open grass with several high, jagged profiles stuck into it and hind legs angled up through the stems. From a way off they can look like broken brush or a strange shrub on the kill. Closer, the keeled pronotum and the cocked jumping legs lock the silhouette as insect.
+
+Close: a bulky cricket. Head tucked under the front of the shield. Long antennae. Short wing pads. Abdomen segmented and also spiked. Every surface that can carry a thorn does.
+
+**Coloration**
+Living greens and field browns, randomized per individual inside a lush-grass envelope. Some animals lean olive, some dead-grass yellow-brown. Low-contrast mottling. Shape does the work.
+
+Chitin is dielectric: darker and a bit smoother on the shield face, rougher in the segment folds. Metallic 0.
+
+**Detailed anatomy (modeling)**
+- Head: heavy mandibles, downward chew. Eyes modest, dark. Antennae long; two-bone chain per side is enough if they read as whips.
+- Pronotum: the character. High keel, forward and side thorns, covers the thorax and the base of the abdomen like a saddle. This piece is the **Thornback Carapace** when harvested.
+- Thorax / wing pads: short, leathery. A flutter on a hit reaction is plenty.
+- Fore and mid legs: walking, spined. Used to hold a carcass and to shove.
+- Hind legs: saltatorial plan (thick femur, long tibia, spined). Cock for a short lunge, a kick, and the “sticks up through the grass” corpse-pile silhouette.
+- Abdomen: plump, segmented, ovipositor on females.
+
+**Locomotion and posture**
+Walk is a cricket walk: high-stepping, abrupt, body pitching a little as the hind legs hitch. Starts and stops are instant. While feeding they hunch into the carcass with the shield up and the hind legs braced out and back.
+
+Jerky, hard-segment motion. Pose, hold, snap. Antennae and palps stay busy. Hind legs should look too cocked even at rest. The ick is the pile — several shields working in a dead animal — and the way a single one twitches in the grass before you see the rest.
+
+**Realistic lifestyle and ecology**
+Lush grassland and meadow. Greener, denser forage than the arid plains and mesas. They keep to open ground for warmth and sight. They enter a woodland edge or a wet margin when they smell a carcass, a battlefield, or a crop plot.
+
+Omnivores. Fresh growth, seeds, insects, and any dead flesh they can reach. High food drive. A downed deer-scale animal in their fields draws a pile. They will eat their own dead after a scatter; a player can use that.
+
+Diurnal to crepuscular. Dusk stridulation is an audio landmark for the biome. Overlap at a marsh-meadow edge: Thornbacks on a kill until dark, a Marshwisp taking wet-edge leftovers later.
+
+Crowd gathered on food. Spacing is “as close as the spines allow.” Individuality is extremely low — lower than the Marshwisp. Disposition almost flat. Hungry cluster or not.
+
+**Behavior patterns**
+- Default: walk and graze / sit in grass / stridulate at dusk.
+- Carcass scent or a visible dead medium-or-larger animal: converge and pile.
+- Player near a pile, or a player that smells like food (open carcass, blood): test with shoves and bites. They climb whatever is in the way.
+- Swing from a held weapon that connects: that individual is punted and the nearby ones scatter a few steps, then often come back if the food is still there.
+- Unarmed punch into the spines: the player is the one who pays (Pierce from the shield and leg thorns).
+- After a scatter, survivors may turn on the dead and wounded Thornbacks.
+
+---
+
+### Section 2: Gameplay Aspects
+
+**Spawn and habitat**
+Lush grassland / meadow. Open fields first. Forest and wetland edges as a response to a corpse or a farm plot. Groups. A lone animal is a grazer. The encounter is the pile.
+
+**Core AI loop**
+Ecological graze / idle / stridulate. Shared `EvaluateTarget` for player and carcasses. Food drive dominates. Branches:
+
+- **Graze / Idle**
+- **Converge on Carcass** – the main event. Climb on, feed, hind legs up.
+- **Chip Attack** – bite (Blunt) and shove when the player is in the pile or has just stolen the food.
+- **Punt / Scatter** – on a solid weapon hit: that unit knocks off, neighbors flinch outward, then food drive pulls them back if the carcass or player is still there.
+- **Cannibal Feed** – dead Thornbacks count as food.
+
+Group fields on the Instance can bias “how many are already on this corpse.”
+
+Disposition ranges sit almost flat.
+
+**Player interaction and telegraphing**
+Readable from a distance if the player has learned the silhouette: jagged shields and cocked hind legs on a kill, or a dark patch of spines in otherwise even grass. Dusk chirp / rasp points at the field before the player sees them.
+
+Close: rear the pronotum toward the threat, hind legs cock, stridulate louder, then shove and bite.
+
+Avoidable: leave a feeding pile alone, carry carcasses out of their fields, punt the first few and leave. The bad case is standing in them and swinging too slow while several chew and press.
+
+**Combat and damage types**
+Uses Slash / Pierce / Blunt. Bite is an animation.
+
+- Thornback bite (mandibles) → **Blunt**. Small chunk of HP. Crushing chew.
+- Unarmed / bare-hand strike into a live Thornback → the player takes **Pierce** from spike primitives on the pronotum and legs. Fists are Blunt outgoing; the thorns stabbed the hand.
+- Held weapon or tool → the item’s own primitive type into the cricket. Impulse punts. The held item takes the contact.
+- Body-check → Blunt from bulk. Spike primitives reserved for unarmed contact.
+
+They are light enough that most committed weapon swings scatter individuals. Lethal math is several animals already on the player: chip Blunt bites, stagger, little room to swing.
+
+**Harvesting**
+Loot item: **Thornback Carapace** (the pronotum plate). Hard Chitin PhysMat.
+
+Other yields: extra chitin scrap, pinch-food meat (poor; numbers later).
+
+Clothing crafts (after the first clothing system):
+
+- Thornback Carapace + prepared small leather sheet + cut leather strips → **one gauntlet**
+- Same three ingredients → **one greave**
+
+Two recipes, one piece each. Clothing slots.
+
+**Intra-species and ecological interactions**
+Piles on any medium-or-larger corpse, including wolf / deer / player kills and other Thornbacks. Contests food by occupying it. Yields to large threats that start emptying the pile. Marshwisp overlap is night leftover scavenging at a wet field edge.
+
+**Seasonal and weather hooks**
+Warm-season fields are busy. Hot dry spells raise food drive and willingness to test a standing player. Cold and wet reduce movement. Stridulation is a dusk / warm-night landmark.
+
+---
+
+### Section 3: Size / Appearance Desk Card
+
+Use this when blocking the mesh or a concept pass.
+
+- Armored bush cricket / *Acanthoplus*, scaled up. Flightless. Spiny saddle for a thorax.
+- Body ~2–2.5 ft. Pronotum ~forearm. Height ~1–1.5 ft at the shield.
+- Living green and field brown, individual variation.
+- Signature pose: several animals buried in a carcass, hind legs and keels sticking out of grass.
+- Motion: high-step hitch, cocked hind legs, busy antennae, snap-to-pose. Pile should look wrong.
+
+---
+
+### Section 4: UE 5.8 / Blender 5.2
+
+**When**
+After wolf. Crafts after the first clothing pass. Can model and animate earlier as a change of pace.
+
+**Data**
+Standard `UCreatureDefinition` + `UCreatureInstance`. Flat disposition ranges. GroupSize / nearby-count bias for pile behavior. RuntimeData as needed (OnCarcass, LastStridulateTime).
+
+**Materials**
+Unique BC + ORM material instance per slot family (body vs a harder shield face is enough). Roughness in the hard-chitin band on the pronotum, a little higher in folds. Metallic 0. Color ranges in lush green / brown.
+
+**Physical Material**
+Shared **Hard Chitin** on carcass pieces and the dropped Carapace. Living Actor: capsule + physics asset; same PhysMat on the asset is fine.
+
+**Collision / damage**
+Pronotum and major leg thorns: primitives named `Pierce` / `Point` so unarmed contact resolves Pierce onto the player. Mandible attack montage applies Blunt. Body bulk Blunt. Player weapons keep their own primitive names; a connecting swing applies punt impulse.
+
+**Rig and animation**
+Orthopteran hierarchy. Root on the ground under the stance. Thorax / pronotum as the mass parent. Six legs in three pairs; hind pair gets the extra femur length and a clear cock pose. Antenna chains. Short abdomen chain. Hard segment lengths. Stepped posing.
+
+Priorities:
+- Idle in grass (antennae, micro-twitch, cocked hind legs)
+- Walk / hitch
+- Climb-on-carcass / feed
+- Threat rear + louder stridulate
+- Bite, shove
+- Punt / scatter hit reaction
+- Death (legs fold or stick up — the stuck-up death is useful in grass)
+
+Ick pass: the pile on a corpse, the shield working while they eat, the sudden hitch when one notices the player.
+
+**Audio**
+Dusk stridulation as a biome landmark. Louder rasp in threat. Chew / tick on a carcass at close range.
+
+**Deferred**
+Juveniles / instars. Separate male/female meshes beyond ovipositor. Exact meat and illness numbers.

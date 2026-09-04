@@ -89,7 +89,7 @@ void AItemActor::InitializeFromInstance(UItemInstance* Instance)
 			SecondaryMeshComponent->RegisterComponent();
 			SecondaryMeshComponent->WeldTo(PrimaryMeshComponent);
 
-			if (GbDebugPrint && GEngine)
+			if (GbDebugSwing && GEngine)
 			{
 				GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Cyan,
 					FString::Printf(TEXT("%s weld Secondary: %s  primaryMass=%.2f"),
@@ -404,7 +404,7 @@ void AItemActor::OnItemMeshHit(UPrimitiveComponent* HitComp, AActor* OtherActor,
 
 	// Debug (gated by GbDebug): cyan Incoming, yellow EdgeDir,
 	// green ±edge bounds, orange ±plane bounds.
-	if (GbDebugDraw)
+	if (GbDebugHits)
 	{
 		if (UWorld* World = GetWorld())
 		{
@@ -453,7 +453,7 @@ void AItemActor::OnItemMeshHit(UPrimitiveComponent* HitComp, AActor* OtherActor,
 		}
 	}
 
-	if (GbDebugPrint)
+	if (GbDebugHits)
 	{
 		const FString TypeName = FinalType ? FinalType->GetName() : TEXT("None");
 		GEngine->AddOnScreenDebugMessage(

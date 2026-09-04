@@ -1,0 +1,184 @@
+**Marshwisp Spider – Comprehensive Reference Notes**
+*Woodcraft Survival – UE 5.8 / Blender 5.2*
+*(Created 2026-09-04)*
+
+Species-specific reference for the Marshwisp Spider, a wetland nocturnal lure predator. Sits alongside `Wolf.txt`, `DesertWyvern.txt`, `FireSalamander.txt`, and `Thornback.txt`.
+
+Related:
+- `../CreatureAISystemDefinition.txt`
+- `../CreatureMaterialsAndAppearance.txt`
+- `../CreatureRiggingAndAnimation.txt`
+- `Notes/EnvironmentSystem/WeatherAndAtmosphere.txt` – night darkness, local fog in hollows
+- `Notes/ArtDirection.txt` – faceted chitin, dielectric / metallic 0, emissive for photophores
+
+Real-world references (scale and motion): fishing spiders / nursery-web spiders, especially *Dolomedes* (Pisauridae). Surface-hunting stance, ripple-sensing front legs, bank and lily-pad waits, occasional dives. Photophores and the firefly display are the derived fantasy trait.
+
+Implementation is after the wolf foundation. Ambient fireflies (effects or cheap instances) need to exist in the same microbiomes for the lure to read.
+
+---
+
+### Section 1: Lore, Morphology, and Behavior
+
+**Evolutionary Origins**
+The Marshwisp is a highly derived fishing spider. Ancestral forms were already large, moisture-tied bank hunters: they sat at the waterline, read surface ripples through the front legs, and took tadpoles, insects, and small vertebrates that came within reach.
+
+As wetlands stayed productive at night and fireflies became a reliable small-prey magnet over still water and clearings, selection favored a lure instead of a longer chase. Distal photophores formed on the tarsi of the first two leg pairs. A pulse rhythm and a small circling wave of those legs, seen from a distance through mist, copies a loose knot of fireflies hovering at about knee-to-waist height. Prey that comes in for an easy light-snack is seized.
+
+Silk: draglines in current biology. Nest lining late polish. Harvest item deferred.
+
+**Size (adult)**
+- Standing height in the display / wait pose: about 2–3 ft (0.6–0.9 m). Body held off the ground on the legs.
+- Comfort stance: legs tucked more under the body, much tighter than the threat span.
+- Threat / stretched legspan: about 6–8 ft (1.8–2.4 m).
+- Prosoma + opisthosoma length: roughly 12–18 in. Compact dark mass behind the legs.
+- Females larger, heavier abdomen, stronger and steadier glow, tighter site fidelity.
+- Males slimmer, more likely to wander a bank, weaker or less regular pulse.
+
+Small-to-medium on the project size ladder. Dangerous because of the first bite.
+
+**Appearance (read at distance, then close)**
+At typical first contact the player sees two to four hovering points of light over black water or a misty clearing edge. The body stays hidden until the viewer is off-axis, has a carried light, or the animal turns.
+
+Close: a dark, long-legged fishing-spider silhouette. Cephalothorax slightly flattened and forward-weighted. Abdomen oval, held in line with the body, plain. Eight walking legs, the front two pairs longer and used for the display; the rear pairs do the supporting work. Chelicerae and fangs sit under the front of the carapace. Pedipalps present. Eight small eyes in two rows (fishing-spider arrangement).
+
+**Coloration**
+Swamp-water palette. Near-black, dark olive, rotten-leaf brown. Randomized at spawn inside that envelope. Plain back and underside. Underside may be a half-step lighter so a belly flash reads if the animal rears. The four distal photophores mark the animal only while they are lit.
+
+Surface is hard chitin with a mild wet sheen. Dielectric: darker and smoother than bark, metallic 0. Same rule as ArtDirection for shiny chitin.
+
+**Photophores and display**
+Small organs on the tips of the front two leg pairs (four points). They glow in pulses. During a pulse the spider waves those legs in small circles, so from afar the lights drift like fireflies. Pulse rate is steady while waiting. It can hitch or stop when the animal has registered a target.
+
+Photophores are a material parameter / small slot.
+
+**Detailed anatomy (modeling)**
+- Two tagmata: prosoma (carapace + mouthparts + legs) and opisthosoma (abdomen). Short pedicel.
+- Carapace low and broad. Chelicerae fold under; fangs point in / slightly back at rest, swing down and in for the bite.
+- Legs: seven visible segments per leg is enough to read as insect (coxa through tarsus can be collapsed a little if the bone budget needs it; knee and “ankle” breaks stay hard). Front two pairs reach forward and out in the display pose. Rear two pairs plant wide and a bit back.
+- Tarsi of legs 1 and 2 carry the photophore volume (a slightly swollen tip is enough).
+- Pedipalps shorter than walking legs, beside the fangs.
+- Eyes small and dark. Eyeshine optional and weak; the lights on the legs do the night read.
+- Spinnerets at the rear of the abdomen. Late polish.
+
+**Locomotion and posture**
+Default wait is a compact crouch at a bank, reed clump, stump, or the edge of a clearing, body over the legs, front pair raised into the light display. Walk is a fishing-spider walk: low, direct, sudden starts. When it commits, the rear legs push and the body shoots forward a short distance. It can step onto floating vegetation or stand with the front legs on the surface film.
+
+Jerky, segment-locked motion. Holds a pose, then snaps to the next. Micro-twitches in the pedipalps and front tarsi while waiting. Anyone who dislikes spiders should get the ick from the walk and the way the legs fold.
+
+**Realistic lifestyle and ecology**
+Nocturnal. Wetlands, marshes, reed beds, misty clearing edges beside still or slow water. Highest activity on humid, still nights. Local fog in hollows makes the lights read sooner than the body.
+
+Day: the animal leaves the open. First pass, if it is after dawn and the player cannot see it, it despawns. Silk-lined scrapes and funnel day-nests are late polish.
+
+Diet is anything small that will approach a hovering light or that the spider can take at the waterline: frogs and other small amphibians, mice-scale mammals, large night insects, and aquatic animals that rise to the glow (fry, small fish, diving beetles). Real fireflies in the same microbiome are both camouflage and part of the lie; some of the lights in a clearing are prey, some are the hunter.
+
+Solitary. One animal, or two on opposite edges of a clearing.
+
+Weather: heavy rain and wind suppress the display. Wet photophores. The animal stays down. Clear, misty, dark nights are prime.
+
+**Behavior patterns**
+- Default night state: wait at a chosen edge and run the pulse display.
+- Prey approach: hold the display until the target is inside a short lunge, then drop the front legs and commit.
+- Miss or a target that fights: short retreat toward cover or water, then either reset the display or despawn if the player has left and it is no longer seen.
+- Direct threat from something too large (player with a light in its face, a swing already incoming): abandon the lure and leave.
+- Day / unseen: despawn.
+
+Disposition spread is tight. Hungry or not, close or not. Sex changes size, glow strength, and how far the animal will wander.
+
+---
+
+### Section 2: Gameplay Aspects
+
+**Spawn and habitat**
+Night-only full actor in wetland / marsh microbiomes and at the wet edge of clearings. Low density. Prefer bank, reed line, stump, or mist pocket with a dark backdrop so the body stays hidden behind the lights.
+
+Ambient fireflies (effects or cheap instances) occupy the same spaces. A loose scatter of real lights can hide one Marshwisp cluster.
+
+**Core AI loop**
+Ecological wait + display at night. Evaluate nearby small prey and the player through the shared `EvaluateTarget` path. Branches:
+
+- **Lure Wait** – pulse + circle-wave the photophore legs. LookTarget on anything that approaches the lights.
+- **Commit** – short rush / lunge, Pierce fang bite, apply Poisoned.
+- **Break Off** – leave toward cover or water after a miss, a hit already landed, or a player that keeps range with a spear or thrown item.
+- **Day Despawn** – after dawn, if unseen, remove the Actor (Instance persistence across days is deferred).
+
+**Player interaction and telegraphing**
+The intended first read is “pretty lights at the clearing edge,” then a double-take when a dark mass sits behind them.
+
+Order:
+1. Two to four pulsed lights, drifting in small circles. Body hidden.
+2. Optional hitch in the pulse once the spider has registered the player.
+3. Off-axis or a carried light: silhouette of legs and body.
+4. Commit: lights drop, body comes forward, bite.
+
+Combat is avoidable. Walk around the lights. Keep distance with a long item to force a break-off.
+
+**Combat and the bite**
+Low HP relative to a wolf. High first-strike value.
+
+Outgoing fang hit is **Pierce** (fang primitives) plus a **Poisoned** status rider. Poisoned is a generic player state so later sources can reuse it. Working name Poisoned / Toxin. Icon TBD. Guidebook / tooltip can still name the Marshwisp as the source.
+
+Poisoned is serious: stamina regen drops, the player should leave and recover. Fighting or sprinting through it risks a health tick and death. A second bite before recovery is the critical case. Exact numbers, stack rule, and antidote plant are open. Antidote, when it exists, is crafted from the gland plus a wetland plant. Until then the intended answer is retreat.
+
+**Intra-species and ecological interactions**
+Treats small lure-able animals as prey. Yields to large animals. May take wet-edge leftovers after dark near a Thornback pile. Same-species: spacing only.
+
+**Harvesting**
+Carcass + special parts:
+
+- Venom reservoir — later antidote and / or a scarce weapon toxin.
+- Chitin — small plates, Hard Chitin PhysMat.
+- Meat — pinch food; poor; exact illness / calorie numbers later.
+
+Photophore trophy light: deferred with nest polish.
+
+**Seasonal and weather hooks**
+Night + humidity + low wind favor display. Rain and hard wind suppress it. Cold snaps reduce night activity. Nesting season deferred.
+
+---
+
+### Section 3: Size / Appearance Desk Card
+
+Use this when blocking the mesh or a concept pass.
+
+- Dark fishing-spider (*Dolomedes* plan).
+- Standing wait pose ~2–3 ft tall. Stretched legs ~6–8 ft. Body 12–18 in.
+- Palette: swamp water, plain. Four tip-lights on the front legs only, and only when pulsing.
+- Legs do the scare. Body is a compact dark oval behind them.
+- Motion: hold, twitch, snap. Hard joints. Pedipalps fuss while it waits.
+
+---
+
+### Section 4: UE 5.8 / Blender 5.2
+
+**When**
+After wolf proves Definition → Instance → Actor, State Tree, evaluation, and materials. Ambient fireflies in wetlands can land with Weather / atmosphere polish; the mimic needs them.
+
+**Data**
+Standard `UCreatureDefinition` + `UCreatureInstance`. Tight disposition ranges. RuntimeData only as needed (LastPulseTime, Displaying, etc.).
+
+**Materials**
+- Body: unique BC + ORM material instance, same path as items. Roughness in the hard-smooth chitin band (about 0.25–0.45, metallic 0). Mild wet sheen.
+- Photophores: emissive toggle or slot on the Woodcraft opaque master (author’s choice). Pulse is a scalar. Off during day despawn and while the animal is not displaying.
+- Color variation: swamp-water ranges only, low saturation, low pattern weight.
+
+**Physical Material**
+Shared **Hard Chitin** on the carcass and harvested plates (density / impact / sound). Living Actor uses the creature capsule + physics asset; that asset can use the same PhysMat.
+
+**Collision / damage**
+Fang primitives named `Pierce` / `Point`. Body / legs default `Blunt`. Player weapons use their own primitive names as usual.
+
+**Rig and animation**
+Arthropod hierarchy. Root on the ground under the stance. A small body / prosoma bone owns eight leg chains. Hard segment lengths. IK with locked bone length and stepped pose changes.
+
+Priorities:
+- Wait / display idle (front two pairs circling in time with the emissive pulse)
+- Short walk, sudden start / stop
+- Lunge + bite
+- Break-off retreat
+- Hit reaction and death (legs curl)
+
+Ick pass: keep the joints hard, the pedipalps busy, and the body still while the legs do too much.
+
+**Deferred**
+Silk-lined day nest as a world object. Silk as an item. Antidote recipe and plant. Juvenile instars. Persistent Instance across days. Photophore trophy light. Nesting season.
