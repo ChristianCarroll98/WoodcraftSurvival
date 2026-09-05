@@ -60,6 +60,7 @@ Blocked By: Crafting data + match prompt; Crafting session + cancel
 Description:
 A2.2. ItemFactory DestroyItemActorAndInstance. HeldItems DestroyHeldItem, ReplaceHeldItem, GetDropTransform, IsHandStacked stub. CompleteCraft order from the crafting spec: durability cost, Factory-destroy consumed bindings, spawn outputs, auto-equip at most one, pile the rest. bInstantCommitOnEngage so two Stones become DA_Item_SharpenedStone and two Plant Fiber become DA_Item_Cordage before minigame motion exists.
 
+
 --- In Progress ---
 
 Title: Minigame stage list
@@ -70,6 +71,9 @@ Blocking: GrindActive minigame; CircleAlternate minigame; Workbench slot + Tie
 Blocked By: Crafting session + cancel
 Description:
 Replace UCraftingMinigameDefinition::Move with TArray<FCraftStage> Stages (length ≥ 1). FCraftStage holds Move, GuidedMontage, ControlMode, bGripIK_Left / Right, per-stage hides, Hint. Add ECraftStageControlMode and ECraftHintGesture to WoodcraftTypes.h. FindMove<T>(Phase) reads the current stage. Session local Progress 0–1; local >= 1 on last stage commits, else Phase++ and play intro. Author DA_Minigame_Grind and DA_Minigame_Twist as one-stage lists. Tie stages wait on the Workbench card.
+
+
+--- Backlog ---
 
 (UPDATED) Title: GrindActive minigame
 Size: S
