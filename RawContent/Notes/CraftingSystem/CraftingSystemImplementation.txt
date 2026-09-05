@@ -323,7 +323,7 @@ Audio and VFX are curated from meter events (engage, valid stroke / slice / pull
 
 #### 11.1 Camera and craft frame
 
-Hands / ground: on E, snap control pitch to `UCraftingComponent::GroundCraftPitchOffset` and keep yaw. Same pitch for every ground craft. Look stays off for the session.
+Hands / ground: on E, set control pitch to 0 (`ArmsPivot` / arms level) and add `GroundCraftPitchOffset` to `CameraPivot` relative pitch. Same offset for every ground craft. Look stays off for the session. R restores both.
 
 Station crafts: the station owns player location and camera offset relative to itself so eyes / arms land on a consistent frame. A3.
 

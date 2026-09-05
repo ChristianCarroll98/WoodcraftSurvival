@@ -9,6 +9,7 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Engine/LocalPlayer.h"
+#include "Components/SceneComponent.h"
 
 namespace
 {
@@ -261,6 +262,7 @@ EHand UCraftingComponent::ResolveEngageHand(const FCraftingMatch& Match) const
 
 void UCraftingComponent::EndSession()
 {
+	RestoreGroundCraftView();
 	Session = FCraftingSession();
 	PopCraftingIMC();
 
@@ -269,16 +271,72 @@ void UCraftingComponent::EndSession()
 	UpdateDebugPrompt();
 }
 
+USceneComponent* UCraftingComponent::FindCameraPivot() const
+{
+	AActor* OwnerActor = GetOwner();
+	if (!OwnerActor) return nullptr;
+
+	TArray<USceneComponent*> Components;
+	OwnerActor->GetComponents<USceneComponent>(Components);
+	for (USceneComponent* Component : Components)
+	{
+		if (Component && Component->GetName().StartsWith(TEXT("CameraPivot")))
+		{
+			return Component;
+		}
+	}
+
+	return nullptr;
+}
+
 void UCraftingComponent::ApplyGroundCraftView()
 {
 	APawn* OwnerPawn = Cast<APawn>(GetOwner());
 	APlayerController* PC = OwnerPawn ? Cast<APlayerController>(OwnerPawn->GetController()) : nullptr;
-	if (!PC) return;
+	USceneComponent* Pivot = FindCameraPivot();
+	if (!PC && !Pivot) return;
 
-	FRotator ControlRotation = PC->GetControlRotation();
-	ControlRotation.Pitch = GroundCraftPitchOffset;
-	ControlRotation.Roll = 0.f;
-	PC->SetControlRotation(ControlRotation);
+	if (!bCraftViewApplied)
+	{
+		if (PC) CachedControlRotation = PC->GetControlRotation();
+		if (Pivot) CachedPivotRelativeRotation = Pivot->GetRelativeRotation();
+		bCraftViewApplied = true;
+	}
+
+	if (PC)
+	{
+		FRotator ControlRotation = CachedControlRotation;
+		ControlRotation.Pitch = 0.f;
+		ControlRotation.Roll = 0.f;
+		PC->SetControlRotation(ControlRotation);
+	}
+
+	if (Pivot)
+	{
+		FRotator RelativeRotation = CachedPivotRelativeRotation;
+		RelativeRotation.Pitch += GroundCraftPitchOffset;
+		RelativeRotation.Roll = 0.f;
+		Pivot->SetRelativeRotation(RelativeRotation);
+	}
+}
+
+void UCraftingComponent::RestoreGroundCraftView()
+{
+	if (!bCraftViewApplied) return;
+
+	APawn* OwnerPawn = Cast<APawn>(GetOwner());
+	APlayerController* PC = OwnerPawn ? Cast<APlayerController>(OwnerPawn->GetController()) : nullptr;
+	if (PC)
+	{
+		PC->SetControlRotation(CachedControlRotation);
+	}
+
+	if (USceneComponent* Pivot = FindCameraPivot())
+	{
+		Pivot->SetRelativeRotation(CachedPivotRelativeRotation);
+	}
+
+	bCraftViewApplied = false;
 }
 
 void UCraftingComponent::PushCraftingIMC()

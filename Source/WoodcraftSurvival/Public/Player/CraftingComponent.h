@@ -8,6 +8,7 @@
 
 class UHeldItemsComponent;
 class UInputMappingContext;
+class USceneComponent;
 
 /**
  * Frozen craft while a minigame is live.
@@ -107,6 +108,8 @@ private:
 	EHand ResolveEngageHand(const FCraftingMatch& Match) const;
 	void EndSession();
 	void ApplyGroundCraftView();
+	void RestoreGroundCraftView();
+	USceneComponent* FindCameraPivot() const;
 	void PushCraftingIMC();
 	void PopCraftingIMC();
 	class UEnhancedInputLocalPlayerSubsystem* GetInputSubsystem() const;
@@ -124,6 +127,9 @@ private:
 	TArray<FCraftingMatch> CurrentMatches;
 	int32 SelectedMatchIndex = 0;
 	bool bCraftingIMCPushed = false;
+	bool bCraftViewApplied = false;
+	FRotator CachedPivotRelativeRotation = FRotator::ZeroRotator;
+	FRotator CachedControlRotation = FRotator::ZeroRotator;
 
 	/** Default working hand until handedness settings exist. */
 	EHand DefaultCraftHand = EHand::Right;

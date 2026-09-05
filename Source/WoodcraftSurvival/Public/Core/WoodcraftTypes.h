@@ -11,16 +11,16 @@
 const FString GErrorPrefix = TEXT("ERROR: ");
 
 /** Hit / incidence text and arrows. */
-const bool GbDebugHits = false;
+const bool GbDebugHits = true;
 
 /** Swing speed, look speed, control strengths, wrist-limit draws. */
-const bool GbDebugSwing = false;
+const bool GbDebugSwing = true;
 
 /** Craft prompt and session text. Later minigame volume draws. */
 const bool GbDebugCraft = true;
 
 /** Harvestable health / yield / missing-mesh text. */
-const bool GbDebugHarvest = false;
+const bool GbDebugHarvest = true;
 
 /** Minimum impulse required for a collision to deal damage. Tunable later. */
 const float GMinImpulse = 100.f;

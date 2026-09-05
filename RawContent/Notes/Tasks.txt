@@ -42,28 +42,27 @@ Blocked By:
 Description:
 A2.0 compile slice. Add UCraftingRecipeDefinition, UCraftingMinigameDefinition, UCraftMovement, UGrindActiveCraftMovement, UCircleAlternateCraftMovement, UCraftingComponent. Crafting enums in WoodcraftTypes.h. FindMatches on the recipe definition. FindMove<T>() on the minigame definition (same pattern as FindFragment<T>()). Component on AWoodcraftCharacter. Snapshot from HeldItems. Debug [E] Craft {Name} when both hands Neutral and a recipe matches. Author DA_Minigame_Grind (GrindActive module), DA_Minigame_Twist (CircleAlternate module), DA_Recipe_SharpenedStone, DA_Recipe_Cordage. Assign RecipeAssets on the player BP. Consume, IMC, and player-input port: later cards.
 
-
---- In Progress ---
-
-(UPDATED) Title: Crafting session + cancel
+Title: Crafting session + cancel
 Size: S
 Labels: feature
-Status: In Progress
+Status: Done (2026-09-04)
 Blocking: Minigame stage list; GrindActive minigame; CircleAlternate minigame
 Blocked By: Crafting data + match prompt
 Description:
-A2.1. FCraftingSession on the component. E freezes the selected match. Swap gameplay IMC for IMC_Crafting. Snap GroundCraftPitchOffset. R and NotifyOwnerDamaged() clear the session and leave bound items. Wheel cycles matches while the prompt is up. SetCraftEngage(EHand, bool) from LMB / RMB. Player BP wires E / wheel / R / LMB / RMB. Extend gated on IsSessionActive(). Gameplay input stays in the player BP. Phase is the 0-based minigame stage index; local Progress is 0–1 per stage.
+A2.1. FCraftingSession on the component. E freezes the selected match. Swap gameplay IMC for IMC_Crafting (Q / extend / swing / look off with IMC_Default). Snap GroundCraftPitchOffset. R and NotifyOwnerDamaged() clear the session and leave bound items. Wheel cycles matches while the prompt is up. SetCraftEngage(EHand, bool) from LMB / RMB. Player BP wires E / wheel / R / LMB / RMB. Gameplay input stays in the player BP. Phase is the 0-based minigame stage index; local Progress is 0–1 per stage.
 
---- Backlog (priority order) ---
+--- In Progress ---
 
 Title: Ground recipe commit
 Size: S
 Labels: feature
-Status: Backlog
+Status: In Progress
 Blocking: GrindActive minigame; CircleAlternate minigame
-Blocked By: Crafting data + match prompt
+Blocked By: Crafting data + match prompt; Crafting session + cancel
 Description:
 A2.2. ItemFactory DestroyItemActorAndInstance. HeldItems IsUnarmed, ReplaceHeldItem, GetDropTransform, IsHandStacked stub. Success order from the crafting spec: durability cost, Factory-destroy consumed bindings, spawn outputs, auto-equip at most one, pile the rest. Instant-success debug so two Stones become DA_Item_SharpenedStone and two Plant Fiber become DA_Item_Cordage before minigame motion exists.
+
+--- Backlog (priority order) ---
 
 Title: Minigame stage list
 Size: XS
