@@ -22,13 +22,17 @@ class WOODCRAFTSURVIVAL_API UItemFactorySubsystem : public UWorldSubsystem
 public:
 	/** Creates a runtime UItemInstance from a Definition (no Actor). */
 	UFUNCTION(BlueprintCallable, Category = "Item Factory")
-	UItemInstance* CreateItemInstanceFromDefinition(UItemDefinition* Definition);
+	UItemInstance* CreateItemInstanceFromDefinition(const UItemDefinition* Definition);
 
 	/** Convenience: creates Instance + spawns the Actor. */
 	UFUNCTION(BlueprintCallable, Category = "Item Factory")
-	AItemActor* SpawnItemActorFromDefinition(UItemDefinition* Definition, const FTransform& SpawnTransform);
+	AItemActor* SpawnItemActorFromDefinition(const UItemDefinition* Definition, const FTransform& SpawnTransform);
 
 	/** Core path: spawns an Actor for an already-existing Instance. */
 	UFUNCTION(BlueprintCallable, Category = "Item Factory")
 	AItemActor* SpawnItemActorFromInstance(UItemInstance* Instance, const FTransform& SpawnTransform);
+
+	/** Only destroy path for a real item. Actor first, then Instance. */
+	UFUNCTION(BlueprintCallable, Category = "Item Factory")
+	void DestroyItemActorAndInstance(AItemActor* Item);
 };

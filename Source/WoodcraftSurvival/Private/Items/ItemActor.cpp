@@ -137,6 +137,20 @@ void AItemActor::EnableCollisionDamage(UStaticMeshComponent* Mesh)
 	Mesh->OnComponentHit.AddDynamic(this, &AItemActor::OnItemMeshHit);
 }
 
+void AItemActor::IgnoreActor(AActor* Other, bool bIgnore)
+{
+	if (!Other || Other == this) return;
+
+	if (PrimaryMeshComponent)
+	{
+		PrimaryMeshComponent->IgnoreActorWhenMoving(Other, bIgnore);
+	}
+	if (SecondaryMeshComponent)
+	{
+		SecondaryMeshComponent->IgnoreActorWhenMoving(Other, bIgnore);
+	}
+}
+
 TSubclassOf<UDamageType> AItemActor::ResolveDamageTypeFromShapeName(FName ShapeName)
 {
 	if (ShapeName.IsNone())

@@ -79,6 +79,9 @@ struct FHandState
 	 * Persists across frames for hysteresis; reset when orient deactivates or item detaches.
 	 */
 	int8 OrientEdgeSign = 1;
+
+	/** World item just dropped from this hand. Used to ignore collision with the incoming held actor. */
+	TWeakObjectPtr<AItemActor> RecentlyDroppedItem;
 };
 
 /**
@@ -278,6 +281,25 @@ public:
 	UFUNCTION(BlueprintPure, Category = "CoreAPI")
 	bool GetIsUnarmed(EHand Hand) const;
 
+	/** Stack count ≥ 2. Stub false until held stacks ship. */
+	UFUNCTION(BlueprintPure, Category = "CoreAPI")
+	bool IsHandStacked(EHand Hand) const;
+
+	/** Origin for newly spawned world items (craft piles). Q-drop stays at the hand. */
+	UFUNCTION(BlueprintPure, Category = "CoreAPI")
+	FTransform GetDropTransform() const;
+
+	/**
+	 * Consumes the real item in this hand. Detach, Factory-destroy actor + Instance, EquipUnarmed.
+	 * Unarmed / empty hand returns false.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "CoreAPI")
+	bool DestroyHeldItem(EHand Hand);
+
+	/** Puts NewItem into an Unarmed hand. No pickup montage. Factory-destroys the Unarmed pair. */
+	UFUNCTION(BlueprintCallable, Category = "CoreAPI")
+	bool ReplaceHeldItem(EHand Hand, AItemActor* NewItem);
+
 	/** Fires after a hand item changes or Neutral / Extended flips. */
 	FOnHeldItemsChanged OnHeldItemsChanged;
 
@@ -338,6 +360,9 @@ private:
 
 	/** Begins the pickup animation for the given item and hand. */
 	bool BeginPickupAnimation(AItemActor* Item, EHand Hand, FString& OutResult);
+
+	void PushHoldPoses(EHand Hand, AItemActor* Item);
+	void IgnoreCollisionBriefly(AItemActor* Dropped, AItemActor* Incoming);
 
 	/** Async loads neutral and extended poses and pushes to AnimInstance when complete */
 	void LoadAndPushPoses(EHand Hand);

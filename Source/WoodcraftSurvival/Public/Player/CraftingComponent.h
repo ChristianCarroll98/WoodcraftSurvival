@@ -68,6 +68,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Crafting|Camera")
 	FTransform GroundCraftCameraTransform = FTransform(FRotator(-50.f, 0.f, 0.f), FVector(25.f, 0.f, 65.f), FVector::OneVector);
 
+	/** A2.2 debug: Engage press completes the session. Grind turns this off. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Crafting")
+	bool bInstantCommitOnEngage = true;
+
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
@@ -106,6 +110,8 @@ private:
 
 	bool CanStartCraft() const;
 	EHand ResolveEngageHand(const FCraftingMatch& Match) const;
+	EHand ResolveAutoEquipHand() const;
+	void CompleteCraft();
 	void EndSession();
 	void ApplyGroundCraftView();
 	void RestoreGroundCraftView();
