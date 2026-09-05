@@ -205,7 +205,7 @@ Mouse wheel while this prompt is up cycles matches. Same wheel as container UI; 
 ### 7. Starting, cancelling, committing
 
 **Start (E)**
-Selected match freezes into a session. Gameplay IMC is removed and `IMC_Crafting` is added. Move, look, Q, swing, and stack-start are off with the gameplay IMC. View snaps to the shared ground pitch and stays there. Prompt becomes `[R] Cancel`. Progress / minigame UI uses the same bottom-middle band later. Hint widget (later) sits under that line and reads the current stage’s `Hint`.
+Selected match freezes into a session. Gameplay IMC is removed and `IMC_Crafting` is added. Move, look, Q, swing, and stack-start are off with the gameplay IMC. View snaps `FPCamera` to `GroundCraftCameraTransform` and stays there. Prompt becomes `[R] Cancel`. Progress / minigame UI uses the same bottom-middle band later. Hint widget (later) sits under that line and reads the current stage’s `Hint`.
 
 The recipe stays frozen for the life of the session. Snapshot rebuilds wait until the session ends. Instances are not rebound mid-session.
 
@@ -323,7 +323,7 @@ Audio and VFX are curated from meter events (engage, valid stroke / slice / pull
 
 #### 11.1 Camera and craft frame
 
-Hands / ground: on E, set control pitch to 0 (`ArmsPivot` / arms level) and add `GroundCraftPitchOffset` to `CameraPivot` relative pitch. Same offset for every ground craft. Look stays off for the session. R restores both.
+Hands / ground: on E, set control pitch to 0 (`ArmsPivot` / arms level) and set `FPCamera` relative transform to `GroundCraftCameraTransform` (scale forced to 1). Same transform for every ground craft. Look stays off for the session. R restores control rotation and the camera relative transform. `FPCamera` parents on `ArmsPivot`. Camera `bUsePawnControlRotation` off. ArmsPivot on.
 
 Station crafts: the station owns player location and camera offset relative to itself so eyes / arms land on a consistent frame. A3.
 
@@ -579,7 +579,7 @@ Minigame mouse delta can join `IMC_Crafting` in A2.3 without giving the pawn loo
 
 ### 15. Status
 
-Locked this pass: snapshot, Neutral-only prompt, wheel select, E start, lock-on-E, R / player-damage cancel, GrindActive always in contact, recipe + slot + output fields, single station pointer, one instance per slot, consume / pile / auto-equip order, component owns table + session + interpreter, IMC swap, ground pitch on the component, station pose on the station, engage = tool hand or default Right, `DA_Type_Name`, `UCraftingRecipeDefinition` / `UCraftingMinigameDefinition`, `UCraftMovement` instanced modules, AnimRef TwoHanded slot after L/R combine for Guided crafts.
+Locked this pass: snapshot, Neutral-only prompt, wheel select, E start, lock-on-E, R / player-damage cancel, GrindActive always in contact, recipe + slot + output fields, single station pointer, one instance per slot, consume / pile / auto-equip order, component owns table + session + interpreter, IMC swap, ground camera transform on the component, station pose on the station, engage = tool hand or default Right, `DA_Type_Name`, `UCraftingRecipeDefinition` / `UCraftingMinigameDefinition`, `UCraftMovement` instanced modules, AnimRef TwoHanded slot after L/R combine for Guided crafts.
 
 Minigame stages (2026-09-03): ordered `FCraftStage` list on the minigame. Local `0–1` per stage; last stage commits, else `Phase++`. Control mode and per-hand grip IK swap only between stages. Frozen bindings; layout pass may move actors onto the slot at E and R restores pre-layout sockets. Grind / Twist / Strip = one stage. Tie = three stages. Workpiece SKM + optional stage extra SKM + optional live tool mesh. Item meshes stay without morphs.
 
@@ -604,7 +604,7 @@ A2.0 First compile
 - PIE: two Neutral Stones show `[E] Craft Sharpened Stone`
 
 A2.1 Session
-- `FCraftingSession` on E, IMC swap, ground pitch snap, R / `NotifyOwnerDamaged()` teardown, wheel select, engage hand
+- `FCraftingSession` on E, IMC swap, `GroundCraftCameraTransform` snap on `FPCamera`, R / `NotifyOwnerDamaged()` teardown, wheel select, engage hand
 
 A2.2 Factory commit
 - `DestroyItemActorAndInstance` + HeldItems `ReplaceHeldItem` / Unarmed fill

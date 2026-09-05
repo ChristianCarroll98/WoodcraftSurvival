@@ -64,9 +64,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Crafting|Input")
 	int32 CraftingIMCPriority = 1;
 
-	/** Shared pitch for every hands / ground craft. Station crafts use the station’s pose later. */
+	/** Shared FPCamera relative transform for every hands / ground craft. Station crafts use the station’s pose later. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Crafting|Camera")
-	float GroundCraftPitchOffset = -30.f;
+	FTransform GroundCraftCameraTransform = FTransform(FRotator(-50.f, 0.f, 0.f), FVector(25.f, 0.f, 65.f), FVector::OneVector);
 
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -109,7 +109,7 @@ private:
 	void EndSession();
 	void ApplyGroundCraftView();
 	void RestoreGroundCraftView();
-	USceneComponent* FindCameraPivot() const;
+	USceneComponent* FindFirstPersonCamera() const;
 	void PushCraftingIMC();
 	void PopCraftingIMC();
 	class UEnhancedInputLocalPlayerSubsystem* GetInputSubsystem() const;
@@ -128,7 +128,7 @@ private:
 	int32 SelectedMatchIndex = 0;
 	bool bCraftingIMCPushed = false;
 	bool bCraftViewApplied = false;
-	FRotator CachedPivotRelativeRotation = FRotator::ZeroRotator;
+	FTransform CachedCameraRelativeTransform = FTransform::Identity;
 	FRotator CachedControlRotation = FRotator::ZeroRotator;
 
 	/** Default working hand until handedness settings exist. */

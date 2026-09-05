@@ -271,7 +271,7 @@ void UCraftingComponent::EndSession()
 	UpdateDebugPrompt();
 }
 
-USceneComponent* UCraftingComponent::FindCameraPivot() const
+USceneComponent* UCraftingComponent::FindFirstPersonCamera() const
 {
 	AActor* OwnerActor = GetOwner();
 	if (!OwnerActor) return nullptr;
@@ -280,7 +280,7 @@ USceneComponent* UCraftingComponent::FindCameraPivot() const
 	OwnerActor->GetComponents<USceneComponent>(Components);
 	for (USceneComponent* Component : Components)
 	{
-		if (Component && Component->GetName().StartsWith(TEXT("CameraPivot")))
+		if (Component && Component->GetName().StartsWith(TEXT("FPCamera")))
 		{
 			return Component;
 		}
@@ -293,13 +293,13 @@ void UCraftingComponent::ApplyGroundCraftView()
 {
 	APawn* OwnerPawn = Cast<APawn>(GetOwner());
 	APlayerController* PC = OwnerPawn ? Cast<APlayerController>(OwnerPawn->GetController()) : nullptr;
-	USceneComponent* Pivot = FindCameraPivot();
-	if (!PC && !Pivot) return;
+	USceneComponent* Camera = FindFirstPersonCamera();
+	if (!PC && !Camera) return;
 
 	if (!bCraftViewApplied)
 	{
 		if (PC) CachedControlRotation = PC->GetControlRotation();
-		if (Pivot) CachedPivotRelativeRotation = Pivot->GetRelativeRotation();
+		if (Camera) CachedCameraRelativeTransform = Camera->GetRelativeTransform();
 		bCraftViewApplied = true;
 	}
 
@@ -311,12 +311,11 @@ void UCraftingComponent::ApplyGroundCraftView()
 		PC->SetControlRotation(ControlRotation);
 	}
 
-	if (Pivot)
+	if (Camera)
 	{
-		FRotator RelativeRotation = CachedPivotRelativeRotation;
-		RelativeRotation.Pitch += GroundCraftPitchOffset;
-		RelativeRotation.Roll = 0.f;
-		Pivot->SetRelativeRotation(RelativeRotation);
+		FTransform CraftTransform = GroundCraftCameraTransform;
+		CraftTransform.SetScale3D(FVector::OneVector);
+		Camera->SetRelativeTransform(CraftTransform);
 	}
 }
 
@@ -331,9 +330,9 @@ void UCraftingComponent::RestoreGroundCraftView()
 		PC->SetControlRotation(CachedControlRotation);
 	}
 
-	if (USceneComponent* Pivot = FindCameraPivot())
+	if (USceneComponent* Camera = FindFirstPersonCamera())
 	{
-		Pivot->SetRelativeRotation(CachedPivotRelativeRotation);
+		Camera->SetRelativeTransform(CachedCameraRelativeTransform);
 	}
 
 	bCraftViewApplied = false;

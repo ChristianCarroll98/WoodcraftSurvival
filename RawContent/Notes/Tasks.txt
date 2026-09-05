@@ -49,7 +49,7 @@ Status: Done (2026-09-04)
 Blocking: Minigame stage list; GrindActive minigame; CircleAlternate minigame
 Blocked By: Crafting data + match prompt
 Description:
-A2.1. FCraftingSession on the component. E freezes the selected match. Swap gameplay IMC for IMC_Crafting (Q / extend / swing / look off with IMC_Default). Snap GroundCraftPitchOffset. R and NotifyOwnerDamaged() clear the session and leave bound items. Wheel cycles matches while the prompt is up. SetCraftEngage(EHand, bool) from LMB / RMB. Player BP wires E / wheel / R / LMB / RMB. Gameplay input stays in the player BP. Phase is the 0-based minigame stage index; local Progress is 0–1 per stage.
+A2.1. FCraftingSession on the component. E freezes the selected match. Swap gameplay IMC for IMC_Crafting (Q / extend / swing / look off with IMC_Default). Snap GroundCraftCameraTransform on FPCamera. R and NotifyOwnerDamaged() clear the session and leave bound items. Wheel cycles matches while the prompt is up. SetCraftEngage(EHand, bool) from LMB / RMB. Player BP wires E / wheel / R / LMB / RMB. Gameplay input stays in the player BP. Phase is the 0-based minigame stage index; local Progress is 0–1 per stage.
 
 --- In Progress ---
 
