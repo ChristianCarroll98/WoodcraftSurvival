@@ -7,7 +7,7 @@
 
 /**
  * Opposite-direction circle slices (cordage twist).
- * Guided / animation path. No HeldItems axis locks.
+ * Arms playhead comes from slices. Fiber presentations sample stage Progress.
  */
 UCLASS(EditInlineNew, DefaultToInstanced)
 class WOODCRAFTSURVIVAL_API UCircleAlternateCraftMovement : public UCraftMovement

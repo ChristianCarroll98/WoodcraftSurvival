@@ -160,15 +160,16 @@ This pose is presentation only. It does not change pickup, place, or stack rules
 
 ---
 
-### 6.2 Guided two-hand slot (locked 2026-09-03; stages 2026-09-03)
+### 6.2 Guided two-hand slot (locked 2026-09-03; stages 2026-09-05)
 
-Physics crafts (Grind) keep per-arm Neutral poses. Control Rig follows the live items on both hands.
+Live-item crafts (Grind, Tie Split working hand) keep per-arm Neutral or brace poses. Control Rig follows the live items on hands with grip IK on.
 
-Guided crafts (Twist; Tie Stage 3) hide the bound item renders and drive both arms from the current stage montage:
+Stage arm motion plays the current `FCraftStage::Montage` on AnimRef into slot `TwoHanded`:
 
-- One montage per stage, on that `FCraftStage`. Intro at the front; `IntroDone` notify enables input; then scrub or loop from local progress.
-- `UCraftingComponent` plays the current stage montage on AnimRef into slot `TwoHanded` and stops it on teardown or phase change.
-- Interpreter writes montage position from that stage’s local progress / slice. Mouse is the gesture detector.
+- Intro at the front. `UAnimNotify_CraftIntroDone` on this clip only reports montage seconds to `UCraftingComponent` and enables the move.
+- After intro, seek `lerp(IntroEndTime, ArmsLength, Progress)` when `bProgressDrivesMontage`. Twist leaves that flag false and writes position from slices.
+- Stage `Presentations` spawn at AnimRef / ArmsPivot. During intro they seek to the FPArms playhead. After intro they sample Progress (`lerp(IntroEndTime, OwnLength, Progress)` or morph weights). A presentation with no montage holds its spawn pose.
+- Stop the slot on teardown or phase change.
 - `PlayMontageInSlot` today is per `EHand`. TwoHanded play / scrub / stop is a third slot name on the AnimRef instance, called from the crafting component.
 
 Hybrid stages (Tie Stage 1 Split, Stage 2 Seat): two-hand clip on AnimRef, Visible Control Rig on the working hand only.
@@ -207,4 +208,4 @@ Hybrid stages (Tie Stage 1 Split, Stage 2 Seat): two-hand clip on AnimRef, Visib
 
 ---
 
-*Locked 2026-08-15. Updated 2026-08-26 with pre-drop socket-snap ReleasePose. Updated 2026-09-03 with TwoHanded slot after L/R combine (Guided crafts).*
+*Locked 2026-08-15. Updated 2026-08-26 with pre-drop socket-snap ReleasePose. Updated 2026-09-03 with TwoHanded slot after L/R combine. Updated 2026-09-05 with stage clocks / IntroDone.*

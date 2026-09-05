@@ -122,6 +122,19 @@ enum class ECraftingMorphSampleMode : uint8
 	HoldAndPop	UMETA(DisplayName = "Hold And Pop"),
 };
 
+/** Looping mouse-hint widget. None until that widget ships. */
+UENUM(BlueprintType)
+enum class ECraftHintGesture : uint8
+{
+	None				UMETA(DisplayName = "None"),
+	StrikeDown			UMETA(DisplayName = "Strike Down"),
+	PushIn				UMETA(DisplayName = "Push In"),
+	CircleAlternate		UMETA(DisplayName = "Circle Alternate"),
+	CircleContinuous	UMETA(DisplayName = "Circle Continuous"),
+	PullAlong			UMETA(DisplayName = "Pull Along"),
+	HoldEngage			UMETA(DisplayName = "Hold Engage"),
+};
+
 
 // ---------- Custom Collision Channels ----------
 

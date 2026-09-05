@@ -58,19 +58,16 @@ Status: Done (2026-09-05)
 Blocking: GrindActive minigame; CircleAlternate minigame
 Blocked By: Crafting data + match prompt; Crafting session + cancel
 Description:
-A2.2. ItemFactory DestroyItemActorAndInstance. HeldItems DestroyHeldItem, ReplaceHeldItem, GetDropTransform, IsHandStacked stub. CompleteCraft order from the crafting spec: durability cost, Factory-destroy consumed bindings, spawn outputs, auto-equip at most one, pile the rest. bInstantCommitOnEngage so two Stones become DA_Item_SharpenedStone and two Plant Fiber become DA_Item_Cordage before minigame motion exists.
-
-
---- In Progress ---
+A2.2. ItemFactory DestroyItemActorAndInstance. HeldItems DestroyHeldItem, ReplaceHeldItem, GetDropTransform, IsHandStacked stub. CompleteCraft order from the crafting spec: durability cost, Factory-destroy consumed bindings, spawn outputs, auto-equip at most one, pile the rest. bInstantComplete so two Stones become DA_Item_SharpenedStone and two Plant Fiber become DA_Item_Cordage before minigame motion exists.
 
 Title: Minigame stage list
 Size: XS
 Labels: feature
-Status: In Progress
+Status: Done (2026-09-05)
 Blocking: GrindActive minigame; CircleAlternate minigame; Workbench slot + Tie
 Blocked By: Crafting session + cancel
 Description:
-Replace UCraftingMinigameDefinition::Move with TArray<FCraftStage> Stages (length ≥ 1). FCraftStage holds Move, GuidedMontage, ControlMode, bGripIK_Left / Right, per-stage hides, Hint. Add ECraftStageControlMode and ECraftHintGesture to WoodcraftTypes.h. FindMove<T>(Phase) reads the current stage. Session local Progress 0–1; local >= 1 on last stage commits, else Phase++ and play intro. Author DA_Minigame_Grind and DA_Minigame_Twist as one-stage lists. Tie stages wait on the Workbench card.
+UCraftingMinigameDefinition::Stages (TArray<FCraftStage>, length ≥ 1). FCraftStage holds Move, arms Montage, Presentations (mesh + optional montage), grip IK bools, bHideLeft / Right / Station, Hint. ECraftHintGesture includes None. FindMove<T>(Phase). bProgressDrivesMontage on UCraftMovement. bInstantComplete advances CompleteCurrentStage. UAnimNotify_CraftIntroDone reports FPArms montage time. Author DA_Minigame_Grind and DA_Minigame_Twist as one-stage lists. Tie stages wait on the Workbench card.
 
 
 --- Backlog ---
@@ -91,7 +88,7 @@ Status: Backlog
 Blocking: CircleAlternate minigame
 Blocked By:
 Description:
-Skeletal mesh for CircleAlternate / cordage: two strands from the working wrist, two-ply growing with phase / Progress. Assign on DA_Minigame_Twist. Placeholder is acceptable to unblock the code card; replace with the real SKM when painted. Item meshes stay without morphs.
+Skeletal mesh for CircleAlternate / cordage: two strands from the working wrist, two-ply growing with phase / Progress. Assign on DA_Minigame_Twist stage 0 Presentations. Placeholder is acceptable to unblock the code card; replace with the real SKM when painted. Item meshes stay without morphs.
 
 (UPDATED) Title: CircleAlternate minigame
 Size: S
@@ -100,7 +97,7 @@ Status: Backlog
 Blocking: GrabPull strip
 Blocked By: Crafting session + cancel; Ground recipe commit; Twist presentation mesh; Minigame stage list
 Description:
-A2.4. One-stage Guided. ACraftPresentationActor follow-mesh on the planted fiber. FindMove<UCircleAlternateCraftMovement>(Phase). Opposite-direction circle slices as the mouse detector, hide both Plant Fiber renders. Both grip IK off. Play the stage reverse-wrap montage into AnimRef TwoHanded slot (after L/R combine); Montage_SetPosition from slice. Destroy presentation, stop slot, unhide leftovers on session end. Success consumes both fibers and auto-equips DA_Item_Cordage.
+A2.4. One-stage. Presentation SKM from the Twist stage list at AnimRef / ArmsPivot. FindMove<UCircleAlternateCraftMovement>(Phase). Opposite-direction circle slices as the mouse detector, bHideLeft + bHideRight. Both grip IK off. Play the stage montage into AnimRef TwoHanded slot; Montage_SetPosition from slice. Fiber presentation samples Progress. Destroy presentations, stop slot, unhide leftovers on session end. Success consumes both fibers and auto-equips DA_Item_Cordage.
 
 (UPDATED) Title: GrabPull strip
 Size: S

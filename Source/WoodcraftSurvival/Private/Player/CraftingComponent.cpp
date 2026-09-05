@@ -1,6 +1,8 @@
 // Copyright (c) 2026 Christian Carroll. All Rights Reserved.
 
 #include "Player/CraftingComponent.h"
+#include "Crafting/CraftingMinigameDefinition.h"
+#include "Crafting/Movements/CraftMovement.h"
 #include "Items/ItemActor.h"
 #include "Items/ItemInstance.h"
 #include "Items/ItemFactorySubsystem.h"
@@ -78,13 +80,15 @@ bool UCraftingComponent::TryStartCraft()
 	const FCraftingMatch& Match = CurrentMatches[SelectedMatchIndex];
 	if (!Match.Recipe) return false;
 
+	const UCraftingMinigameDefinition* Minigame = Match.Recipe->Minigame;
+	if (!Minigame || Minigame->GetStageCount() < 1) return false;
+
 	Session.Recipe = Match.Recipe;
 	Session.Bindings = Match.Bindings;
-	Session.Progress = 0.f;
-	Session.Phase = 0;
 	Session.bEngage = false;
 	Session.EngageHand = ResolveEngageHand(Match);
 	Session.Presentation = nullptr;
+	ApplyStage(0);
 
 	PushCraftingIMC();
 	ApplyGroundCraftView();
@@ -123,9 +127,9 @@ void UCraftingComponent::SetCraftEngage(EHand Hand, bool bPressed)
 	if (Hand != Session.EngageHand) return;
 
 	Session.bEngage = bPressed;
-	if (bPressed && bInstantCommitOnEngage)
+	if (bPressed && bInstantComplete)
 	{
-		CompleteCraft();
+		CompleteCurrentStage();
 	}
 }
 
@@ -221,11 +225,20 @@ void UCraftingComponent::UpdateDebugPrompt() const
 
 	if (IsSessionActive())
 	{
+		const UCraftingMinigameDefinition* Minigame = Session.Recipe ? Session.Recipe->Minigame : nullptr;
+		const FCraftStage* Stage = Minigame ? Minigame->GetStage(Session.Phase) : nullptr;
+		const UCraftMovement* Move = Stage ? Stage->Move.Get() : nullptr;
+		const int32 StageCount = Minigame ? Minigame->GetStageCount() : 0;
 		GEngine->AddOnScreenDebugMessage(
 			CraftPromptMessageId,
 			10000.f,
 			FColor::Cyan,
-			TEXT("[R] Cancel"));
+			FString::Printf(
+				TEXT("[R] Cancel  Stage %d/%d  %s  Intro=%s"),
+				Session.Phase + 1,
+				StageCount,
+				Move ? *Move->GetClass()->GetName() : TEXT("None"),
+				Session.bIntroActive ? TEXT("1") : TEXT("0")));
 		return;
 	}
 
@@ -282,6 +295,72 @@ EHand UCraftingComponent::ResolveAutoEquipHand() const
 	}
 
 	return DefaultCraftHand;
+}
+
+void UCraftingComponent::ApplyStage(int32 StageIndex)
+{
+	if (!Session.Recipe) return;
+
+	const UCraftingMinigameDefinition* Minigame = Session.Recipe->Minigame;
+	const FCraftStage* Stage = Minigame ? Minigame->GetStage(StageIndex) : nullptr;
+	if (!Stage) return;
+
+	Session.Phase = StageIndex;
+	Session.Progress = 0.f;
+	Session.bIntroActive = !Stage->Montage.IsNull();
+	Session.IntroEndTime = 0.f;
+
+	if (GbDebugCraft && GEngine)
+	{
+		const UCraftMovement* Move = Stage->Move.Get();
+		GEngine->AddOnScreenDebugMessage(
+			-1,
+			6.f,
+			FColor::Cyan,
+			FString::Printf(
+				TEXT("Craft stage %d/%d %s DriveArms=%s Intro=%s"),
+				StageIndex + 1,
+				Minigame->GetStageCount(),
+				Move ? *Move->GetClass()->GetName() : TEXT("None"),
+				(Move && Move->bProgressDrivesMontage) ? TEXT("1") : TEXT("0"),
+				Session.bIntroActive ? TEXT("1") : TEXT("0")));
+	}
+}
+
+void UCraftingComponent::NotifyCraftIntroDone(float MontagePosition)
+{
+	if (!IsSessionActive()) return;
+	if (!Session.bIntroActive) return;
+
+	Session.IntroEndTime = MontagePosition;
+	Session.bIntroActive = false;
+
+	if (GbDebugCraft && GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(
+			-1,
+			6.f,
+			FColor::Cyan,
+			FString::Printf(TEXT("Craft intro done t=%.3f"), MontagePosition));
+	}
+
+	UpdateDebugPrompt();
+}
+
+void UCraftingComponent::CompleteCurrentStage()
+{
+	if (!IsSessionActive() || !Session.Recipe) return;
+
+	const UCraftingMinigameDefinition* Minigame = Session.Recipe->Minigame;
+	const int32 LastIndex = Minigame ? Minigame->GetStageCount() - 1 : -1;
+	if (LastIndex < 0 || Session.Phase >= LastIndex)
+	{
+		CompleteCraft();
+		return;
+	}
+
+	ApplyStage(Session.Phase + 1);
+	UpdateDebugPrompt();
 }
 
 void UCraftingComponent::CompleteCraft()
