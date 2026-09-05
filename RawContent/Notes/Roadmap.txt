@@ -49,7 +49,7 @@ A1. T1 content — DONE (2026-09-02)
 A2. Ground crafting
 - `UCraftingRecipeDefinition` + `UCraftingMinigameDefinition` + `UCraftingComponent` (recipe table, snapshot, session, one interpreter).
 - Consume / spawn only through ItemFactory. R / player damage clears the session and leaves the bound items.
-- Hands recipes first: Grind (`DA_Item_Stone`+`DA_Item_Stone` → `DA_Item_SharpenedStone`, `Physics`, LiveMeshes) then Twist (`DA_Item_PlantFiber`+`DA_Item_PlantFiber` → `DA_Item_Cordage`, `Guided`, presentation SKM).
+- Hands recipes first: Grind (`DA_Item_Stone`+`DA_Item_Stone` → `DA_Item_SharpenedStone`) then Twist (`DA_Item_PlantFiber`+`DA_Item_PlantFiber` → `DA_Item_Cordage`, presentation SKM).
 - Strip after that PoC. Station / Tie / knap / forge / hone: later.
 
 A3. Structure scaffolding + placed Workbench

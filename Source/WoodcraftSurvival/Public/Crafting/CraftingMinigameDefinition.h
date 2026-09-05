@@ -80,13 +80,7 @@ public:
 	TArray<FCraftStage> Stages;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Minigame|Appearance")
-	ECraftingAppearanceMode AppearanceMode = ECraftingAppearanceMode::LiveMeshes;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Minigame|Appearance")
 	ECraftingMorphSampleMode MorphSampleMode = ECraftingMorphSampleMode::Lerp;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Minigame|Appearance")
-	FTransform PresentationOffset = FTransform::Identity;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Minigame|Appearance")
 	TArray<FName> MorphChannelNames;

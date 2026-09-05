@@ -105,15 +105,6 @@ enum class ECraftingSlotMatchMode : uint8
 	Sharpenable		UMETA(DisplayName = "Sharpenable"),
 };
 
-/** How the session shows progress on the work. */
-UENUM(BlueprintType)
-enum class ECraftingAppearanceMode : uint8
-{
-	LiveMeshes		UMETA(DisplayName = "Live Meshes"),
-	Morph			UMETA(DisplayName = "Morph"),
-	SkeletalPhase	UMETA(DisplayName = "Skeletal Phase"),
-};
-
 /** How morph weights are sampled from progress. */
 UENUM(BlueprintType)
 enum class ECraftingMorphSampleMode : uint8

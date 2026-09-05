@@ -60,9 +60,8 @@ Enums live in `WoodcraftTypes.h`:
 
 - `ECraftingSlotRole` — Ingredient, Tool, Workpiece
 - `ECraftingSlotMatchMode` — ExactDefinition, RequiredTag, Sharpenable
-- `ECraftingAppearanceMode` — LiveMeshes, Morph, SkeletalPhase
 - `ECraftingMorphSampleMode` — Lerp, HoldAndPop
-- `ECraftHintGesture` — None, StrikeDown, PushIn, CircleAlternate, CircleContinuous, PullAlong, HoldEngage
+- `ECraftHintGesture` — None, Shake, StrikeDown, PushIn, CircleAlternate, CircleContinuous, PullAlong, HoldEngage
 
 Structs live next to the type that owns them (`FCraftingSlot` / `FCraftingOutput` / snapshot / match on the recipe header because `FindMatches` lives there; session on the component header). Movement numbers live on the movement classes.
 
@@ -260,7 +259,7 @@ A minigame may own a fail meter `0–1`. When it fills: session ends, tools stay
 3. That hand must be free after consumes
 4. If auto-equip cannot run, that output piles instead
 
-HeldItems `DestroyHeldItem(EHand)` consumes a real held item. `ReplaceHeldItem(EHand, AItemActor*)` auto-equips with no pickup montage. Factory `DestroyItemActorAndInstance(AItemActor*)` is the only destroy path, including Unarmed. `CompleteCraft()` runs this order. `bInstantComplete`: engage press calls `CompleteCurrentStage()` (last stage commits). Grind turns the flag off.
+HeldItems `DestroyHeldItem(EHand)` consumes a real held item. `ReplaceHeldItem(EHand, AItemActor*)` auto-equips with no pickup montage. Factory `DestroyItemActorAndInstance(AItemActor*)` is the only destroy path, including Unarmed. `CompleteCraft()` runs this order. Auto-equip outputs spawn at `GetHeldSpawnTransform` (WeaponBone) with no rotation jitter. Piles use `GetDropTransform` with jitter. `bInstantComplete`: engage press calls `CompleteCurrentStage()` (last stage commits). Grind turns the flag off.
 
 
 ### 9. Stations (what crafting needs)
@@ -387,15 +386,9 @@ A2 authors GrindActive and CircleAlternate only. Each of those minigames has one
 
 Some stages hide bound item render meshes and spawn presentation SKMs owned by `UCraftingComponent`. Bound Item Instances and their `AItemActor`s stay in their sockets until a later in-progress replace or a final consume.
 
-Spawn presentation actors at AnimRef / ArmsPivot with `PresentationOffset` (Identity when Blender roots match the FPArms armature). Collision and Physics Control stay on the item actors.
+Spawn presentation actors at AnimRef / ArmsPivot (Identity). Collision and Physics Control stay on the item actors.
 
-Appearance mode (per minigame):
-
-- `LiveMeshes` — real bound meshes. A2 Grind. Stage `Presentations` empty.
-- `Morph` — presentation SKM, weights change the silhouette.
-- `SkeletalPhase` — presentation SKM, bones / growing length / wrap turns follow Progress. A2 Twist.
-
-Morph sample: `Lerp` (continuous from Progress) or `HoldAndPop` (snap when Progress crosses a step).
+Empty `Presentations` = live bound item meshes (Grind). Non-empty = spawn those SKMs. Montage vs morph targets is how the SKM is authored. Morph sample: `Lerp` or `HoldAndPop`.
 
 Hide flags are per stage and hide live item renders: `bHideLeft` / `bHideRight` / `bHideStation`. Twist hides left and right. Grind shows both stones. Tie hides the slotted Stick the whole session, hides Cordage on Stages 1–2, hides the live stone on Stage 3.
 
@@ -417,7 +410,7 @@ The player holds `AItemActor` in A2.
 
 On `UCraftingMinigameDefinition` (shared look / camera):
 
-- Appearance mode, morph sample, `PresentationOffset`, morph channel names
+- Morph sample, morph channel names
 - `Stages` (`FCraftStage`)
 - Optional fail-meter rate, events, checkpoints (later)
 
@@ -444,7 +437,7 @@ Engage is per movement class. GrindActive is always in contact. GrindPassive cli
 - Right (working) is the abrader: stone face down. Only this hand is read for progress.
 - Always in contact.
 - Working hand XY motion inside the volume. Speed below min: no progress. Speed above max: clamped. A stroke is travel `D` then a reverse. Each valid stroke adds progress and a grind cue.
-- A2: `LiveMeshes`. Two cobbles the whole session. R / damage returns both stones. Success consumes both, spawns Sharpened Stone into the primary hand.
+- A2: empty Presentations. Two cobbles the whole session. R / damage returns both stones. Success consumes both, spawns Sharpened Stone into the primary hand.
 
 **Twist** — one stage, `UCircleAlternateCraftMovement`, hands, both grip IK off, `bHideLeft` + `bHideRight`. `DA_Item_PlantFiber` + `DA_Item_PlantFiber` → `DA_Item_Cordage`.
 
@@ -493,7 +486,7 @@ A minigame may list events (`FCraftMinigameEvent`: trigger, id, optional arm mon
 On every `UCraftingMinigameDefinition`:
 
 - `Stages` — `TArray<FCraftStage>`, length ≥ 1
-- Shared look: appearance mode, morph sample, `PresentationOffset`, morph channel names
+- Shared look: morph sample, morph channel names
 - Events / checkpoints / fail: optional
 
 `FindMove<T>(Phase)` reads `Stages[Phase].Move`. Gesture numbers live on the movement class.
@@ -630,11 +623,11 @@ A2.2 Factory complete
 
 A2.3 Grind
 - HeldItems `BeginCraftMotion` / `EndCraftMotion`
-- One-stage GrindActive + `LiveMeshes`. Always in contact. Volume + stroke `D` + speed gate/cap
+- One-stage GrindActive. Empty Presentations. Always in contact. Volume + stroke `D` + speed gate/cap
 - Interpreter `FindMove<T>(Phase)` (Phase stays 0)
 
 A2.4 Twist
-- Presentation list on the Twist stage. One-stage `SkeletalPhase`. Hide both fibers
+- Presentation list on the Twist stage. Hide both fibers
 - Stage montage into AnimRef `TwoHanded` slot; arms position from slice; fiber SKM from Progress
 
 Strip after that PoC plays (one stage, stalk + Unarmed → Plant Fiber only).

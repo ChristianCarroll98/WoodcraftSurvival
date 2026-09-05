@@ -503,6 +503,12 @@ FTransform UHeldItemsComponent::GetDropTransform() const
 	return FTransform(OwnerActor->GetActorRotation(), Location);
 }
 
+FTransform UHeldItemsComponent::GetHeldSpawnTransform(EHand Hand) const
+{
+	if (Hand == EHand::None || !AnimRefMesh) return GetDropTransform();
+	return GetWeaponBoneTransform(Hand);
+}
+
 bool UHeldItemsComponent::DestroyHeldItem(EHand Hand)
 {
 	if (Hand == EHand::None) return false;

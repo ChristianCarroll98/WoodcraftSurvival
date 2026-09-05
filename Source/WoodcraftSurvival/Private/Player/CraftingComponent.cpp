@@ -426,8 +426,13 @@ void UCraftingComponent::CompleteCraft()
 			continue;
 		}
 
-		FTransform SpawnTransform = HeldItems->GetDropTransform();
-		if (PileIndex > 0)
+		const bool bTryEquip = Output.bAutoEquip && !bDidAutoEquip
+			&& HeldItems->GetIsUnarmed(AutoEquipHand);
+
+		FTransform SpawnTransform = bTryEquip
+			? HeldItems->GetHeldSpawnTransform(AutoEquipHand)
+			: HeldItems->GetDropTransform();
+		if (!bTryEquip && PileIndex > 0)
 		{
 			const FVector Offset(
 				FMath::FRandRange(-12.f, 12.f),
@@ -438,7 +443,8 @@ void UCraftingComponent::CompleteCraft()
 
 		AItemActor* Spawned = ItemFactory->SpawnItemActorFromDefinition(
 			Output.ItemDefinition.Get(),
-			SpawnTransform);
+			SpawnTransform,
+			!bTryEquip);
 		if (!Spawned)
 		{
 			if (GbDebugCraft && GEngine)
@@ -453,8 +459,6 @@ void UCraftingComponent::CompleteCraft()
 			continue;
 		}
 
-		const bool bTryEquip = Output.bAutoEquip && !bDidAutoEquip
-			&& HeldItems->GetIsUnarmed(AutoEquipHand);
 		if (bTryEquip && HeldItems->ReplaceHeldItem(AutoEquipHand, Spawned))
 		{
 			bDidAutoEquip = true;
