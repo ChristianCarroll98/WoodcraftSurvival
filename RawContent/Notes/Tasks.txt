@@ -69,19 +69,26 @@ Blocked By: Crafting session + cancel
 Description:
 UCraftingMinigameDefinition::Stages (TArray<FCraftStage>, length ≥ 1). FCraftStage holds Move, arms Montage, Presentations (mesh + optional montage), grip IK bools, bHideLeft / Right / Station, Hint. ECraftHintGesture includes None. FindMove<T>(Phase). bProgressDrivesMontage on UCraftMovement. bInstantComplete advances CompleteCurrentStage. UAnimNotify_CraftIntroDone reports FPArms montage time. Author DA_Minigame_Grind and DA_Minigame_Twist as one-stage lists. Tie stages wait on the Workbench card.
 
-
---- In Progress ---
-
 Title: Recipe owns stages
 Size: XS
 Labels: tech-debt, feature
-Status: In Progress
+Status: Done (2026-09-05)
 Blocking: Workbench slot + Tie
 Blocked By:
 Description:
-Move FCraftStage / FCraftPresentation onto UCraftingRecipeDefinition. MorphSampleMode and MorphChannelNames live on FCraftStage. FindMove<T>(Phase) on the recipe. Delete UCraftingMinigameDefinition and DA_Minigame_*. Ground camera stays GroundCraftCameraTransform on the component. Station actor owns player stand location and camera offset. Copy Grind / Twist stage rows onto DA_Recipe_SharpenedStone and DA_Recipe_Cordage.
+FCraftStage / FCraftPresentation live on UCraftingRecipeDefinition. MorphSampleMode and MorphChannelNames live on FCraftStage. FindMove<T>(Phase) on the recipe. UCraftingMinigameDefinition deleted. Ground camera stays GroundCraftCameraTransform on the component. Station actor owns player stand location and camera offset. DA_Recipe_SharpenedStone and DA_Recipe_Cordage each have one stage. PIE: 0 stages prompt-only, 1 stage instant-commits, extra dummy stages click through then spawn.
+
+
+--- In Progress ---
 
 Title: GrindActive minigame
+Size: S
+Labels: feature
+Status: In Progress
+Blocking: GrabPull strip
+Blocked By: Crafting session + cancel; Ground recipe commit; Minigame stage list; Recipe owns stages
+Description:
+A2.3. HeldItems BeginCraftMotion / EndCraftMotion. Interpreter FindMove<UGrindActiveCraftMovement>(Phase) on the single Grind stage. Always in contact. Planted left, working right inside the volume. XY travel D then reverse adds progress. Speed below min = no progress, above max = clamped. Empty Presentations. Both grip IK on. R returns both stones. Success uses the commit path. Tune D / volume / speeds / strengths on DA_Recipe_SharpenedStone stage 0 Move in PIE.
 Size: S
 Labels: feature
 Status: In Progress
