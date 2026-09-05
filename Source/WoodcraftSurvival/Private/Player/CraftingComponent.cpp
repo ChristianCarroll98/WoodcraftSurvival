@@ -1,7 +1,6 @@
 // Copyright (c) 2026 Christian Carroll. All Rights Reserved.
 
 #include "Player/CraftingComponent.h"
-#include "Crafting/CraftingMinigameDefinition.h"
 #include "Crafting/Movements/CraftMovement.h"
 #include "Items/ItemActor.h"
 #include "Items/ItemInstance.h"
@@ -78,10 +77,7 @@ bool UCraftingComponent::TryStartCraft()
 	if (!CanStartCraft()) return false;
 
 	const FCraftingMatch& Match = CurrentMatches[SelectedMatchIndex];
-	if (!Match.Recipe) return false;
-
-	const UCraftingMinigameDefinition* Minigame = Match.Recipe->Minigame;
-	if (!Minigame || Minigame->GetStageCount() < 1) return false;
+	if (!Match.Recipe || Match.Recipe->GetStageCount() < 1) return false;
 
 	Session.Recipe = Match.Recipe;
 	Session.Bindings = Match.Bindings;
@@ -225,10 +221,9 @@ void UCraftingComponent::UpdateDebugPrompt() const
 
 	if (IsSessionActive())
 	{
-		const UCraftingMinigameDefinition* Minigame = Session.Recipe ? Session.Recipe->Minigame : nullptr;
-		const FCraftStage* Stage = Minigame ? Minigame->GetStage(Session.Phase) : nullptr;
+		const FCraftStage* Stage = Session.Recipe ? Session.Recipe->GetStage(Session.Phase) : nullptr;
 		const UCraftMovement* Move = Stage ? Stage->Move.Get() : nullptr;
-		const int32 StageCount = Minigame ? Minigame->GetStageCount() : 0;
+		const int32 StageCount = Session.Recipe ? Session.Recipe->GetStageCount() : 0;
 		GEngine->AddOnScreenDebugMessage(
 			CraftPromptMessageId,
 			10000.f,
@@ -301,8 +296,7 @@ void UCraftingComponent::ApplyStage(int32 StageIndex)
 {
 	if (!Session.Recipe) return;
 
-	const UCraftingMinigameDefinition* Minigame = Session.Recipe->Minigame;
-	const FCraftStage* Stage = Minigame ? Minigame->GetStage(StageIndex) : nullptr;
+	const FCraftStage* Stage = Session.Recipe->GetStage(StageIndex);
 	if (!Stage) return;
 
 	Session.Phase = StageIndex;
@@ -320,7 +314,7 @@ void UCraftingComponent::ApplyStage(int32 StageIndex)
 			FString::Printf(
 				TEXT("Craft stage %d/%d %s DriveArms=%s Intro=%s"),
 				StageIndex + 1,
-				Minigame->GetStageCount(),
+				Session.Recipe->GetStageCount(),
 				Move ? *Move->GetClass()->GetName() : TEXT("None"),
 				(Move && Move->bProgressDrivesMontage) ? TEXT("1") : TEXT("0"),
 				Session.bIntroActive ? TEXT("1") : TEXT("0")));
@@ -351,8 +345,7 @@ void UCraftingComponent::CompleteCurrentStage()
 {
 	if (!IsSessionActive() || !Session.Recipe) return;
 
-	const UCraftingMinigameDefinition* Minigame = Session.Recipe->Minigame;
-	const int32 LastIndex = Minigame ? Minigame->GetStageCount() - 1 : -1;
+	const int32 LastIndex = Session.Recipe->GetStageCount() - 1;
 	if (LastIndex < 0 || Session.Phase >= LastIndex)
 	{
 		CompleteCraft();

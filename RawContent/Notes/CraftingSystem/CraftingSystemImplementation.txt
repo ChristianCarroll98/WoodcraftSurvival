@@ -3,7 +3,7 @@
 
 ProjectVision.txt keeps the short system blurb and a link here. Item durability, hold/place, and factory rules stay in ItemSystemImplementation.txt. Station actors and sockets stay in the Structure system; this file only states what crafting needs from a station.
 
-Content assets use `DA_Type_Name` (`DA_Recipe_SharpenedStone`, `DA_Minigame_Grind`, `DA_Item_Stone`, `DA_Structure_Workbench`).
+Content assets use `DA_Type_Name` (`DA_Recipe_SharpenedStone`, `DA_Item_Stone`, `DA_Structure_Workbench`).
 
 Open sections are marked OPEN. Leave those until they are closed here.
 

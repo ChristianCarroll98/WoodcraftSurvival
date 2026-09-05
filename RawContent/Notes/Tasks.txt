@@ -72,14 +72,23 @@ UCraftingMinigameDefinition::Stages (TArray<FCraftStage>, length ≥ 1). FCraftS
 
 --- In Progress ---
 
-(UPDATED) Title: GrindActive minigame
+Title: Recipe owns stages
+Size: XS
+Labels: tech-debt, feature
+Status: In Progress
+Blocking: Workbench slot + Tie
+Blocked By:
+Description:
+Move FCraftStage / FCraftPresentation onto UCraftingRecipeDefinition. MorphSampleMode and MorphChannelNames live on FCraftStage. FindMove<T>(Phase) on the recipe. Delete UCraftingMinigameDefinition and DA_Minigame_*. Ground camera stays GroundCraftCameraTransform on the component. Station actor owns player stand location and camera offset. Copy Grind / Twist stage rows onto DA_Recipe_SharpenedStone and DA_Recipe_Cordage.
+
+Title: GrindActive minigame
 Size: S
 Labels: feature
 Status: In Progress
 Blocking: GrabPull strip
-Blocked By: Crafting session + cancel; Ground recipe commit; Minigame stage list
+Blocked By: Crafting session + cancel; Ground recipe commit; Minigame stage list; Recipe owns stages
 Description:
-A2.3. HeldItems BeginCraftMotion / EndCraftMotion. Interpreter FindMove<UGrindActiveCraftMovement>(Phase) on the single Grind stage. Always in contact. Planted left, working right inside the volume. XY travel D then reverse adds progress. Speed below min = no progress, above max = clamped. Empty Presentations. Both grip IK on. R returns both stones. Success uses the commit path. Tune D / volume / speeds / strengths on DA_Minigame_Grind in PIE.
+A2.3. HeldItems BeginCraftMotion / EndCraftMotion. Interpreter FindMove<UGrindActiveCraftMovement>(Phase) on the single Grind stage. Always in contact. Planted left, working right inside the volume. XY travel D then reverse adds progress. Speed below min = no progress, above max = clamped. Empty Presentations. Both grip IK on. R returns both stones. Success uses the commit path. Tune D / volume / speeds / strengths on DA_Recipe_SharpenedStone stage 0 Move in PIE.
 
 
 --- Backlog ---
@@ -91,14 +100,14 @@ Status: Backlog
 Blocking: CircleAlternate minigame
 Blocked By:
 Description:
-Skeletal mesh for CircleAlternate / cordage: two strands from the working wrist, two-ply growing with phase / Progress. Assign on DA_Minigame_Twist stage 0 Presentations. Placeholder is acceptable to unblock the code card; replace with the real SKM when painted. Item meshes stay without morphs.
+Skeletal mesh for CircleAlternate / cordage: two strands from the working wrist, two-ply growing with phase / Progress. Assign on DA_Recipe_Cordage stage 0 Presentations. Placeholder is acceptable to unblock the code card; replace with the real SKM when painted. Item meshes stay without morphs.
 
 (UPDATED) Title: CircleAlternate minigame
 Size: S
 Labels: feature
 Status: Backlog
 Blocking: GrabPull strip
-Blocked By: Crafting session + cancel; Ground recipe commit; Twist presentation mesh; Minigame stage list
+Blocked By: Crafting session + cancel; Ground recipe commit; Twist presentation mesh; Minigame stage list; Recipe owns stages
 Description:
 A2.4. One-stage. Presentation SKM from the Twist stage list at AnimRef / ArmsPivot. FindMove<UCircleAlternateCraftMovement>(Phase). Opposite-direction circle slices as the mouse detector, bHideLeft + bHideRight. Both grip IK off. Play the stage montage into AnimRef TwoHanded slot; Montage_SetPosition from slice. Fiber presentation samples Progress. Destroy presentations, stop slot, unhide leftovers on session end. Success consumes both fibers and auto-equips DA_Item_Cordage.
 
@@ -107,9 +116,9 @@ Size: S
 Labels: feature
 Status: Backlog
 Blocking:
-Blocked By: GrindActive minigame; CircleAlternate minigame; Minigame stage list
+Blocked By: GrindActive minigame; CircleAlternate minigame; Minigame stage list; Recipe owns stages
 Description:
-After the Grind + Twist PoC. One-stage minigame. Add UGrabPullCraftMovement. DA_Recipe_PlantFiber + DA_Minigame_Strip (Stages length 1). Fibrous Stalk planted, Unarmed working hand, Engage grab, pull D along the stalk. Output DA_Item_PlantFiber. Wood Scraps / Kindling: fire system.
+After the Grind + Twist PoC. One-stage minigame. Add UGrabPullCraftMovement. DA_Recipe_PlantFiber Stages length 1. Fibrous Stalk planted, Unarmed working hand, Engage grab, pull D along the stalk. Output DA_Item_PlantFiber. Wood Scraps / Kindling: fire system.
 
 (UPDATED) Title: Workbench slot + Tie
 Size: M
@@ -122,15 +131,6 @@ Station snapshot (looked-at workbench or slotted item). DA_Recipe_StoneHatchet a
 
 
 --- After core loop (listed so it is not lost) ---
-
-Title: Recipe owns stages
-Size: XS
-Labels: tech-debt, feature
-Status: Backlog
-Blocking: Workbench slot + Tie
-Blocked By: GrindActive minigame; CircleAlternate minigame
-Description:
-Move FCraftStage / FCraftPresentation onto UCraftingRecipeDefinition. MorphSampleMode and MorphChannelNames live on FCraftStage. FindMove<T>(Phase) on the recipe. Delete UCraftingMinigameDefinition and DA_Minigame_*. Ground camera stays GroundCraftCameraTransform on the component. Station actor owns player stand location and camera offset. Copy Grind / Twist stage rows onto DA_Recipe_SharpenedStone and DA_Recipe_Cordage.
 
 Title: Player input into C++ parent
 Size: M
