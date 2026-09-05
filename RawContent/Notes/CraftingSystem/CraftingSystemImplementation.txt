@@ -227,7 +227,7 @@ Bound items stay in their sockets for the session. Q is off. Later multiplayer l
 Order:
 
 1. Apply each slot’s `DurabilityCost` to the bound Instance
-2. Factory-destroy every bound Instance with `bConsumed` (HeldItems detaches first, then `UItemFactorySubsystem` destroys actor + Instance; Unarmed fills the empty hand)
+2. Factory-destroy every bound Instance with `bConsumed` (`DestroyHeldItem`: detach, `DestroyItemActorAndInstance`, EquipUnarmed)
 3. Spawn each output via ItemFactory
 4. Auto-equip at most one output (see §8)
 5. Remaining outputs pile at craft origin as separate world actors
@@ -251,7 +251,7 @@ A minigame may own a fail meter `0–1`. When it fills: session ends, tools stay
 3. That hand must be free after consumes
 4. If auto-equip cannot run, that output piles instead
 
-HeldItems grows a `ReplaceHeldItem(EHand, AItemActor*)` path for auto-equip (no pickup montage). Factory grows `DestroyItemActorAndInstance(AItemActor*)` as the only destroy path.
+HeldItems `DestroyHeldItem(EHand)` consumes a real held item. `ReplaceHeldItem(EHand, AItemActor*)` auto-equips with no pickup montage. Factory `DestroyItemActorAndInstance(AItemActor*)` is the only destroy path, including Unarmed. `CompleteCraft()` runs this order. A2.2: `bInstantCommitOnEngage` completes on the engage hand (Right for Grind / Twist).
 
 
 ### 9. Stations (what crafting needs)
@@ -323,7 +323,7 @@ Audio and VFX are curated from meter events (engage, valid stroke / slice / pull
 
 #### 11.1 Camera and craft frame
 
-Hands / ground: on E, set control pitch to 0 (`ArmsPivot` / arms level) and set `FPCamera` relative transform to `GroundCraftCameraTransform` (scale forced to 1). Same transform for every ground craft. Look stays off for the session. R restores control rotation and the camera relative transform. `FPCamera` parents on `ArmsPivot`. Camera `bUsePawnControlRotation` off. ArmsPivot on.
+Hands / ground: on E, set control pitch to 0 (`ArmsPivot` / arms level) and set `FPCamera` relative transform to `GroundCraftCameraTransform` (scale forced to 1). Same transform for every ground craft. Locked default: location `25, 0, 65`, rotation `0, -50, 0` (pitch −50). Look stays off for the session. R restores control rotation and the camera relative transform. `FPCamera` parents on `ArmsPivot`. Camera `bUsePawnControlRotation` off. ArmsPivot on.
 
 Station crafts: the station owns player location and camera offset relative to itself so eyes / arms land on a consistent frame. A3.
 
@@ -500,7 +500,7 @@ Each stage owns a local Progress `0–1`. Intro does not write progress. After `
 
 ```
 local >= 1
-  if Phase is last stage → Commit
+  if Phase is last stage → CompleteCraft
   else Phase++, local = 0, apply next stage control mode / IK / hides, play next intro
 ```
 
@@ -534,7 +534,7 @@ Minigame mouse delta can join `IMC_Crafting` in A2.3 without giving the pawn loo
 
 ### 13. Item system contact points
 
-- Create / destroy Instances only through `UItemFactorySubsystem`
+- Create / destroy Instances only through `UItemFactorySubsystem` (`DestroyItemActorAndInstance`)
 - Tags on `UItemDefinition::ItemTags`
 - Durability numbers live on `UDurabilityItemFragment` / Instance state (ItemSystemImplementation.txt §10). Crafting applies `DurabilityCost` on success.
 - Station place / retrieve: Q-mode, `PlacementOffsetTransform`, shared ReleasePose. Crafting reads the slot.
@@ -573,7 +573,7 @@ Minigame mouse delta can join `IMC_Crafting` in A2.3 without giving the pawn loo
 - Three Ingredient slots, each exact def, `bMustBeHeld == false` so any one may sit in the slot
 - Layout at E puts Stick in the slot
 - One output, auto-equip primary
-- All three consumed at Commit after Stage 3
+- All three consumed at CompleteCraft after Stage 3
 - Minigame stages: Split / Seat / Wrap (§11.7)
 
 
@@ -606,9 +606,9 @@ A2.0 First compile
 A2.1 Session
 - `FCraftingSession` on E, IMC swap, `GroundCraftCameraTransform` snap on `FPCamera`, R / `NotifyOwnerDamaged()` teardown, wheel select, engage hand
 
-A2.2 Factory commit
-- `DestroyItemActorAndInstance` + HeldItems `ReplaceHeldItem` / Unarmed fill
-- Success order in §7. Instant-success debug so two Stones become a Sharpened Stone before motion exists
+A2.2 Factory complete
+- `DestroyItemActorAndInstance` + HeldItems `DestroyHeldItem` / `ReplaceHeldItem` / `GetDropTransform`
+- Success order in §7. `bInstantCommitOnEngage` so two Stones become a Sharpened Stone before motion exists
 
 A2.3 Grind
 - HeldItems `BeginCraftMotion` / `EndCraftMotion`

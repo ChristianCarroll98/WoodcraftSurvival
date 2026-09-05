@@ -54,18 +54,21 @@ The actual actor in the world.
 - For normal ground ↔ hand cycles the actor is kept alive.
 
 **UItemFactorySubsystem** (`UWorldSubsystem`)  
-Single authority for creation. Access via `GetWorld()->GetSubsystem<UItemFactorySubsystem>()` or a cached `TObjectPtr` on components.
+Single authority for creation and destruction. Access via `GetWorld()->GetSubsystem<UItemFactorySubsystem>()` or a cached `TObjectPtr` on components.
 
 Public API:
 ```cpp
-UItemInstance* CreateItemInstanceFromDefinition(UItemDefinition* Definition);
-AItemActor*    SpawnItemActorFromDefinition(UItemDefinition* Definition, const FTransform& SpawnTransform);
+UItemInstance* CreateItemInstanceFromDefinition(const UItemDefinition* Definition);
+AItemActor*    SpawnItemActorFromDefinition(const UItemDefinition* Definition, const FTransform& SpawnTransform);
 AItemActor*    SpawnItemActorFromInstance(UItemInstance* Instance, const FTransform& SpawnTransform);
+void           DestroyItemActorAndInstance(AItemActor* Item);
 ```
 
+- Definitions are const. Spawn reads the asset and writes a new Instance.
 - `CreateItemInstanceFromDefinition` creates the Instance and calls `Fragment->OnItemInstanceCreated` on all fragments.
-- `SpawnItemActorFromInstance` spawns the Actor and calls `Actor->InitializeFromInstance` (which runs `OnItemSpawned`).
+- `SpawnItemActorFromInstance` applies a slight random rotator, then spawns the Actor and calls `Actor->InitializeFromInstance` (which runs `OnItemSpawned`).
 - `SpawnItemActorFromDefinition` is the convenience path (Create + Spawn).
+- `DestroyItemActorAndInstance` destroys the Actor then marks the Instance garbage. HeldItems detaches first. Unarmed uses this path too.
 
 **EHand** (in `WoodcraftTypes.h`)
 ```cpp
@@ -206,7 +209,7 @@ bool GetIsUnarmed(EHand Hand) const;
 - Q held = Pickup/Drop/Place mode (outlines already driven by PickUpMode).
 - **Press, hand Unarmed + looking at a valid item** → Pickup. Items sitting on a station socket use this same path as ground items (`TryPickup` detaches the existing actor).
 - **Press, hand Unarmed + looking at empty space** → Do nothing.
-- **Press, hand occupied + looking at another item** → Do nothing (swap later).
+- **Press, hand occupied + looking at another item** → Drop the held item at the hand, then pickup the target. Brief `AItemActor::IgnoreActor` between the dropped actor and the incoming Unarmed / picked-up item (Primary + Secondary).
 - **Press, hand occupied + not looking at another item** → Begin place/drop: `SetExtended(true)` on that hand. No swinging: procedural orientation and collision damage stay off for the duration of Q-mode even though the hand is extended. While held, preview-snap the live actor toward a nearby station socket (workbench slot first) when one is in range.
 - **While preview-snapped**: push the shared ReleasePose on that arm (palm away, letting go). Control Rig reaches toward the item **loosely and location-only** — no exact grip snap, no copy of item rotation into the hand. Prevents wrist mangling when the socket orientation disagrees with a hold pose. See ItemAnimationPipeline §6.1. Lost snap → Extended HoldPose + normal full grip.
 - **Release, hand occupied**:
@@ -216,7 +219,7 @@ bool GetIsUnarmed(EHand Hand) const;
 
 **TryPickupOrDrop decision tree (updated 2026-08-26)**
 - Looking at valid item (ground or socket) + hand is Unarmed → Pickup on **press**
-- Looking at valid item + hand occupied → Do nothing on press (swap later)
+- Looking at valid item (ground or socket) + hand occupied → Drop at hand, then pickup target
 - Hand occupied + Q + mouse held → Extend, no swing, preview-snap to nearby sockets
 - Hand occupied + Q + mouse **released** + near valid socket + not a stack → Place on socket
 - Hand occupied + Q + mouse **released** + no valid socket (or is a stack) → Drop (entire stack if count > 1)
@@ -234,8 +237,8 @@ bool GetIsUnarmed(EHand Hand) const;
 
 **Unarmed handling inside pickup/drop**
 - `GetIsUnarmed(EHand)` compares the held item’s Definition against the stored `UnarmedDefinition`.
-- On pickup of a real item: previous Unarmed actor is simply `Destroy()`ed.
-- On drop: `EquipUnarmed(Hand)` is called immediately after detach.
+- On pickup of a real item: detach, then `DestroyItemActorAndInstance` on the Unarmed pair.
+- On drop: detach at the hand, `EquipUnarmed`, brief ignore between the dropped actor and Unarmed.
 
 ### Held Stacks (Locked 2026-08-20)
 
@@ -286,7 +289,7 @@ Hand-held stacks are a lightweight, same-type-only special case managed entirely
 - Unarmed is a real item (`DA_Item_Unarmed`).
 - Store **only** the `UItemDefinition*` (no permanent Unarmed Instances).
 - On equip: `Factory->SpawnItemActorFromDefinition(UnarmedDefinition)` then normal attach path.
-- On replace with a real item: simply `Destroy()` the Unarmed actor.
+- On replace with a real item: Factory-destroy the Unarmed actor + Instance.
 - Both hands start with Unarmed.
 - Dropping an item immediately re-equips Unarmed in that hand.
 - Eliminates null-hand special cases.
@@ -445,7 +448,7 @@ Until the relevant break condition is met the head stays attached and simply bec
 ### 11. Current Status (2026-08-26)
 
 **Working / Implemented**
-- `UItemFactorySubsystem` (World Subsystem) with the three creation methods
+- `UItemFactorySubsystem` (World Subsystem) with create + `DestroyItemActorAndInstance`
 - Instance outered to `GetTransientPackage()`
 - Fragment split: `OnItemInstanceCreated` + `OnItemSpawned`
 - `AItemActor::InitializeFromInstance` calls `OnItemSpawned`
@@ -453,8 +456,8 @@ Until the relevant break condition is met the head stays attached and simply bec
 - Left-hand mesh mirroring (scale X = -1 on mesh only)
 - `PreventItemStuck` (response-based, HandBone↔Grip distance, hysteresis)
 - Basic hold feel
-- Unarmed approach (Definition only, spawn/destroy actor)
-- **Basic TryPickup / TryDrop / TryPickupOrDrop + GetIsUnarmed** (sphere sweep on TRACE_EQUIPPABLE)
+- Unarmed approach (Definition only; Factory spawn / destroy)
+- **TryPickup / TryDrop / TryPickupOrDrop + GetIsUnarmed** (sphere sweep on TRACE_EQUIPPABLE). Occupied hand + look-at item drops then pickups.
 - Hybrid collision setup (Item profile + EquippableItemFragment sets TRACE_EQUIPPABLE = Block)
 - Pickup and drop fully functional end-to-end (including left-hand mirroring)
 - Held Stacks design locked (stacks drop whole on Q + mouse release)

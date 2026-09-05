@@ -12,6 +12,12 @@
 #include <GameFramework/PlayerController.h>
 #include <GameFramework/Pawn.h>
 #include <DrawDebugHelpers.h>
+#include <TimerManager.h>
+
+namespace
+{
+	constexpr float DropIgnoreSeconds = 0.4f;
+}
 
 
 // --------------------------------------------
@@ -42,7 +48,14 @@ bool UHeldItemsComponent::TryPickupOrDrop(EHand Hand, FString& OutResult)
 
 	if (LookedAtItem)
 	{
-		if (!bHandIsUnarmed) return false; // Occupied + looking at item -> do nothing (swap later)
+		if (!bHandIsUnarmed)
+		{
+			if (!TryDrop(Hand, OutResult))
+			{
+				OutResult = TEXT("TryDrop: ") + OutResult;
+				return false;
+			}
+		}
 
 		bool bSuccess = BeginPickupAnimation(LookedAtItem, Hand, OutResult);
 		if (!bSuccess) OutResult = TEXT("BeginPickupAnimation: ") + OutResult;
@@ -337,14 +350,22 @@ bool UHeldItemsComponent::TryPickup(AItemActor* Item, EHand Hand, FString& OutRe
 
 	// TODO: Two handed item handling
 
-	// Get current held item
 	AItemActor* PreviousItem = GetHeldItem(Hand);
-
-	// If player has Unarmed item, destroy it before attaching new item
-	if (PreviousItem && GetIsUnarmed(Hand)) PreviousItem->Destroy();
+	if (PreviousItem && GetIsUnarmed(Hand))
+	{
+		DetachItemFromControl(Hand);
+		if (ItemFactory) ItemFactory->DestroyItemActorAndInstance(PreviousItem);
+	}
 
 	bool bSuccess = AttachItemToControl(Item, Hand, OutResult);
 	if (!bSuccess) OutResult = TEXT("AttachItemToControl: ") + OutResult;
+
+	if (bSuccess)
+	{
+		FHandState& State = GetHandState(Hand);
+		IgnoreCollisionBriefly(State.RecentlyDroppedItem.Get(), Item);
+	}
+
 	return bSuccess;
 }
 
@@ -367,10 +388,12 @@ bool UHeldItemsComponent::TryDrop(EHand Hand, FString& OutResult)
 	if (GetIsUnarmed(Hand)) return false;
 
 	DetachItemFromControl(Hand);
+	GetHandState(Hand).RecentlyDroppedItem = Item;
 
 	bool bSuccess = EquipUnarmed(Hand, OutResult);
 	if (!bSuccess) OutResult = TEXT("EquipUnarmed: ") + OutResult;
 
+	IgnoreCollisionBriefly(Item, GetHeldItem(Hand));
 	return bSuccess;
 }
 
@@ -462,6 +485,97 @@ bool UHeldItemsComponent::EquipUnarmed(EHand Hand, FString& OutResult)
 
 	AnimInstance->SetHoldPose(Hand, UnarmedNeutralPose, UnarmedExtendedPose);
 	return true;
+}
+
+bool UHeldItemsComponent::IsHandStacked(EHand Hand) const
+{
+	return false;
+}
+
+FTransform UHeldItemsComponent::GetDropTransform() const
+{
+	const AActor* OwnerActor = GetOwner();
+	if (!OwnerActor) return FTransform::Identity;
+
+	const FVector Location = OwnerActor->GetActorLocation()
+		+ OwnerActor->GetActorForwardVector() * 60.f
+		+ FVector(0.f, 0.f, 20.f);
+	return FTransform(OwnerActor->GetActorRotation(), Location);
+}
+
+bool UHeldItemsComponent::DestroyHeldItem(EHand Hand)
+{
+	if (Hand == EHand::None) return false;
+	if (GetIsUnarmed(Hand)) return false;
+	if (!ItemFactory) return false;
+
+	AItemActor* Item = GetHeldItem(Hand);
+	if (!Item) return false;
+
+	DetachItemFromControl(Hand);
+	ItemFactory->DestroyItemActorAndInstance(Item);
+
+	FString OutResult;
+	return EquipUnarmed(Hand, OutResult);
+}
+
+bool UHeldItemsComponent::ReplaceHeldItem(EHand Hand, AItemActor* NewItem)
+{
+	if (Hand == EHand::None || !NewItem) return false;
+	if (!GetIsUnarmed(Hand)) return false;
+
+	AItemActor* PreviousItem = GetHeldItem(Hand);
+	DetachItemFromControl(Hand);
+	if (ItemFactory && PreviousItem) ItemFactory->DestroyItemActorAndInstance(PreviousItem);
+
+	FString OutResult;
+	if (!AttachItemToControl(NewItem, Hand, OutResult)) return false;
+
+	PushHoldPoses(Hand, NewItem);
+	return true;
+}
+
+void UHeldItemsComponent::PushHoldPoses(EHand Hand, AItemActor* Item)
+{
+	if (!Item || Hand == EHand::None) return;
+
+	const UItemInstance* Instance = Item->GetItemInstance();
+	const UEquippableItemFragment* EquipFrag = Instance
+		? Instance->FindFragment<UEquippableItemFragment>()
+		: nullptr;
+	if (!EquipFrag) return;
+
+	FPendingPickupData& Pending = GetPendingPickup(Hand);
+	Pending.NeutralPose = EquipFrag->NeutralPose;
+	Pending.ExtendedPose = EquipFrag->ExtendedPose;
+	LoadAndPushPoses(Hand);
+}
+
+void UHeldItemsComponent::IgnoreCollisionBriefly(AItemActor* Dropped, AItemActor* Incoming)
+{
+	if (!Dropped || !Incoming || Dropped == Incoming) return;
+
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	Dropped->IgnoreActor(Incoming, true);
+	Incoming->IgnoreActor(Dropped, true);
+
+	TWeakObjectPtr<AItemActor> WeakDropped = Dropped;
+	TWeakObjectPtr<AItemActor> WeakIncoming = Incoming;
+	FTimerHandle IgnoreHandle;
+	World->GetTimerManager().SetTimer(
+		IgnoreHandle,
+		[WeakDropped, WeakIncoming]()
+		{
+			AItemActor* DroppedItem = WeakDropped.Get();
+			AItemActor* IncomingItem = WeakIncoming.Get();
+			if (!DroppedItem || !IncomingItem) return;
+			DroppedItem->IgnoreActor(IncomingItem, false);
+			IncomingItem->IgnoreActor(DroppedItem, false);
+		},
+		DropIgnoreSeconds,
+		false);
 }
 
 #pragma endregion
@@ -747,6 +861,7 @@ void UHeldItemsComponent::DetachItemFromControl(EHand Hand)
 	State.bProceduralOrientActive = false;
 	State.OrientEdgeSign = 1;
 	State.bItemStuck = false;
+	State.HeldItem = nullptr;
 }
 
 void UHeldItemsComponent::SetHeldItemStuckResponses(AItemActor* Item, bool bStuck)

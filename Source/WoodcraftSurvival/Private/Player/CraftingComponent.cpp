@@ -2,6 +2,9 @@
 
 #include "Player/CraftingComponent.h"
 #include "Items/ItemActor.h"
+#include "Items/ItemInstance.h"
+#include "Items/ItemFactorySubsystem.h"
+#include "Items/Fragments/DurabilityItemFragment.h"
 #include "Player/HeldItemsComponent.h"
 #include "Core/WoodcraftTypes.h"
 #include "EnhancedInputSubsystems.h"
@@ -120,6 +123,10 @@ void UCraftingComponent::SetCraftEngage(EHand Hand, bool bPressed)
 	if (Hand != Session.EngageHand) return;
 
 	Session.bEngage = bPressed;
+	if (bPressed && bInstantCommitOnEngage)
+	{
+		CompleteCraft();
+	}
 }
 
 void UCraftingComponent::HandleHeldItemsChanged()
@@ -159,14 +166,14 @@ void UCraftingComponent::FillHandSnapshot(EHand Hand)
 		CurrentSnapshot.LeftActor = ItemActor;
 		CurrentSnapshot.bLeftUnarmed = bUnarmed;
 		CurrentSnapshot.bLeftExtended = bExtended;
-		CurrentSnapshot.bLeftStacked = false;
+		CurrentSnapshot.bLeftStacked = HeldItems && HeldItems->IsHandStacked(Hand);
 	}
 	else if (Hand == EHand::Right)
 	{
 		CurrentSnapshot.RightActor = ItemActor;
 		CurrentSnapshot.bRightUnarmed = bUnarmed;
 		CurrentSnapshot.bRightExtended = bExtended;
-		CurrentSnapshot.bRightStacked = false;
+		CurrentSnapshot.bRightStacked = HeldItems && HeldItems->IsHandStacked(Hand);
 	}
 }
 
@@ -258,6 +265,95 @@ EHand UCraftingComponent::ResolveEngageHand(const FCraftingMatch& Match) const
 	}
 
 	return DefaultCraftHand;
+}
+
+EHand UCraftingComponent::ResolveAutoEquipHand() const
+{
+	if (Session.Recipe)
+	{
+		for (const FCraftingSlotBinding& Binding : Session.Bindings)
+		{
+			if (Binding.bStation) continue;
+			if (Binding.Hand == EHand::None) continue;
+			if (!Session.Recipe->Slots.IsValidIndex(Binding.SlotIndex)) continue;
+			if (Session.Recipe->Slots[Binding.SlotIndex].Role != ECraftingSlotRole::Tool) continue;
+			return (Binding.Hand == EHand::Left) ? EHand::Right : EHand::Left;
+		}
+	}
+
+	return DefaultCraftHand;
+}
+
+void UCraftingComponent::CompleteCraft()
+{
+	if (!IsSessionActive() || !Session.Recipe) return;
+	if (!HeldItems) return;
+
+	UItemFactorySubsystem* ItemFactory = GetWorld()
+		? GetWorld()->GetSubsystem<UItemFactorySubsystem>()
+		: nullptr;
+	if (!ItemFactory) return;
+
+	const UCraftingRecipeDefinition* Recipe = Session.Recipe;
+
+	for (const FCraftingSlotBinding& Binding : Session.Bindings)
+	{
+		if (!Recipe->Slots.IsValidIndex(Binding.SlotIndex)) continue;
+		const FCraftingSlot& Slot = Recipe->Slots[Binding.SlotIndex];
+		if (Slot.DurabilityCost <= 0.f) continue;
+		if (!Binding.Actor) continue;
+
+		UItemInstance* Instance = Binding.Actor->GetItemInstance();
+		if (!Instance) continue;
+		if (!Instance->FindFragment<UDurabilityItemFragment>()) continue;
+
+		Instance->CurrentHealth = FMath::Max(0.f, Instance->CurrentHealth - Slot.DurabilityCost);
+	}
+
+	for (const FCraftingSlotBinding& Binding : Session.Bindings)
+	{
+		if (!Recipe->Slots.IsValidIndex(Binding.SlotIndex)) continue;
+		if (!Recipe->Slots[Binding.SlotIndex].bConsumed) continue;
+		if (Binding.bStation) continue;
+		if (Binding.Hand == EHand::None) continue;
+		HeldItems->DestroyHeldItem(Binding.Hand);
+	}
+
+	const EHand AutoEquipHand = ResolveAutoEquipHand();
+	bool bDidAutoEquip = false;
+	int32 PileIndex = 0;
+
+	for (const FCraftingOutput& Output : Recipe->Outputs)
+	{
+		if (!Output.ItemDefinition) continue;
+
+		FTransform SpawnTransform = HeldItems->GetDropTransform();
+		if (PileIndex > 0)
+		{
+			const FVector Offset(
+				FMath::FRandRange(-12.f, 12.f),
+				FMath::FRandRange(-12.f, 12.f),
+				0.f);
+			SpawnTransform.AddToTranslation(Offset);
+		}
+
+		AItemActor* Spawned = ItemFactory->SpawnItemActorFromDefinition(
+			Output.ItemDefinition.Get(),
+			SpawnTransform);
+		if (!Spawned) continue;
+
+		const bool bTryEquip = Output.bAutoEquip && !bDidAutoEquip
+			&& HeldItems->GetIsUnarmed(AutoEquipHand);
+		if (bTryEquip && HeldItems->ReplaceHeldItem(AutoEquipHand, Spawned))
+		{
+			bDidAutoEquip = true;
+			continue;
+		}
+
+		++PileIndex;
+	}
+
+	EndSession();
 }
 
 void UCraftingComponent::EndSession()

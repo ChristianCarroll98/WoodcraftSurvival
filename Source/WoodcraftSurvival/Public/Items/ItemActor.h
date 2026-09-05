@@ -59,6 +59,9 @@ public:
 	 *  Called from UDamageItemFragment::OnItemSpawned so only damaging items generate hits. */
 	void EnableCollisionDamage(UStaticMeshComponent* Mesh);
 
+	/** Primary and Secondary ignore Other for movement / physics contact. */
+	void IgnoreActor(AActor* Other, bool bIgnore);
+
 
 	// ---------- Held State ----------
 

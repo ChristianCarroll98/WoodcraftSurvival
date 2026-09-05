@@ -6,7 +6,7 @@
 #include "Items/ItemActor.h"
 #include "Items/Fragments/ItemFragment.h"
 
-UItemInstance* UItemFactorySubsystem::CreateItemInstanceFromDefinition(UItemDefinition* Definition)
+UItemInstance* UItemFactorySubsystem::CreateItemInstanceFromDefinition(const UItemDefinition* Definition)
 {
 	if (!Definition) return nullptr;
 
@@ -26,7 +26,7 @@ UItemInstance* UItemFactorySubsystem::CreateItemInstanceFromDefinition(UItemDefi
 	return NewInstance;
 }
 
-AItemActor* UItemFactorySubsystem::SpawnItemActorFromDefinition(UItemDefinition* Definition, const FTransform& SpawnTransform)
+AItemActor* UItemFactorySubsystem::SpawnItemActorFromDefinition(const UItemDefinition* Definition, const FTransform& SpawnTransform)
 {
 	UItemInstance* NewInstance = CreateItemInstanceFromDefinition(Definition);
 	if (!NewInstance) return nullptr;
@@ -54,9 +54,16 @@ AItemActor* UItemFactorySubsystem::SpawnItemActorFromInstance(UItemInstance* Ins
 	SpawnParams.NameMode = FActorSpawnParameters::ESpawnActorNameMode::Requested;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
+	const FRotator SpawnJitter(
+		FMath::FRandRange(-25.f, 25.f),
+		FMath::FRandRange(-25.f, 25.f),
+		FMath::FRandRange(-25.f, 25.f));
+	FTransform JitteredTransform = SpawnTransform;
+	JitteredTransform.SetRotation((SpawnJitter.Quaternion() * SpawnTransform.GetRotation()).GetNormalized());
+
 	AItemActor* NewItem = GetWorld()->SpawnActor<AItemActor>(
 		AItemActor::StaticClass(),
-		SpawnTransform,
+		JitteredTransform,
 		SpawnParams);
 
 	if (!NewItem) return nullptr;
@@ -70,4 +77,13 @@ AItemActor* UItemFactorySubsystem::SpawnItemActorFromInstance(UItemInstance* Ins
 	NewItem->InitializeFromInstance(Instance);
 
 	return NewItem;
+}
+
+void UItemFactorySubsystem::DestroyItemActorAndInstance(AItemActor* Item)
+{
+	if (!Item) return;
+
+	UItemInstance* Instance = Item->GetItemInstance();
+	Item->Destroy();
+	if (IsValid(Instance)) Instance->MarkAsGarbage();
 }

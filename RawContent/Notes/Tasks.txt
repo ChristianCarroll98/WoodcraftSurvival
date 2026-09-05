@@ -60,7 +60,7 @@ Status: In Progress
 Blocking: GrindActive minigame; CircleAlternate minigame
 Blocked By: Crafting data + match prompt; Crafting session + cancel
 Description:
-A2.2. ItemFactory DestroyItemActorAndInstance. HeldItems IsUnarmed, ReplaceHeldItem, GetDropTransform, IsHandStacked stub. Success order from the crafting spec: durability cost, Factory-destroy consumed bindings, spawn outputs, auto-equip at most one, pile the rest. Instant-success debug so two Stones become DA_Item_SharpenedStone and two Plant Fiber become DA_Item_Cordage before minigame motion exists.
+A2.2. ItemFactory DestroyItemActorAndInstance. HeldItems DestroyHeldItem, ReplaceHeldItem, GetDropTransform, IsHandStacked stub. CompleteCraft order from the crafting spec: durability cost, Factory-destroy consumed bindings, spawn outputs, auto-equip at most one, pile the rest. bInstantCommitOnEngage so two Stones become DA_Item_SharpenedStone and two Plant Fiber become DA_Item_Cordage before minigame motion exists.
 
 --- Backlog (priority order) ---
 
