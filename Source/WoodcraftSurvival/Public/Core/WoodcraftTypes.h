@@ -11,10 +11,10 @@
 const FString GErrorPrefix = TEXT("ERROR: ");
 
 /** Hit / incidence text and arrows. */
-const bool GbDebugHits = true;
+const bool GbDebugHits = false;
 
 /** Swing speed, look speed, control strengths, wrist-limit draws. */
-const bool GbDebugSwing = true;
+const bool GbDebugSwing = false;
 
 /** Craft prompt and session text. Later minigame volume draws. */
 const bool GbDebugCraft = true;
