@@ -71,6 +71,7 @@ D. One living creature (wolf). Rig / weight paint can happen any time as a chang
 E. Needs + day cycle (stamina on swing/sprint, simple hunger, 24-min day).
 F. Combat verbs that expand the loop rather than close it: stab, throw, two-hand weapons beyond logs.
 G. Next progression tier (flint / leather), then copper.
+- Ground craft camera lerp: blend FPCamera to / from GroundCraftCameraTransform over a few hundred ms instead of snap.
 
 Parallel / anytime
 - Wolf weight paint and remaining creature art.
