@@ -323,9 +323,29 @@ void UCraftingComponent::CompleteCraft()
 	bool bDidAutoEquip = false;
 	int32 PileIndex = 0;
 
+	if (GbDebugCraft && GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(
+			-1,
+			6.f,
+			FColor::Cyan,
+			FString::Printf(
+				TEXT("CompleteCraft %s outputs=%d"),
+				*Recipe->GetName(),
+				Recipe->Outputs.Num()));
+	}
+
 	for (const FCraftingOutput& Output : Recipe->Outputs)
 	{
-		if (!Output.ItemDefinition) continue;
+		if (!Output.ItemDefinition)
+		{
+			if (GbDebugCraft && GEngine)
+			{
+				GEngine->AddOnScreenDebugMessage(-1, 6.f, FColor::Red,
+					TEXT("CompleteCraft: output ItemDefinition is null"));
+			}
+			continue;
+		}
 
 		FTransform SpawnTransform = HeldItems->GetDropTransform();
 		if (PileIndex > 0)
@@ -340,17 +360,47 @@ void UCraftingComponent::CompleteCraft()
 		AItemActor* Spawned = ItemFactory->SpawnItemActorFromDefinition(
 			Output.ItemDefinition.Get(),
 			SpawnTransform);
-		if (!Spawned) continue;
+		if (!Spawned)
+		{
+			if (GbDebugCraft && GEngine)
+			{
+				GEngine->AddOnScreenDebugMessage(
+					-1,
+					6.f,
+					FColor::Red,
+					FString::Printf(TEXT("CompleteCraft: spawn failed for %s"),
+						*GetNameSafe(Output.ItemDefinition.Get())));
+			}
+			continue;
+		}
 
 		const bool bTryEquip = Output.bAutoEquip && !bDidAutoEquip
 			&& HeldItems->GetIsUnarmed(AutoEquipHand);
 		if (bTryEquip && HeldItems->ReplaceHeldItem(AutoEquipHand, Spawned))
 		{
 			bDidAutoEquip = true;
+			if (GbDebugCraft && GEngine)
+			{
+				GEngine->AddOnScreenDebugMessage(
+					-1,
+					6.f,
+					FColor::Green,
+					FString::Printf(TEXT("CompleteCraft: equipped %s"),
+						*GetNameSafe(Spawned)));
+			}
 			continue;
 		}
 
 		++PileIndex;
+		if (GbDebugCraft && GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(
+				-1,
+				6.f,
+				FColor::Yellow,
+				FString::Printf(TEXT("CompleteCraft: piled %s"),
+					*GetNameSafe(Spawned)));
+		}
 	}
 
 	EndSession();
