@@ -25,7 +25,7 @@ Content/
 ---PhysMaterials/
 ---Game modes
 --Crafting/
----Minigames/ DA_Minigame_Grind, DA_Minigame_Twist, Twist presentation SKM.
+--- presentation SKMs (Twist fiber, later Tie stick / wrap). Recipe DAs live next to the primary output item.
 --Dev/
 --Effects/
 ---item pickup outline material other shared materials or effects

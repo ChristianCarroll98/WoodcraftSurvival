@@ -47,7 +47,7 @@ A1. T1 content — DONE (2026-09-02)
 - In test level: pickup, Stone/Stick blunt swing, Sharpened Stone cuts TestTree and Nettle, Nettle WalkThrough + Fibrous Stalk yield.
 
 A2. Ground crafting
-- `UCraftingRecipeDefinition` + `UCraftingMinigameDefinition` + `UCraftingComponent` (recipe table, snapshot, session, one interpreter).
+- `UCraftingRecipeDefinition` + `UCraftingComponent` (recipe table, snapshot, session, one interpreter). Recipe owns `Stages`.
 - Consume / spawn only through ItemFactory. R / player damage clears the session and leaves the bound items.
 - Hands recipes first: Grind (`DA_Item_Stone`+`DA_Item_Stone` → `DA_Item_SharpenedStone`) then Twist (`DA_Item_PlantFiber`+`DA_Item_PlantFiber` → `DA_Item_Cordage`, presentation SKM).
 - Strip after that PoC. Station / Tie / knap / forge / hone: later.
@@ -78,5 +78,5 @@ Parallel / anytime
 - Wolf weight paint and remaining creature art.
 - Polish materials / ORM / audio / floating damage numbers.
 - Input move from Player BP into C++ when it starts to get in the way.
-- Asset Manager primary types (ItemDefinition, CraftingRecipe, CraftingMinigame, Harvestable). Optional later: scan-all recipes instead of CraftingComponent.RecipeAssets.
+- Asset Manager primary types (ItemDefinition, CraftingRecipe, Harvestable). Optional later: scan-all recipes instead of CraftingComponent.RecipeAssets.
 - Move crafting snapshot matching into component instead of recipe (IF this design decision makes sense)

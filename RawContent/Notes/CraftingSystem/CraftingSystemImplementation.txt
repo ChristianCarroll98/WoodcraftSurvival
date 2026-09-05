@@ -74,7 +74,9 @@ One asset per craft (`DA_Recipe_SharpenedStone`, `DA_Recipe_Cordage`, `DA_Recipe
 - `Station` — optional soft pointer to one station-identity asset (`UStructureDefinition` when Structures exist; `UPrimaryDataAsset` until then). Unset = hands craft. Set = that station only. Hands recipes stay hands-only.
 - `Slots` — array of `FCraftingSlot` (usually 2, at most 3)
 - `Outputs` — array of `FCraftingOutput` (one or more)
-- `Minigame` — one `UCraftingMinigameDefinition` asset. Minigame fields stay on that asset.
+- `Stages` — `TArray<FCraftStage>` (length ≥ 1). Grind, Twist, and Strip author one stage. Tie authors three.
+
+`FindMove<T>(int32 StageIndex)` on the recipe matches `UItemDefinition::FindFragment<T>()` against `Stages[StageIndex].Move`. The interpreter always asks for the session’s current stage.
 
 **`FCraftingSlot`**
 
@@ -96,15 +98,7 @@ One instance per slot.
 
 A single-output recipe sets `bAutoEquip` true. Multi-output recipes flag at most one output. If `bAutoEquip` is false, that output piles.
 
-**`UCraftingMinigameDefinition`** (Primary Data Asset)
-Appearance, camera, and an ordered stage list. See §11.3 / §11.9 / §11.11.
-`GetPrimaryAssetId` type: `CraftingMinigame`.
-
-`TArray<FCraftStage> Stages` (length ≥ 1). Grind, Twist, and Strip author one stage. Tie authors three.
-
-`FindMove<T>(int32 StageIndex)` on this asset matches `UItemDefinition::FindFragment<T>()` against `Stages[StageIndex].Move`. The interpreter always asks for the session’s current stage.
-
-**`FCraftPresentation`** (on the minigame header)
+**`FCraftPresentation`** (on the recipe header)
 
 - `Mesh` — presentation SKM
 - `Montage` — optional. Unset = spawn pose / first frame after intro
@@ -114,6 +108,8 @@ Appearance, camera, and an ordered stage list. See §11.3 / §11.9 / §11.11.
 - `Move` — one instanced `UCraftMovement`
 - `Montage` — FPArms TwoHanded clip. Intro at the front, notify `IntroDone`, optional interactive tail
 - `Presentations` — `TArray<FCraftPresentation>` spawned for this stage
+- `MorphSampleMode` — `Lerp` or `HoldAndPop`
+- `MorphChannelNames`
 - `bGripIK_Left` / `bGripIK_Right` — Visible Control Rig gates for this stage
 - `bHideLeft` / `bHideRight` / `bHideStation` — hide bound item renders (not presentation SKMs)
 - `Hint` — `ECraftHintGesture` for the looping mouse-hint widget (widget ships later)
@@ -165,7 +161,6 @@ The session is a struct on the component.
 A2 / MVP file layout:
 
 - `Public/Crafting/CraftingRecipeDefinition.h` + `Private/Crafting/CraftingRecipeDefinition.cpp`
-- `Public/Crafting/CraftingMinigameDefinition.h` + `Private/Crafting/CraftingMinigameDefinition.cpp`
 - `Public/Crafting/Movements/CraftMovement.h`
 - `Public/Crafting/Movements/GrindActiveCraftMovement.h` + matching `.cpp` if needed
 - `Public/Crafting/Movements/CircleAlternateCraftMovement.h` + matching `.cpp` if needed
@@ -173,7 +168,7 @@ A2 / MVP file layout:
 - Crafting enums in `Public/Core/WoodcraftTypes.h`
 - `Public/Player/AnimNotify_CraftIntroDone.h` + matching `.cpp`
 - `AWoodcraftCharacter` creates the component as a default subobject
-- Content: `DA_Recipe_*` next to the primary output item. `DA_Minigame_*` in `Content/WoodcraftSurvival/Crafting/Minigames/`.
+- Content: `DA_Recipe_*` next to the primary output item.
 
 
 ### 5. Matching and binding
@@ -269,6 +264,7 @@ A station is a Structure. Crafting needs:
 - A station identity: one structure data asset. The recipe’s `Station` field and the structure’s identity are the same asset
 - Zero or one item slot on the shared socket frame already locked for items (`+Z` up, `+X` forward, item `PlacementOffsetTransform`)
 - Detection: looked-at station, or the station that already owns the slotted item
+- Player stand location and camera offset relative to the station
 
 Q-place / retrieve is Item + Structure work. Typical station craft: park one ingredient with Q, stand Neutral with the other item(s) in hand, prompt appears, E.
 
@@ -325,15 +321,15 @@ Prompt policy can follow the guidebook setting. Matching itself does not depend 
 
 ### 11. Minigames
 
-One interpreter on `UCraftingComponent`. Each recipe points at one `UCraftingMinigameDefinition`. Types are data.
+One interpreter on `UCraftingComponent`. Each recipe owns its `Stages` list. Types are data.
 
 Audio and VFX are curated from meter events (engage, valid stroke / slice / pull / pop / finish, fail tick, authored events). Strike / knap / forge pops can spawn chips, sparks, or a wood burst at the hit. Niagara fields later.
 
 #### 11.1 Camera and craft frame
 
-Hands / ground: on E, set control pitch to 0 (`ArmsPivot` / arms level) and set `FPCamera` relative transform to `GroundCraftCameraTransform` (scale forced to 1). Same transform for every ground craft. Locked default: location `25, 0, 65`, rotation `0, -50, 0` (pitch −50). Look stays off for the session. R restores control rotation and the camera relative transform. `FPCamera` parents on `ArmsPivot`. Camera `bUsePawnControlRotation` off. ArmsPivot on.
+Hands / ground: on E, set control pitch to 0 (`ArmsPivot` / arms level) and set `FPCamera` relative transform to `GroundCraftCameraTransform` on `UCraftingComponent` (scale forced to 1). Same transform for every ground craft. Locked default: location `25, 0, 65`, rotation `0, -50, 0` (pitch −50). Look stays off for the session. R restores control rotation and the camera relative transform. `FPCamera` parents on `ArmsPivot`. Camera `bUsePawnControlRotation` off. ArmsPivot on.
 
-Station crafts: the station owns player location and camera offset relative to itself so eyes / arms land on a consistent frame. A3.
+Station crafts: the station owns player stand location and camera offset relative to itself so eyes / arms land on a consistent frame. A3.
 
 Deferred enter/exit (after A2 snap). Short “move to place and sit and/or look down.” Station: lerp player location and camera to the station craft pose. Ground: camera only, to `GroundCraftCameraTransform`. Beat 1: brief look-forward while hide flags apply and stage presentation SKMs spawn at AnimRef / ArmsPivot. Beat 2: lerp camera down onto the work surface. Short. R / session end blends back.
 
@@ -351,7 +347,7 @@ HeldItems craft API:
 - Guided TwoHanded slot play / `Montage_SetPosition` / stop — CraftingComponent on AnimRef (ItemAnimationPipeline §6.2). Stage intros use the same slot.
 - Visible grip-IK bools per hand, written from the current stage
 
-Swing orientation and collision damage stay off for the whole session. Player BP gates extend on `IsSessionActive()`. Start requires both hands Neutral. Start fails if the recipe has no minigame or `Stages.Num() < 1`.
+Swing orientation and collision damage stay off for the whole session. Player BP gates extend on `IsSessionActive()`. Start requires both hands Neutral. Start fails if the recipe has `Stages.Num() < 1`.
 
 Stage change: `EndCraftMotion`, stop the previous TwoHanded montage, apply the new stage’s grip-IK bools and hides, spawn that stage’s `Presentations`, play that stage’s arms montage from 0. Intro plays with input off. `UAnimNotify_CraftIntroDone` on the FPArms clip (only) reports montage seconds and enables the stage’s move. Montage end with no notify also ends the intro.
 
@@ -380,7 +376,7 @@ Identity is the class. Look up with `FindMove<T>(Phase)`.
 | `UCircleContinuousCraftMovement` | Tie Stage 3 wrap | Animation / continuous wrap. |
 | `UStrikeCraftMovement` | Tie Stage 1 split; later knap / forge | Aim then slam. Hold-to-lock is session state. |
 
-A2 authors GrindActive and CircleAlternate only. Each of those minigames has one stage. The component asks `FindMove<T>(Phase)` for the live stage and runs that class.
+A2 authors GrindActive and CircleAlternate only. Each of those recipes has one stage. The component asks `FindMove<T>(Phase)` for the live stage and runs that class.
 
 #### 11.4 Presentation and progress appearance
 
@@ -408,11 +404,12 @@ The player holds `AItemActor` in A2.
 
 #### 11.5 Tuning fields
 
-On `UCraftingMinigameDefinition` (shared look / camera):
+On `FCraftStage`:
 
 - Morph sample, morph channel names
-- `Stages` (`FCraftStage`)
-- Optional fail-meter rate, events, checkpoints (later)
+- Move, arms Montage, Presentations, grip IK, hides, Hint
+
+Optional fail-meter rate, events, checkpoints later on the recipe.
 
 On the concrete movement:
 
@@ -481,12 +478,11 @@ Exact slam count, morph names, and wrap SKM layout: author when the hatchet craf
 
 A minigame may list events (`FCraftMinigameEvent`: trigger, id, optional arm montage, `bIntermission`). Flip moves the hand and the workpiece together. Flip: later.
 
-#### 11.9 Minigame definition shape
+#### 11.9 Recipe stage list
 
-On every `UCraftingMinigameDefinition`:
+On every `UCraftingRecipeDefinition`:
 
 - `Stages` — `TArray<FCraftStage>`, length ≥ 1
-- Shared look: morph sample, morph channel names
 - Events / checkpoints / fail: optional
 
 `FindMove<T>(Phase)` reads `Stages[Phase].Move`. Gesture numbers live on the movement class.
@@ -590,9 +586,9 @@ Minigame mouse delta can join `IMC_Crafting` in A2.3 without giving the pawn loo
 
 ### 15. Status
 
-Locked this pass: snapshot, Neutral-only prompt, wheel select, E start, lock-on-E, R / player-damage cancel, GrindActive always in contact, recipe + slot + output fields, single station pointer, one instance per slot, consume / pile / auto-equip order, component owns table + session + interpreter, IMC swap, ground camera transform on the component, station pose on the station, engage = tool hand or default Right, `DA_Type_Name`, `UCraftingRecipeDefinition` / `UCraftingMinigameDefinition`, `UCraftMovement` instanced modules, AnimRef TwoHanded slot after L/R combine for Guided crafts.
+Locked this pass: snapshot, Neutral-only prompt, wheel select, E start, lock-on-E, R / player-damage cancel, GrindActive always in contact, recipe + slot + output + `Stages` fields, single station pointer, one instance per slot, consume / pile / auto-equip order, component owns table + session + interpreter, IMC swap, ground camera transform on the component, station pose on the station, engage = tool hand or default Right, `DA_Type_Name`, `UCraftingRecipeDefinition`, `UCraftMovement` instanced modules, AnimRef TwoHanded slot after L/R combine for Guided crafts.
 
-Minigame stages (2026-09-05): ordered `FCraftStage` list on the minigame. Local `0–1` per stage; last stage commits, else `Phase++`. `bProgressDrivesMontage` seeks the FPArms clip from Progress after intro. Presentations always sample Progress after intro. `IntroDone` lives only on the FPArms montage and reports time. Frozen bindings; layout pass may move actors onto the slot at E and R restores pre-layout sockets. Grind / Twist / Strip = one stage. Tie = three stages. Per-stage `Presentations` list. Item meshes stay without morphs.
+Minigame stages (2026-09-05): ordered `FCraftStage` list on the recipe. Local `0–1` per stage; last stage commits, else `Phase++`. Morph sample + channel names live on the stage. `bProgressDrivesMontage` seeks the FPArms clip from Progress after intro. Presentations always sample Progress after intro. `IntroDone` lives only on the FPArms montage and reports time. Frozen bindings; layout pass may move actors onto the slot at E and R restores pre-layout sockets. Grind / Twist / Strip = one stage. Tie = three stages. Per-stage `Presentations` list. Item meshes stay without morphs.
 
 A2 MVP recipes: Grind and Twist. Strip follows the PoC. Station / Tie is A3.
 
@@ -608,7 +604,7 @@ OPEN: TwoHanded slot handedness Mirror, AssistOffset two-hand item IK, discovery
 **Core Loop / Roadmap A2 — implement in this order**
 
 A2.0 First compile
-- Recipe definition, minigame definition, `UCraftMovement` + `UGrindActiveCraftMovement` + `UCircleAlternateCraftMovement`
+- Recipe definition, `UCraftMovement` + `UGrindActiveCraftMovement` + `UCircleAlternateCraftMovement`
 - Component (recipe table, snapshot, `FindMatches`, debug prompt)
 - Enums in `WoodcraftTypes.h`
 - Component default-subobject on `AWoodcraftCharacter`
