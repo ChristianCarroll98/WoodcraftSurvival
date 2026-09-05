@@ -83,20 +83,18 @@ Single AnimBP on the **FPArmsMeshAnimRef** (invisible truth source).
 
 Graph order:
 ```
-HoldPose_Left / HoldPose_Right Sequence Players
-        ↓
-   LeftArm / RightArm Slots   (temporary montages only)
-        ↓
-   Mirror node (Mirror Data Table)
-        ↓
-   Blend Mask combine
-        ↓
-   Output Pose → Visible mesh + Control Rig
+Neutral/Extended L → LeftArm slot  → Mirror (data table) → left mask ─┐
+Neutral/Extended R → RightArm slot → right mask ─────────────────────┴→ Combine
+                                                                        ↓
+                                                              TwoHanded Slot
+                                                                        ↓
+                                                              Output Pose → Visible mesh + Control Rig
 ```
 
-- Base layer always plays the current HoldPose_L / HoldPose_R.
-- LeftArm / RightArm slots are used only for short override montages.
-- Both slots play the **same** right-arm-authored montage asset. The Mirror node that sits after the slots automatically produces correct left-side motion via the Mirror Data Table. No separate mirrored montage assets are required.
+- Base layer always plays the current Neutral/Extended pose per arm.
+- LeftArm / RightArm slots are one-arm overrides (pickup, drop, later one-arm montages). Both play the same right-arm-authored montage. The Mirror on the left branch produces the left-side motion. No separate mirrored montage assets.
+- **TwoHanded** sits after the L/R combine. Empty slot = combine pose passes through. Guided crafts (Twist, later Tie) play a both-arm montage here. `Montage_SetPosition` scrubs time from minigame phase / slice progress.
+- TwoHanded slot Mirror (handedness settings, working hand = Left) is later. A2 plays the authored clip as-is (Left planted, Right working).
 
 The visible mesh (FPArmsMeshVisible) continues to copy the pose from AnimRef and then runs Control Rig for final IK grip adjustment. Grip target locations may still be pulled from `UHeldItemsComponent` on the visible side if convenient.
 
@@ -162,13 +160,36 @@ This pose is presentation only. It does not change pickup, place, or stack rules
 
 ---
 
+### 6.2 Guided two-hand slot (locked 2026-09-03; stages 2026-09-03)
+
+Physics crafts (Grind) keep per-arm Neutral poses. Control Rig follows the live items on both hands.
+
+Guided crafts (Twist; Tie Stage 3) hide the bound item renders and drive both arms from the current stage montage:
+
+- One montage per stage, on that `FCraftStage`. Intro at the front; `IntroDone` notify enables input; then scrub or loop from local progress.
+- `UCraftingComponent` plays the current stage montage on AnimRef into slot `TwoHanded` and stops it on teardown or phase change.
+- Interpreter writes montage position from that stage’s local progress / slice. Mouse is the gesture detector.
+- `PlayMontageInSlot` today is per `EHand`. TwoHanded play / scrub / stop is a third slot name on the AnimRef instance, called from the crafting component.
+
+Hybrid stages (Tie Stage 1 Split, Stage 2 Seat): two-hand clip on AnimRef, Visible Control Rig on the working hand only.
+
+- Visible AnimInstance: `bGripIK_Left` / `bGripIK_Right` plus the existing grip transforms. One Control Rig, two gated branches.
+- Working item transform comes from the craft interpreter, not from AnimRef `WeaponBone`.
+- Off-hand grip IK off so the brace / hold matches AnimRef 1:1.
+- Stage change is a hard swap of those bools after `EndCraftMotion`.
+
+`bTwoHanded` items (logs, bows) stay a separate path: primary Neutral/Extended plus AssistOffset offhand IK. They do not use this slot.
+
+---
+
 ### 7. Open Points
 
 - Exact frame for the FinalizePickup notify (currently ~9–10 of 12). Needs feel testing.
 - Drop montage length and feel relative to pickup.
-- Future Extended pose (neutral vs extended) for normal activation. Pre-drop socket snap uses the shared ReleasePose instead.
-- Two-handed support.
 - Optional item-specific EquipMontage override.
+- TwoHanded slot Mirror when working hand is Left (handedness settings).
+- AssistOffset two-hand IK for `bTwoHanded` items.
+- Per-hand grip IK bools on the Visible AnimInstance / Control Rig (needed for Tie Stage 1).
 - Future polish: temporarily override the Control Rig IK target to the world item being reached for during the pickup montage (so the hand homes toward the real object instead of the current held/Unarmed grip). Requires a short-lived “reach target override” that is cleared on FinalizePickup or MontageEnded. Not required for the first working version.
 
 ---
@@ -186,4 +207,4 @@ This pose is presentation only. It does not change pickup, place, or stack rules
 
 ---
 
-*Locked 2026-08-15. Updated 2026-08-26 with pre-drop socket-snap ReleasePose (shared, location-only loose IK). Update when open points are resolved or when two-handed / swing support is designed.*
+*Locked 2026-08-15. Updated 2026-08-26 with pre-drop socket-snap ReleasePose. Updated 2026-09-03 with TwoHanded slot after L/R combine (Guided crafts).*

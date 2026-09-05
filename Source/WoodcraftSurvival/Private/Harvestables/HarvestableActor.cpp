@@ -9,6 +9,7 @@
 #include "Harvestables/HarvestableFactorySubsystem.h"
 #include "Items/ItemFactorySubsystem.h"
 #include "Items/ItemDefinition.h"
+#include "Core/WoodcraftTypes.h"
 #include <Components/StaticMeshComponent.h>
 #include "Engine/StaticMesh.h"
 
@@ -90,7 +91,7 @@ void AHarvestableActor::SetupMeshFromDefinition()
 	else
 	{
 		// Optional debug – remove or gate behind a CVar later
-		if (GEngine)
+		if (GbDebugHarvest && GEngine)
 		{
 			GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Yellow,
 				FString::Printf(TEXT("HarvestableActor: No PrimaryMesh on Definition %s"), *GetNameSafe(Definition)));
@@ -131,7 +132,7 @@ void AHarvestableActor::ApplyDamage(const FDamageInfo& DamageInfo)
 
 	Instance->CurrentHealth -= FinalAmount;
 
-	if (GEngine)
+	if (GbDebugHarvest && GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage
 		(
@@ -214,7 +215,7 @@ void AHarvestableActor::HandleDeath()
 		}
 	}
 
-	if (GEngine)
+	if (GbDebugHarvest && GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage
 		(

@@ -3,6 +3,13 @@
 #include "Player/CraftingComponent.h"
 #include "Items/ItemActor.h"
 #include "Player/HeldItemsComponent.h"
+#include "Core/WoodcraftTypes.h"
+#include "EnhancedInputSubsystems.h"
+#include "InputMappingContext.h"
+#include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerController.h"
+#include "Engine/LocalPlayer.h"
+#include "Components/SceneComponent.h"
 
 namespace
 {
@@ -31,6 +38,11 @@ void UCraftingComponent::BeginPlay()
 
 void UCraftingComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (IsSessionActive())
+	{
+		EndSession();
+	}
+
 	if (HeldItems)
 	{
 		HeldItems->OnHeldItemsChanged.RemoveAll(this);
@@ -39,8 +51,81 @@ void UCraftingComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	Super::EndPlay(EndPlayReason);
 }
 
+bool UCraftingComponent::IsSessionActive() const
+{
+	return Session.Recipe != nullptr;
+}
+
+EHand UCraftingComponent::GetEngageHand() const
+{
+	return IsSessionActive() ? Session.EngageHand : EHand::None;
+}
+
+bool UCraftingComponent::CanStartCraft() const
+{
+	if (IsSessionActive()) return false;
+	if (CurrentSnapshot.bLeftExtended || CurrentSnapshot.bRightExtended) return false;
+	return CurrentMatches.IsValidIndex(SelectedMatchIndex);
+}
+
+bool UCraftingComponent::TryStartCraft()
+{
+	if (!CanStartCraft()) return false;
+
+	const FCraftingMatch& Match = CurrentMatches[SelectedMatchIndex];
+	if (!Match.Recipe) return false;
+
+	Session.Recipe = Match.Recipe;
+	Session.Bindings = Match.Bindings;
+	Session.Progress = 0.f;
+	Session.Phase = 0;
+	Session.bEngage = false;
+	Session.EngageHand = ResolveEngageHand(Match);
+	Session.Presentation = nullptr;
+
+	PushCraftingIMC();
+	ApplyGroundCraftView();
+	UpdateDebugPrompt();
+	return true;
+}
+
+void UCraftingComponent::CancelCraft()
+{
+	if (!IsSessionActive()) return;
+	EndSession();
+}
+
+void UCraftingComponent::NotifyOwnerDamaged()
+{
+	if (!IsSessionActive()) return;
+	EndSession();
+}
+
+void UCraftingComponent::CycleCraftMatch(int32 Delta)
+{
+	if (IsSessionActive()) return;
+	if (CurrentMatches.Num() < 2) return;
+	if (Delta == 0) return;
+
+	const int32 Num = CurrentMatches.Num();
+	SelectedMatchIndex = (SelectedMatchIndex + Delta) % Num;
+	if (SelectedMatchIndex < 0) SelectedMatchIndex += Num;
+	UpdateDebugPrompt();
+}
+
+void UCraftingComponent::SetCraftEngage(EHand Hand, bool bPressed)
+{
+	if (!IsSessionActive()) return;
+	if (Hand == EHand::None) return;
+	if (Hand != Session.EngageHand) return;
+
+	Session.bEngage = bPressed;
+}
+
 void UCraftingComponent::HandleHeldItemsChanged()
 {
+	if (IsSessionActive()) return;
+
 	if (LoadedRecipes.Num() == 0 && RecipeAssets.Num() > 0)
 	{
 		ResolveRecipeAssets();
@@ -121,6 +206,22 @@ void UCraftingComponent::UpdateDebugPrompt() const
 {
 	if (!GEngine) return;
 
+	if (!GbDebugCraft)
+	{
+		GEngine->AddOnScreenDebugMessage(CraftPromptMessageId, 0.f, FColor::Cyan, FString());
+		return;
+	}
+
+	if (IsSessionActive())
+	{
+		GEngine->AddOnScreenDebugMessage(
+			CraftPromptMessageId,
+			10000.f,
+			FColor::Cyan,
+			TEXT("[R] Cancel"));
+		return;
+	}
+
 	const bool bBothNeutral = !CurrentSnapshot.bLeftExtended && !CurrentSnapshot.bRightExtended;
 	const bool bShowPrompt = bBothNeutral && CurrentMatches.IsValidIndex(SelectedMatchIndex);
 	if (!bShowPrompt)
@@ -140,4 +241,150 @@ void UCraftingComponent::UpdateDebugPrompt() const
 		10000.f,
 		FColor::Cyan,
 		FString::Printf(TEXT("[E] Craft %s"), *CraftName));
+}
+
+EHand UCraftingComponent::ResolveEngageHand(const FCraftingMatch& Match) const
+{
+	if (Match.Recipe)
+	{
+		for (const FCraftingSlotBinding& Binding : Match.Bindings)
+		{
+			if (Binding.bStation) continue;
+			if (Binding.Hand == EHand::None) continue;
+			if (!Match.Recipe->Slots.IsValidIndex(Binding.SlotIndex)) continue;
+			if (Match.Recipe->Slots[Binding.SlotIndex].Role != ECraftingSlotRole::Tool) continue;
+			return Binding.Hand;
+		}
+	}
+
+	return DefaultCraftHand;
+}
+
+void UCraftingComponent::EndSession()
+{
+	RestoreGroundCraftView();
+	Session = FCraftingSession();
+	PopCraftingIMC();
+
+	RebuildSnapshot();
+	RefreshMatches();
+	UpdateDebugPrompt();
+}
+
+USceneComponent* UCraftingComponent::FindFirstPersonCamera() const
+{
+	AActor* OwnerActor = GetOwner();
+	if (!OwnerActor) return nullptr;
+
+	TArray<USceneComponent*> Components;
+	OwnerActor->GetComponents<USceneComponent>(Components);
+	for (USceneComponent* Component : Components)
+	{
+		if (Component && Component->GetName().StartsWith(TEXT("FPCamera")))
+		{
+			return Component;
+		}
+	}
+
+	return nullptr;
+}
+
+void UCraftingComponent::ApplyGroundCraftView()
+{
+	APawn* OwnerPawn = Cast<APawn>(GetOwner());
+	APlayerController* PC = OwnerPawn ? Cast<APlayerController>(OwnerPawn->GetController()) : nullptr;
+	USceneComponent* Camera = FindFirstPersonCamera();
+	if (!PC && !Camera) return;
+
+	if (!bCraftViewApplied)
+	{
+		if (PC) CachedControlRotation = PC->GetControlRotation();
+		if (Camera) CachedCameraRelativeTransform = Camera->GetRelativeTransform();
+		bCraftViewApplied = true;
+	}
+
+	if (PC)
+	{
+		FRotator ControlRotation = CachedControlRotation;
+		ControlRotation.Pitch = 0.f;
+		ControlRotation.Roll = 0.f;
+		PC->SetControlRotation(ControlRotation);
+	}
+
+	if (Camera)
+	{
+		FTransform CraftTransform = GroundCraftCameraTransform;
+		CraftTransform.SetScale3D(FVector::OneVector);
+		Camera->SetRelativeTransform(CraftTransform);
+	}
+}
+
+void UCraftingComponent::RestoreGroundCraftView()
+{
+	if (!bCraftViewApplied) return;
+
+	APawn* OwnerPawn = Cast<APawn>(GetOwner());
+	APlayerController* PC = OwnerPawn ? Cast<APlayerController>(OwnerPawn->GetController()) : nullptr;
+	if (PC)
+	{
+		PC->SetControlRotation(CachedControlRotation);
+	}
+
+	if (USceneComponent* Camera = FindFirstPersonCamera())
+	{
+		Camera->SetRelativeTransform(CachedCameraRelativeTransform);
+	}
+
+	bCraftViewApplied = false;
+}
+
+void UCraftingComponent::PushCraftingIMC()
+{
+	UEnhancedInputLocalPlayerSubsystem* InputSubsystem = GetInputSubsystem();
+	if (!InputSubsystem) return;
+
+	if (GameplayMappingContext)
+	{
+		InputSubsystem->RemoveMappingContext(GameplayMappingContext);
+	}
+
+	if (CraftingMappingContext)
+	{
+		InputSubsystem->AddMappingContext(CraftingMappingContext, CraftingIMCPriority);
+	}
+
+	bCraftingIMCPushed = true;
+}
+
+void UCraftingComponent::PopCraftingIMC()
+{
+	if (!bCraftingIMCPushed) return;
+
+	UEnhancedInputLocalPlayerSubsystem* InputSubsystem = GetInputSubsystem();
+	if (InputSubsystem)
+	{
+		if (CraftingMappingContext)
+		{
+			InputSubsystem->RemoveMappingContext(CraftingMappingContext);
+		}
+
+		if (GameplayMappingContext)
+		{
+			InputSubsystem->AddMappingContext(GameplayMappingContext, GameplayIMCPriority);
+		}
+	}
+
+	bCraftingIMCPushed = false;
+}
+
+UEnhancedInputLocalPlayerSubsystem* UCraftingComponent::GetInputSubsystem() const
+{
+	const APawn* OwnerPawn = Cast<APawn>(GetOwner());
+	const APlayerController* PC = OwnerPawn ? Cast<APlayerController>(OwnerPawn->GetController()) : nullptr;
+	if (!PC) return nullptr;
+
+	const ULocalPlayer* LocalPlayer = PC->GetLocalPlayer();
+	if (!LocalPlayer) return nullptr;
+
+	return LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>();
 }
