@@ -127,6 +127,7 @@ UENUM(BlueprintType)
 enum class ECraftHintGesture : uint8
 {
 	None				UMETA(DisplayName = "None"),
+	Shake				UMETA(DisplayName = "Shake"),
 	StrikeDown			UMETA(DisplayName = "Strike Down"),
 	PushIn				UMETA(DisplayName = "Push In"),
 	CircleAlternate		UMETA(DisplayName = "Circle Alternate"),
