@@ -2,15 +2,70 @@
 
 #pragma once
 
+#include "Core/WoodcraftTypes.h"
 #include "Crafting/Movements/CraftMovement.h"
 #include "Engine/DataAsset.h"
 #include "CraftingMinigameDefinition.generated.h"
 
+class UAnimMontage;
 class USkeletalMesh;
 
 /**
- * Shared look, camera, and presentation data for one minigame.
- * Gesture numbers live on the instanced UCraftMovement.
+ * One presentation SKM for a stage.
+ * Montage is optional. No montage = spawn pose / first frame after intro.
+ */
+USTRUCT(BlueprintType)
+struct FCraftPresentation
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Presentation")
+	TSoftObjectPtr<USkeletalMesh> Mesh;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Presentation")
+	TSoftObjectPtr<UAnimMontage> Montage;
+};
+
+/**
+ * One minigame stage. Grind / Twist / Strip author one row. Tie authors three.
+ */
+USTRUCT(BlueprintType)
+struct FCraftStage
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditDefaultsOnly, Instanced, Category = "Stage")
+	TObjectPtr<UCraftMovement> Move;
+
+	/** FPArms TwoHanded clip. Intro at the front, IntroDone notify, then interactive tail. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Stage")
+	TSoftObjectPtr<UAnimMontage> Montage;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Stage")
+	TArray<FCraftPresentation> Presentations;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Stage")
+	bool bGripIK_Left = true;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Stage")
+	bool bGripIK_Right = true;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Stage")
+	bool bHideLeft = false;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Stage")
+	bool bHideRight = false;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Stage")
+	bool bHideStation = false;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Stage")
+	ECraftHintGesture Hint = ECraftHintGesture::None;
+};
+
+/**
+ * Shared look, camera, and an ordered stage list.
+ * Gesture numbers live on the instanced UCraftMovement on each stage.
  */
 UCLASS(BlueprintType)
 class WOODCRAFTSURVIVAL_API UCraftingMinigameDefinition : public UPrimaryDataAsset
@@ -21,26 +76,11 @@ public:
 
 	UCraftingMinigameDefinition();
 
-	UPROPERTY(EditDefaultsOnly, Instanced, Category = "Minigame")
-	TObjectPtr<UCraftMovement> Move;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Minigame|Appearance")
-	ECraftingAppearanceMode AppearanceMode = ECraftingAppearanceMode::LiveMeshes;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Minigame")
+	TArray<FCraftStage> Stages;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Minigame|Appearance")
 	ECraftingMorphSampleMode MorphSampleMode = ECraftingMorphSampleMode::Lerp;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Minigame|Appearance")
-	TSoftObjectPtr<USkeletalMesh> PresentationMesh;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Minigame|Appearance")
-	bool bHideWorkpiece = false;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Minigame|Appearance")
-	bool bHideTool = false;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Minigame|Appearance")
-	FTransform PresentationOffset = FTransform::Identity;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Minigame|Appearance")
 	TArray<FName> MorphChannelNames;
@@ -56,13 +96,22 @@ public:
 
 	virtual FPrimaryAssetId GetPrimaryAssetId() const override;
 
+	int32 GetStageCount() const { return Stages.Num(); }
+
+	const FCraftStage* GetStage(int32 StageIndex) const
+	{
+		return Stages.IsValidIndex(StageIndex) ? &Stages[StageIndex] : nullptr;
+	}
+
 	/**
-	 * Finds the movement module if it is the requested class.
-	 * Example: const UGrindActiveCraftMovement* Grind = Minigame->FindMove<UGrindActiveCraftMovement>();
+	 * Finds the movement module on the requested stage if it is class T.
+	 * Example: const UGrindActiveCraftMovement* Grind = Minigame->FindMove<UGrindActiveCraftMovement>(Phase);
 	 */
 	template<typename T>
-	const T* FindMove() const
+	const T* FindMove(int32 StageIndex) const
 	{
-		return Cast<T>(Move.Get());
+		const FCraftStage* Stage = GetStage(StageIndex);
+		if (!Stage) return nullptr;
+		return Cast<T>(Stage->Move.Get());
 	}
 };

@@ -26,11 +26,17 @@ public:
 
 	/** Convenience: creates Instance + spawns the Actor. */
 	UFUNCTION(BlueprintCallable, Category = "Item Factory")
-	AItemActor* SpawnItemActorFromDefinition(const UItemDefinition* Definition, const FTransform& SpawnTransform);
+	AItemActor* SpawnItemActorFromDefinition(
+		const UItemDefinition* Definition,
+		const FTransform& SpawnTransform,
+		bool bJitterRotation = true);
 
 	/** Core path: spawns an Actor for an already-existing Instance. */
 	UFUNCTION(BlueprintCallable, Category = "Item Factory")
-	AItemActor* SpawnItemActorFromInstance(UItemInstance* Instance, const FTransform& SpawnTransform);
+	AItemActor* SpawnItemActorFromInstance(
+		UItemInstance* Instance,
+		const FTransform& SpawnTransform,
+		bool bJitterRotation = true);
 
 	/** Only destroy path for a real item. Actor first, then Instance. */
 	UFUNCTION(BlueprintCallable, Category = "Item Factory")

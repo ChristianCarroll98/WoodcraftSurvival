@@ -26,15 +26,21 @@ UItemInstance* UItemFactorySubsystem::CreateItemInstanceFromDefinition(const UIt
 	return NewInstance;
 }
 
-AItemActor* UItemFactorySubsystem::SpawnItemActorFromDefinition(const UItemDefinition* Definition, const FTransform& SpawnTransform)
+AItemActor* UItemFactorySubsystem::SpawnItemActorFromDefinition(
+	const UItemDefinition* Definition,
+	const FTransform& SpawnTransform,
+	bool bJitterRotation)
 {
 	UItemInstance* NewInstance = CreateItemInstanceFromDefinition(Definition);
 	if (!NewInstance) return nullptr;
 
-	return SpawnItemActorFromInstance(NewInstance, SpawnTransform);
+	return SpawnItemActorFromInstance(NewInstance, SpawnTransform, bJitterRotation);
 }
 
-AItemActor* UItemFactorySubsystem::SpawnItemActorFromInstance(UItemInstance* Instance, const FTransform& SpawnTransform)
+AItemActor* UItemFactorySubsystem::SpawnItemActorFromInstance(
+	UItemInstance* Instance,
+	const FTransform& SpawnTransform,
+	bool bJitterRotation)
 {
 	if (!Instance || !GetWorld()) return nullptr;
 
@@ -54,16 +60,19 @@ AItemActor* UItemFactorySubsystem::SpawnItemActorFromInstance(UItemInstance* Ins
 	SpawnParams.NameMode = FActorSpawnParameters::ESpawnActorNameMode::Requested;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
-	const FRotator SpawnJitter(
-		FMath::FRandRange(-25.f, 25.f),
-		FMath::FRandRange(-25.f, 25.f),
-		FMath::FRandRange(-25.f, 25.f));
-	FTransform JitteredTransform = SpawnTransform;
-	JitteredTransform.SetRotation((SpawnJitter.Quaternion() * SpawnTransform.GetRotation()).GetNormalized());
+	FTransform FinalTransform = SpawnTransform;
+	if (bJitterRotation)
+	{
+		const FRotator SpawnJitter(
+			FMath::FRandRange(-25.f, 25.f),
+			FMath::FRandRange(-25.f, 25.f),
+			FMath::FRandRange(-25.f, 25.f));
+		FinalTransform.SetRotation((SpawnJitter.Quaternion() * SpawnTransform.GetRotation()).GetNormalized());
+	}
 
 	AItemActor* NewItem = GetWorld()->SpawnActor<AItemActor>(
 		AItemActor::StaticClass(),
-		JitteredTransform,
+		FinalTransform,
 		SpawnParams);
 
 	if (!NewItem) return nullptr;

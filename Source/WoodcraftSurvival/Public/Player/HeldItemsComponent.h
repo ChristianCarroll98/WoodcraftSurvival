@@ -289,6 +289,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "CoreAPI")
 	FTransform GetDropTransform() const;
 
+	/** WeaponBone world transform for a hand. Falls back to GetDropTransform if the mesh is missing. */
+	UFUNCTION(BlueprintPure, Category = "CoreAPI")
+	FTransform GetHeldSpawnTransform(EHand Hand) const;
+
 	/**
 	 * Consumes the real item in this hand. Detach, Factory-destroy actor + Instance, EquipUnarmed.
 	 * Unarmed / empty hand returns false.

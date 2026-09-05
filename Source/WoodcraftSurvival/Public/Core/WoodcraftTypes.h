@@ -105,21 +105,26 @@ enum class ECraftingSlotMatchMode : uint8
 	Sharpenable		UMETA(DisplayName = "Sharpenable"),
 };
 
-/** How the session shows progress on the work. */
-UENUM(BlueprintType)
-enum class ECraftingAppearanceMode : uint8
-{
-	LiveMeshes		UMETA(DisplayName = "Live Meshes"),
-	Morph			UMETA(DisplayName = "Morph"),
-	SkeletalPhase	UMETA(DisplayName = "Skeletal Phase"),
-};
-
 /** How morph weights are sampled from progress. */
 UENUM(BlueprintType)
 enum class ECraftingMorphSampleMode : uint8
 {
 	Lerp		UMETA(DisplayName = "Lerp"),
 	HoldAndPop	UMETA(DisplayName = "Hold And Pop"),
+};
+
+/** Looping mouse-hint widget. None until that widget ships. */
+UENUM(BlueprintType)
+enum class ECraftHintGesture : uint8
+{
+	None				UMETA(DisplayName = "None"),
+	Shake				UMETA(DisplayName = "Shake"),
+	StrikeDown			UMETA(DisplayName = "Strike Down"),
+	PushIn				UMETA(DisplayName = "Push In"),
+	CircleAlternate		UMETA(DisplayName = "Circle Alternate"),
+	CircleContinuous	UMETA(DisplayName = "Circle Continuous"),
+	PullAlong			UMETA(DisplayName = "Pull Along"),
+	HoldEngage			UMETA(DisplayName = "Hold Engage"),
 };
 
 

@@ -29,6 +29,8 @@ struct FCraftingSession
 	int32 Phase = 0;
 	bool bEngage = false;
 	EHand EngageHand = EHand::Right;
+	bool bIntroActive = false;
+	float IntroEndTime = 0.f;
 
 	UPROPERTY()
 	TObjectPtr<AActor> Presentation;
@@ -68,9 +70,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Crafting|Camera")
 	FTransform GroundCraftCameraTransform = FTransform(FRotator(-50.f, 0.f, 0.f), FVector(25.f, 0.f, 65.f), FVector::OneVector);
 
-	/** A2.2 debug: Engage press completes the session. Grind turns this off. */
+	/** A2.2 debug: Engage press completes the current stage. Last stage commits the recipe. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Crafting")
-	bool bInstantCommitOnEngage = true;
+	bool bInstantComplete = true;
 
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -88,6 +90,14 @@ public:
 	/** Player BP reports both buttons. Ignored when Hand is not Session.EngageHand. */
 	UFUNCTION(BlueprintCallable, Category = "Crafting")
 	void SetCraftEngage(EHand Hand, bool bPressed);
+
+	/** FPArms IntroDone notify. Stores montage time and ends the intro. */
+	UFUNCTION(BlueprintCallable, Category = "Crafting")
+	void NotifyCraftIntroDone(float MontagePosition);
+
+	/** Last stage commits. Else Phase++ and local Progress resets. */
+	UFUNCTION(BlueprintCallable, Category = "Crafting")
+	void CompleteCurrentStage();
 
 	/** Same teardown as CancelCraft. Wire when the player can take damage. */
 	UFUNCTION(BlueprintCallable, Category = "Crafting")
@@ -111,6 +121,7 @@ private:
 	bool CanStartCraft() const;
 	EHand ResolveEngageHand(const FCraftingMatch& Match) const;
 	EHand ResolveAutoEquipHand() const;
+	void ApplyStage(int32 StageIndex);
 	void CompleteCraft();
 	void EndSession();
 	void ApplyGroundCraftView();
