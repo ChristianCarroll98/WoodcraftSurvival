@@ -166,7 +166,7 @@ Live-item crafts (Grind, Tie Split working hand) keep per-arm Neutral or brace p
 
 Stage arm motion plays the current `FCraftStage::Montage` on AnimRef into slot `TwoHanded`:
 
-- Intro at the front. `UAnimNotify_CraftIntroDone` on this clip only reports montage seconds to `UCraftingComponent` and enables the move.
+- Intro at the front. `UAnimNotify_CraftIntroDone` on this clip only reports montage seconds to `UCraftingComponent` and enables the move. Auto Blend Out off so the pose stays in the slot until `StopStageMontage`.
 - After intro, seek `lerp(IntroEndTime, ArmsLength, Progress)` when `bProgressDrivesMontage`. Twist leaves that flag false and writes position from slices.
 - Stage `Presentations` spawn at `FCraftPresentation::Anchor`. During intro they seek to the FPArms playhead. After intro they sample Progress (`lerp(IntroEndTime, OwnLength, Progress)` or morph weights). A presentation with no montage holds its spawn pose.
 - Stop the slot on teardown or phase change.

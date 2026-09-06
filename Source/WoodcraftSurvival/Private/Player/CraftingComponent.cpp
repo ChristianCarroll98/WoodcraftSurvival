@@ -401,9 +401,15 @@ void UCraftingComponent::NotifyCraftIntroDone(float MontagePosition)
 
 	const FCraftStage* Stage = Session.Recipe ? Session.Recipe->GetStage(Session.Phase) : nullptr;
 	const UCraftMovement* Move = Stage ? Stage->Move.Get() : nullptr;
-	if (!Move || !Move->bProgressDrivesMontage)
+	if (HeldItems)
 	{
-		HoldStageMontage(Session.IntroEndTime);
+		if (UFPArmsAnimInstance* ArmsAnim = HeldItems->GetArmsAnimInstance())
+		{
+			if (Session.PlayingMontage && (!Move || !Move->bProgressDrivesMontage))
+			{
+				ArmsAnim->Montage_SetPlayRate(Session.PlayingMontage, 0.f);
+			}
+		}
 	}
 
 	if (GbDebugCraft && GEngine)
@@ -735,25 +741,6 @@ void UCraftingComponent::StopStageMontage()
 	Session.PlayingMontage = nullptr;
 }
 
-void UCraftingComponent::HoldStageMontage(float Time)
-{
-	if (!Session.PlayingMontage || !HeldItems) return;
-
-	UFPArmsAnimInstance* ArmsAnim = HeldItems->GetArmsAnimInstance();
-	if (!ArmsAnim) return;
-
-	const float Length = Session.PlayingMontage->GetPlayLength();
-	const float HoldTime = FMath::Clamp(Time, 0.f, FMath::Max(0.f, Length - 0.02f));
-
-	if (!ArmsAnim->Montage_IsPlaying(Session.PlayingMontage))
-	{
-		ArmsAnim->Montage_Play(Session.PlayingMontage, 1.f);
-	}
-
-	ArmsAnim->Montage_SetPosition(Session.PlayingMontage, HoldTime);
-	ArmsAnim->Montage_SetPlayRate(Session.PlayingMontage, 0.f);
-}
-
 void UCraftingComponent::TickStageClock()
 {
 	if (!HeldItems) return;
@@ -772,22 +759,13 @@ void UCraftingComponent::TickStageClock()
 
 	const FCraftStage* Stage = Session.Recipe ? Session.Recipe->GetStage(Session.Phase) : nullptr;
 	const UCraftMovement* Move = Stage ? Stage->Move.Get() : nullptr;
+	if (!Move || !Move->bProgressDrivesMontage) return;
 	if (!Session.PlayingMontage) return;
 
-	if (Move && Move->bProgressDrivesMontage)
-	{
-		const float Length = Session.PlayingMontage->GetPlayLength();
-		const float T = FMath::Lerp(Session.IntroEndTime, Length, Session.Progress);
-		if (!ArmsAnim->Montage_IsPlaying(Session.PlayingMontage))
-		{
-			ArmsAnim->Montage_Play(Session.PlayingMontage, 1.f);
-		}
-		ArmsAnim->Montage_SetPosition(Session.PlayingMontage, T);
-		ArmsAnim->Montage_SetPlayRate(Session.PlayingMontage, 0.f);
-		return;
-	}
-
-	HoldStageMontage(Session.IntroEndTime);
+	const float Length = Session.PlayingMontage->GetPlayLength();
+	const float T = FMath::Lerp(Session.IntroEndTime, Length, Session.Progress);
+	ArmsAnim->Montage_SetPosition(Session.PlayingMontage, T);
+	ArmsAnim->Montage_SetPlayRate(Session.PlayingMontage, 0.f);
 }
 
 void UCraftingComponent::ApplyStagePresentation(const FCraftStage& Stage)

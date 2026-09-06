@@ -112,7 +112,7 @@ A single-output recipe sets `bAutoEquip` true. Multi-output recipes flag at most
 **`FCraftStage`**
 
 - `Move` — one instanced `UCraftMovement`
-- `Montage` — FPArms TwoHanded clip. Intro at the front, notify `IntroDone`, optional interactive tail
+- `Montage` — FPArms TwoHanded clip. Intro at the front, notify `IntroDone`, optional interactive tail. Auto Blend Out off.
 - `Presentations` — `TArray<FCraftPresentation>` spawned for this stage
 - `WorkRequired` — stage meter target. `1` = one second at the move’s cap rate. `Progress = AccumulatedWork / WorkRequired`
 - `bGripIK_Left` / `bGripIK_Right` — Visible Control Rig gates for this stage
@@ -356,7 +356,7 @@ HeldItems craft API:
 
 Swing orientation and collision damage stay off for the whole session. Player BP gates extend on `IsSessionActive()`. Start requires both hands Neutral. Start fails if the recipe has `Stages.Num() < 1`.
 
-Stage change: `EndCraftMotion`, stop the previous TwoHanded montage, apply the new stage’s grip-IK bools and hides, spawn that stage’s `Presentations`, play that stage’s arms montage from 0. Intro plays with input off. `UAnimNotify_CraftIntroDone` on the FPArms clip (only) reports montage seconds and enables the stage’s move. Montage end with no notify also ends the intro.
+Stage change: `EndCraftMotion`, stop the previous TwoHanded montage, apply the new stage’s grip-IK bools and hides, spawn that stage’s `Presentations`, play that stage’s arms montage from 0. Intro plays with input off. `UAnimNotify_CraftIntroDone` on the FPArms clip (only) reports montage seconds and enables the stage’s move. Montage end with no notify also ends the intro. Auto Blend Out off on stage montages.
 
 Clocks:
 
