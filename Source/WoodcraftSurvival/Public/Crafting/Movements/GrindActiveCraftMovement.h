@@ -35,6 +35,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grind", meta = (ClampMin = "0.0"))
 	float MaxStrokeSpeed = 200.f;
 
+	/** World cm of working-item travel per unit of CraftPointer. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grind", meta = (ClampMin = "0.0"))
+	float PointerSensitivity = 0.25f;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grind|Strength")
 	float PlantedLinearStrength = 1000.f;
 

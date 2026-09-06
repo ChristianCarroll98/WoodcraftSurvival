@@ -12,6 +12,8 @@ class UInputAction;
 class UInputComponent;
 class UInputMappingContext;
 class USceneComponent;
+class UAnimMontage;
+class AItemActor;
 
 /**
  * Frozen craft while a minigame is live.
@@ -34,6 +36,11 @@ struct FCraftingSession
 	EHand EngageHand = EHand::Right;
 	bool bIntroActive = false;
 	float IntroEndTime = 0.f;
+	float AccumulatedWork = 0.f;
+	bool bMotionStarted = false;
+
+	UPROPERTY()
+	TObjectPtr<UAnimMontage> PlayingMontage;
 
 	UPROPERTY()
 	TObjectPtr<AActor> Presentation;
@@ -77,12 +84,14 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Crafting|Camera")
 	FTransform GroundCraftCameraTransform = FTransform(FRotator(-50.f, 0.f, 0.f), FVector(25.f, 0.f, 65.f), FVector::OneVector);
 
-	/** A2.2 debug: Engage press completes the current stage. Last stage commits the recipe. */
+	/** Debug cheat: Engage press completes the current stage. Off for grind motion. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Crafting")
-	bool bInstantComplete = true;
+	bool bInstantComplete = false;
 
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	virtual void TickComponent(float DeltaTime, ELevelTick TickType,
+		FActorComponentTickFunction* ThisTickFunction) override;
 
 	UFUNCTION(BlueprintCallable, Category = "Crafting")
 	bool TryStartCraft();
@@ -142,6 +151,16 @@ private:
 	class UEnhancedInputLocalPlayerSubsystem* GetInputSubsystem() const;
 	void HandleCraftPointer(const FInputActionValue& Value);
 	void HandleCraftPointerCompleted();
+	void PlayStageMontage(const FCraftStage& Stage);
+	void StopStageMontage();
+	void TickStageClock();
+	void TickGrindActive(float DeltaTime);
+	void ApplyStagePresentation(const FCraftStage& Stage);
+	void RestoreBoundItemVisibility();
+	void EndCraftMotionBothHands();
+	void SetItemRenderHidden(AItemActor* Item, bool bHidden) const;
+	EHand GetSecondaryHand() const;
+	AItemActor* GetBoundActor(EHand Hand) const;
 
 	UPROPERTY()
 	TObjectPtr<UHeldItemsComponent> HeldItems;

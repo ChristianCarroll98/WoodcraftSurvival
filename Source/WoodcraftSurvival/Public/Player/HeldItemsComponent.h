@@ -80,6 +80,14 @@ struct FHandState
 	 */
 	int8 OrientEdgeSign = 1;
 
+	bool bCraftMotion = false;
+	float CraftLinearStrength = 0.f;
+	float CraftAngularStrength = 0.f;
+	bool bCraftLockX = false;
+	bool bCraftLockY = false;
+	bool bCraftLockZ = false;
+	FVector CraftExtraOffset = FVector::ZeroVector;
+
 	/** World item just dropped from this hand. Used to ignore collision with the incoming held actor. */
 	TWeakObjectPtr<AItemActor> RecentlyDroppedItem;
 };
@@ -337,6 +345,19 @@ public:
 	UFUNCTION(BlueprintPure, Category = "CoreAPI")
 	float GetLookSpeed() const;
 
+	UFUNCTION(BlueprintPure, Category = "CoreAPI")
+	USkeletalMeshComponent* GetAnimRefMesh() const { return AnimRefMesh; }
+
+	UFUNCTION(BlueprintPure, Category = "CoreAPI")
+	UFPArmsAnimInstance* GetArmsAnimInstance() const { return AnimInstance; }
+
+	void BeginCraftMotion(EHand Hand, float LinearStrength, float AngularStrength);
+	void SetCraftAxisLocks(EHand Hand, bool bLockX, bool bLockY, bool bLockZ);
+	void SetCraftExtraOffset(EHand Hand, const FVector& ExtraOffset);
+	FVector GetCraftExtraOffset(EHand Hand) const;
+	void EndCraftMotion(EHand Hand);
+	bool IsCraftMotionActive(EHand Hand) const;
+
 
 protected:
 	
@@ -413,6 +434,7 @@ private:
 	 * Item-local CP from the hold pose, not the live simulated mesh.
 	 */
 	void ApplyWristControlPoint(EHand Hand);
+	void ApplyCraftMotionTarget(EHand Hand);
 
 	/** Returns a reference to the pending pickup data for the given hand. */
 	FPendingPickupData& GetPendingPickup(EHand Hand);

@@ -259,7 +259,7 @@ A minigame may own a fail meter `0–1`. When it fills: session ends, tools stay
 3. That hand must be free after consumes
 4. If auto-equip cannot run, that output piles instead
 
-HeldItems `DestroyHeldItem(EHand)` consumes a real held item. `ReplaceHeldItem(EHand, AItemActor*)` auto-equips with no pickup montage. Factory `DestroyItemActorAndInstance(AItemActor*)` is the only destroy path, including Unarmed. `CompleteCraft()` runs this order. Auto-equip outputs spawn at `GetHeldSpawnTransform` (WeaponBone) with no rotation jitter. Piles use `GetDropTransform` with jitter. `bInstantComplete`: engage press calls `CompleteCurrentStage()` (last stage commits). Grind turns the flag off.
+HeldItems `DestroyHeldItem(EHand)` consumes a real held item. `ReplaceHeldItem(EHand, AItemActor*)` auto-equips with no pickup montage. Factory `DestroyItemActorAndInstance(AItemActor*)` is the only destroy path, including Unarmed. `CompleteCraft()` runs this order. Auto-equip outputs spawn at `GetHeldSpawnTransform` (WeaponBone) with no rotation jitter. Piles use `GetDropTransform` with jitter. `bInstantComplete` is a debug cheat (Engage press → `CompleteCurrentStage`). Default off.
 
 
 ### 9. Stations (what crafting needs)
@@ -640,9 +640,10 @@ A2.2 Factory complete
 - Success order in §7. `bInstantComplete` so two Stones become a Sharpened Stone before motion exists
 
 A2.3 Grind
-- HeldItems `BeginCraftMotion` / `EndCraftMotion`
+- HeldItems `BeginCraftMotion` / `EndCraftMotion` / `SetCraftAxisLocks`
 - One-stage GrindActive. Empty Presentations. Always in contact. Volume + speed gate/cap + `WorkRequired`
 - `IA_CraftPointer` on `IMC_Crafting`
+- TwoHanded stage montage play / `IntroDone` / pause
 - Interpreter `FindMove<T>(Phase)` (Phase stays 0)
 
 A2.4 Twist

@@ -137,6 +137,86 @@ float UHeldItemsComponent::GetLookSpeed() const
 	return LookSpeed;
 }
 
+void UHeldItemsComponent::BeginCraftMotion(EHand Hand, float LinearStrength, float AngularStrength)
+{
+	if (Hand == EHand::None) return;
+
+	FHandState& State = GetHandState(Hand);
+	State.bCraftMotion = true;
+	State.CraftLinearStrength = LinearStrength;
+	State.CraftAngularStrength = AngularStrength;
+	State.CraftExtraOffset = FVector::ZeroVector;
+	State.bProceduralOrientActive = false;
+
+	if (PhysicsControl && !State.ActiveControl.IsNone())
+	{
+		PhysicsControl->SetControlUseSkeletalAnimation(State.ActiveControl, true, 1.f);
+		PhysicsControl->SetControlTargetPositionAndOrientation(
+			State.ActiveControl,
+			FVector::ZeroVector,
+			FRotator::ZeroRotator,
+			0.f,
+			true,
+			true,
+			true,
+			false);
+	}
+}
+
+void UHeldItemsComponent::SetCraftAxisLocks(EHand Hand, bool bLockX, bool bLockY, bool bLockZ)
+{
+	if (Hand == EHand::None) return;
+
+	FHandState& State = GetHandState(Hand);
+	State.bCraftLockX = bLockX;
+	State.bCraftLockY = bLockY;
+	State.bCraftLockZ = bLockZ;
+}
+
+void UHeldItemsComponent::SetCraftExtraOffset(EHand Hand, const FVector& ExtraOffset)
+{
+	if (Hand == EHand::None) return;
+	GetHandState(Hand).CraftExtraOffset = ExtraOffset;
+}
+
+FVector UHeldItemsComponent::GetCraftExtraOffset(EHand Hand) const
+{
+	if (Hand == EHand::None) return FVector::ZeroVector;
+	return GetHandState(Hand).CraftExtraOffset;
+}
+
+void UHeldItemsComponent::EndCraftMotion(EHand Hand)
+{
+	if (Hand == EHand::None) return;
+
+	FHandState& State = GetHandState(Hand);
+	State.bCraftMotion = false;
+	State.CraftExtraOffset = FVector::ZeroVector;
+	State.bCraftLockX = false;
+	State.bCraftLockY = false;
+	State.bCraftLockZ = false;
+
+	if (PhysicsControl && !State.ActiveControl.IsNone())
+	{
+		PhysicsControl->SetControlUseSkeletalAnimation(State.ActiveControl, true, 1.f);
+		PhysicsControl->SetControlTargetPositionAndOrientation(
+			State.ActiveControl,
+			FVector::ZeroVector,
+			FRotator::ZeroRotator,
+			0.f,
+			true,
+			true,
+			true,
+			false);
+	}
+}
+
+bool UHeldItemsComponent::IsCraftMotionActive(EHand Hand) const
+{
+	if (Hand == EHand::None) return false;
+	return GetHandState(Hand).bCraftMotion;
+}
+
 EHand UHeldItemsComponent::GetIsHoldingTwoHanded() const
 {
 	AItemActor* LeftItem = GetHeldItem(EHand::Left);
@@ -312,6 +392,9 @@ void UHeldItemsComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 
 	ApplyWristControlPoint(EHand::Left);
 	ApplyWristControlPoint(EHand::Right);
+
+	ApplyCraftMotionTarget(EHand::Left);
+	ApplyCraftMotionTarget(EHand::Right);
 
 	UpdateProceduralOrientation(EHand::Left, DeltaTime);
 	UpdateProceduralOrientation(EHand::Right, DeltaTime);
@@ -867,6 +950,8 @@ void UHeldItemsComponent::DetachItemFromControl(EHand Hand)
 	State.bProceduralOrientActive = false;
 	State.OrientEdgeSign = 1;
 	State.bItemStuck = false;
+	State.bCraftMotion = false;
+	State.CraftExtraOffset = FVector::ZeroVector;
 	State.HeldItem = nullptr;
 }
 
@@ -968,12 +1053,37 @@ void UHeldItemsComponent::ApplyWristControlPoint(EHand Hand)
 		GetRelativeTransformBetweenWeaponAndHandBones(Hand).GetLocation());
 }
 
+void UHeldItemsComponent::ApplyCraftMotionTarget(EHand Hand)
+{
+	if (Hand == EHand::None || !PhysicsControl) return;
+
+	const FHandState& State = GetHandState(Hand);
+	if (!State.bCraftMotion) return;
+	if (State.ActiveControl.IsNone()) return;
+
+	PhysicsControl->SetControlTargetPositionAndOrientation(
+		State.ActiveControl,
+		State.CraftExtraOffset,
+		FRotator::ZeroRotator,
+		0.f,
+		true,
+		true,
+		true,
+		false);
+}
+
 void UHeldItemsComponent::UpdateControlStrengths(EHand Hand)
 {
 	if (Hand == EHand::None || !PhysicsControl) return;
 
 	const FHandState& State = GetHandState(Hand);
 	if (State.ActiveControl.IsNone() || !State.HeldItem) return;
+
+	if (State.bCraftMotion)
+	{
+		ApplyControlStrengths(Hand, State.CraftAngularStrength, State.CraftLinearStrength);
+		return;
+	}
 
 	const float AngLo = State.bExtended
 		? AngularStrengthBaseline
@@ -1023,6 +1133,7 @@ void UHeldItemsComponent::UpdateProceduralOrientation(EHand Hand, float DeltaTim
 
 	FHandState& State = GetHandState(Hand);
 	if (State.ActiveControl.IsNone() || !State.HeldItem) return;
+	if (State.bCraftMotion) return;
 	if (GetIsUnarmed(Hand)) return;
 
 	// Edged tools only — Pierce / None / Blunt skip procedural orient (damage still from primitives).
