@@ -153,6 +153,7 @@ private:
 	void HandleCraftPointerCompleted();
 	void PlayStageMontage(const FCraftStage& Stage);
 	void StopStageMontage();
+	void HoldStageMontage(float Time);
 	void TickStageClock();
 	void TickGrindActive(float DeltaTime);
 	void ApplyStagePresentation(const FCraftStage& Stage);
