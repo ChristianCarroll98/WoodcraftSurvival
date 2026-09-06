@@ -61,6 +61,7 @@ Enums live in `WoodcraftTypes.h`:
 - `ECraftingSlotRole` — Ingredient, Tool, Workpiece
 - `ECraftingSlotMatchMode` — ExactDefinition, RequiredTag, Sharpenable
 - `ECraftingMorphSampleMode` — Lerp, HoldAndPop
+- `ECraftPresentationAnchor` — ArmsPivot, Primary, Secondary, Station
 - `ECraftHintGesture` — None, Shake, StrikeDown, PushIn, CircleAlternate, CircleContinuous, PullAlong, HoldEngage
 
 Structs live next to the type that owns them (`FCraftingSlot` / `FCraftingOutput` / snapshot / match on the recipe header because `FindMatches` lives there; session on the component header). Movement numbers live on the movement classes.
@@ -102,14 +103,18 @@ A single-output recipe sets `bAutoEquip` true. Multi-output recipes flag at most
 
 - `Mesh` — presentation SKM
 - `Montage` — optional. Unset = spawn pose / first frame after intro
+- `Anchor` — `ECraftPresentationAnchor`: `ArmsPivot`, `Primary`, `Secondary`, `Station`
+- `MorphSampleMode` — `Lerp` or `HoldAndPop`
+- `MorphChannelNames`
+
+`Primary` = working / default craft hand (`EngageHand`). `Secondary` = the other hand. Handedness settings later remap those to `EHand`.
 
 **`FCraftStage`**
 
 - `Move` — one instanced `UCraftMovement`
-- `Montage` — FPArms TwoHanded clip. Intro at the front, notify `IntroDone`, optional interactive tail
+- `Montage` — FPArms TwoHanded clip. Intro at the front, notify `IntroDone`, optional interactive tail. Auto Blend Out off.
 - `Presentations` — `TArray<FCraftPresentation>` spawned for this stage
-- `MorphSampleMode` — `Lerp` or `HoldAndPop`
-- `MorphChannelNames`
+- `WorkRequired` — stage meter target. `1` = one second at the move’s cap rate. `Progress = AccumulatedWork / WorkRequired`
 - `bGripIK_Left` / `bGripIK_Right` — Visible Control Rig gates for this stage
 - `bHideLeft` / `bHideRight` / `bHideStation` — hide bound item renders (not presentation SKMs)
 - `Hint` — `ECraftHintGesture` for the looping mouse-hint widget (widget ships later)
@@ -124,12 +129,12 @@ Folder: `Public/Crafting/Movements/` (mirrors `Public/Items/Fragments/`).
 
 Concrete A2 classes:
 
-- `UGrindActiveCraftMovement` — always in contact. Stroke `D`, travel volume, min speed (gate) / max speed (cap), planted vs working strengths.
+- `UGrindActiveCraftMovement` — always in contact. Travel volume, min speed (gate) / max speed (cap), planted vs working strengths, `StrokeDistance` cue. Emits `dWork` from working-hand planar speed.
 - `UCircleAlternateCraftMovement` — animation / mouse slices. Slice radians, gesture radius.
 
 Later classes (same naming, add when that craft ships): `UGrindPassiveCraftMovement`, `UGrabPullCraftMovement`, `UCircleContinuousCraftMovement`, `UStrikeCraftMovement`.
 
-The interpreter on `UCraftingComponent` uses `FindMove<T>(Phase)` and runs that move. Movement objects do not run the session.
+The interpreter on `UCraftingComponent` uses `FindMove<T>(Phase)` and runs that move. Movement objects do not run the session. Each move emits normalized `dWork` into the current stage meter. `FCraftStage::WorkRequired` is the finish line.
 
 **`UCraftingComponent`** (on the player)
 Owns:
@@ -254,7 +259,7 @@ A minigame may own a fail meter `0–1`. When it fills: session ends, tools stay
 3. That hand must be free after consumes
 4. If auto-equip cannot run, that output piles instead
 
-HeldItems `DestroyHeldItem(EHand)` consumes a real held item. `ReplaceHeldItem(EHand, AItemActor*)` auto-equips with no pickup montage. Factory `DestroyItemActorAndInstance(AItemActor*)` is the only destroy path, including Unarmed. `CompleteCraft()` runs this order. Auto-equip outputs spawn at `GetHeldSpawnTransform` (WeaponBone) with no rotation jitter. Piles use `GetDropTransform` with jitter. `bInstantComplete`: engage press calls `CompleteCurrentStage()` (last stage commits). Grind turns the flag off.
+HeldItems `DestroyHeldItem(EHand)` consumes a real held item. `ReplaceHeldItem(EHand, AItemActor*)` auto-equips with no pickup montage. Factory `DestroyItemActorAndInstance(AItemActor*)` is the only destroy path, including Unarmed. `CompleteCraft()` runs this order. Auto-equip outputs spawn at `GetHeldSpawnTransform` (WeaponBone) with no rotation jitter. Piles use `GetDropTransform` with jitter. `bInstantComplete` is a debug cheat (Engage press → `CompleteCurrentStage`). Default off.
 
 
 ### 9. Stations (what crafting needs)
@@ -264,7 +269,7 @@ A station is a Structure. Crafting needs:
 - A station identity: one structure data asset. The recipe’s `Station` field and the structure’s identity are the same asset
 - Zero or one item slot on the shared socket frame already locked for items (`+Z` up, `+X` forward, item `PlacementOffsetTransform`)
 - Detection: looked-at station, or the station that already owns the slotted item
-- Player stand location and camera offset relative to the station
+- Player stand location and camera offset relative to the **slot socket** (author `CraftStand` / `CraftCamera` as child sockets of the slot when the bench mesh exists)
 
 Q-place / retrieve is Item + Structure work. Typical station craft: park one ingredient with Q, stand Neutral with the other item(s) in hand, prompt appears, E.
 
@@ -329,9 +334,11 @@ Audio and VFX are curated from meter events (engage, valid stroke / slice / pull
 
 Hands / ground: on E, set control pitch to 0 (`ArmsPivot` / arms level) and set `FPCamera` relative transform to `GroundCraftCameraTransform` on `UCraftingComponent` (scale forced to 1). Same transform for every ground craft. Locked default: location `25, 0, 65`, rotation `0, -50, 0` (pitch −50). Look stays off for the session. R restores control rotation and the camera relative transform. `FPCamera` parents on `ArmsPivot`. Camera `bUsePawnControlRotation` off. ArmsPivot on.
 
-Station crafts: the station owns player stand location and camera offset relative to itself so eyes / arms land on a consistent frame. A3.
+Work frame: recipe `Station` unset → FPArms AnimRef mesh component (`+Z` up, `+X` forward). Recipe `Station` set → that station’s slot socket (`+Z` up, `+X` forward). Mouse plane and default travel volumes use this frame. Grind volume origin is the working WeaponBone; orientation is the work frame. Grind volume tracks the planted item inside the frame later.
 
-Deferred enter/exit (after A2 snap). Short “move to place and sit and/or look down.” Station: lerp player location and camera to the station craft pose. Ground: camera only, to `GroundCraftCameraTransform`. Beat 1: brief look-forward while hide flags apply and stage presentation SKMs spawn at AnimRef / ArmsPivot. Beat 2: lerp camera down onto the work surface. Short. R / session end blends back.
+Station crafts: player stand and camera are offsets from the slot socket. A3.
+
+Deferred enter/exit (after A2 snap). Short “move to place and sit and/or look down.” Station: lerp player location and camera to the station craft pose. Ground: camera only, to `GroundCraftCameraTransform`. Beat 1: brief look-forward while hide flags apply and stage presentation SKMs spawn at their `Anchor`. Beat 2: lerp camera down onto the work surface. Short. R / session end blends back.
 
 #### 11.2 Authority
 
@@ -349,7 +356,7 @@ HeldItems craft API:
 
 Swing orientation and collision damage stay off for the whole session. Player BP gates extend on `IsSessionActive()`. Start requires both hands Neutral. Start fails if the recipe has `Stages.Num() < 1`.
 
-Stage change: `EndCraftMotion`, stop the previous TwoHanded montage, apply the new stage’s grip-IK bools and hides, spawn that stage’s `Presentations`, play that stage’s arms montage from 0. Intro plays with input off. `UAnimNotify_CraftIntroDone` on the FPArms clip (only) reports montage seconds and enables the stage’s move. Montage end with no notify also ends the intro.
+Stage change: `EndCraftMotion`, stop the previous TwoHanded montage, apply the new stage’s grip-IK bools and hides, spawn that stage’s `Presentations`, play that stage’s arms montage from 0. Intro plays with input off. `UAnimNotify_CraftIntroDone` on the FPArms clip (only) reports montage seconds and enables the stage’s move. Montage end with no notify also ends the intro. Auto Blend Out off on stage montages.
 
 Clocks:
 
@@ -382,20 +389,27 @@ A2 authors GrindActive and CircleAlternate only. Each of those recipes has one s
 
 Some stages hide bound item render meshes and spawn presentation SKMs owned by `UCraftingComponent`. Bound Item Instances and their `AItemActor`s stay in their sockets until a later in-progress replace or a final consume.
 
-Spawn presentation actors at AnimRef / ArmsPivot (Identity). Collision and Physics Control stay on the item actors.
+Each `FCraftPresentation` spawns at its `Anchor`. Collision and Physics Control stay on the item actors.
 
-Empty `Presentations` = live bound item meshes (Grind). Non-empty = spawn those SKMs. Montage vs morph targets is how the SKM is authored. Morph sample: `Lerp` or `HoldAndPop`.
+| Anchor | Transform |
+|---|---|
+| `ArmsPivot` | Identity on AnimRef / ArmsPivot |
+| `Primary` | working-hand item primary-mesh world transform |
+| `Secondary` | other-hand item primary-mesh world transform |
+| `Station` | slot socket Identity |
+
+Empty `Presentations` = live bound item meshes (A2 Grind). Non-empty = spawn those SKMs. Montage vs morph targets is how the SKM is authored. Morph sample and channel names live on that presentation.
 
 Hide flags are per stage and hide live item renders: `bHideLeft` / `bHideRight` / `bHideStation`. Twist hides left and right. Grind shows both stones. Tie hides the slotted Stick the whole session, hides Cordage on Stages 1–2, hides the live stone on Stage 3.
 
-`FCraftStage::Presentations` is the mesh list for that stage. Twist: one fiber SKM. Tie Split: stick SKM. Tie Seat: stick or stick+head SKM with a seat montage. Tie Wrap: wrap SKM plus seated-head SKM if it should stay visible (head has no montage if it should hold). Same SKM asset may repeat on a later stage with a different montage.
+`FCraftStage::Presentations` is the mesh list for that stage. Twist: one fiber SKM, `ArmsPivot`. Grind workpiece (shippable): `Secondary`. Tie Split / Seat / Wrap SKMs: `Station`. Same SKM asset may repeat on a later stage with a different montage.
 
-Item meshes stay without morphs. Shape change is presentation only.
+Item meshes stay without morphs. Shape change is presentation only. Material `CraftProgress` scalar can follow the same Progress as morph weights.
 
 **A2 presentation**
 
 1. Session starts. Bindings are the existing item actors.
-2. Spawn each `FCraftPresentation` on the current stage at AnimRef / ArmsPivot.
+2. Spawn each `FCraftPresentation` on the current stage at its `Anchor`.
 3. Stage hide flags → `SetVisibility(false)` on those bound primary meshes. Collision / simulate stay.
 4. Intro: seek presentation montages to the FPArms playhead. After intro: seek / morph from session Progress.
 5. Stage change or session end: destroy that list. Session end also unhides item actors that still exist.
@@ -406,15 +420,19 @@ The player holds `AItemActor` in A2.
 
 On `FCraftStage`:
 
-- Morph sample, morph channel names
+- `WorkRequired` (`1` = one second at the move’s cap rate)
 - Move, arms Montage, Presentations, grip IK, hides, Hint
+
+On `FCraftPresentation`:
+
+- Mesh, Montage, Anchor, morph sample, morph channel names
 
 Optional fail-meter rate, events, checkpoints later on the recipe.
 
 On the concrete movement:
 
 - `bProgressDrivesMontage` on the base class
-- GrindActive: stroke `D`, travel volume, min speed (gate) / max speed (cap), planted vs working strengths
+- GrindActive: travel volume, min speed (gate) / max speed (cap), planted vs working strengths, `StrokeDistance` cue interval
 - CircleAlternate: slice radians, gesture radius
 - GrabPull (later): grab-start angle cone, pull direction, peel `D`
 - GrindPassive (later): click engage, hone `R` / `r`
@@ -430,10 +448,13 @@ Engage is per movement class. GrindActive is always in contact. GrindPassive cli
 
 **Grind** — one stage, `UGrindActiveCraftMovement`, hands, both grip IK on. `DA_Item_Stone` + `DA_Item_Stone` → `DA_Item_SharpenedStone`.
 
-- Left (planted) is the workpiece: stone face up. Interpreter plants this hand.
-- Right (working) is the abrader: stone face down. Only this hand is read for progress.
+- Left (planted, Secondary) is the workpiece: stone face up. Interpreter plants this hand.
+- Right (working, Primary) is the abrader: stone face down. Only this hand is read for work.
 - Always in contact.
-- Working hand XY motion inside the volume. Speed below min: no progress. Speed above max: clamped. A stroke is travel `D` then a reverse. Each valid stroke adds progress and a grind cue.
+- Working hand XY motion inside the volume. Pointer from `IA_CraftPointer` on `IMC_Crafting`.
+- `Speed < MinStrokeSpeed`: `dWork = 0`. Else `dWork = (min(Speed, MaxStrokeSpeed) / MaxStrokeSpeed) * dt`.
+- `Progress = AccumulatedWork / WorkRequired`. Cap speed for `WorkRequired` seconds completes the stage.
+- `StrokeDistance` is a grind-cue interval.
 - A2: empty Presentations. Two cobbles the whole session. R / damage returns both stones. Success consumes both, spawns Sharpened Stone into the primary hand.
 
 **Twist** — one stage, `UCircleAlternateCraftMovement`, hands, both grip IK off, `bHideLeft` + `bHideRight`. `DA_Item_PlantFiber` + `DA_Item_PlantFiber` → `DA_Item_Cordage`.
@@ -485,7 +506,7 @@ On every `UCraftingRecipeDefinition`:
 - `Stages` — `TArray<FCraftStage>`, length ≥ 1
 - Events / checkpoints / fail: optional
 
-`FindMove<T>(Phase)` reads `Stages[Phase].Move`. Gesture numbers live on the movement class.
+`FindMove<T>(Phase)` reads `Stages[Phase].Move`. Gesture numbers live on the movement class. `WorkRequired` lives on the stage.
 
 #### 11.10 Still parked
 
@@ -524,6 +545,7 @@ Gameplay IMC is removed for the session. `IMC_Crafting` replaces it. Teardown re
 
 - R → cancel
 - LMB / RMB → `SetCraftEngage(EHand, bool)` (LMB = Left, RMB = Right)
+- `IA_CraftPointer` → Axis2D Mouse XY 2D. Stored on `UCraftingComponent`. Gamepad stick maps to the same action later.
 - Move, look, Q, wheel off
 
 Engage hand is resolved at E: a bound `Tool` slot’s hand, otherwise the default working hand (`Right` until handedness settings). The other mouse button is ignored.
@@ -536,7 +558,7 @@ A2 bindings stay on the Player BP and call:
 - `SetCraftEngage(EHand, bool)` on LMB / RMB while a session is live
 - `NotifyOwnerDamaged()` from the player damage path when that path exists
 
-Minigame mouse delta can join `IMC_Crafting` in A2.3 without giving the pawn look.
+`AWoodcraftCharacter::SetupPlayerInputComponent` binds `IA_CraftPointer` on the crafting component. The action only fires while `IMC_Crafting` is on.
 
 
 ### 13. Item system contact points
@@ -588,11 +610,13 @@ Minigame mouse delta can join `IMC_Crafting` in A2.3 without giving the pawn loo
 
 Locked this pass: snapshot, Neutral-only prompt, wheel select, E start, lock-on-E, R / player-damage cancel, GrindActive always in contact, recipe + slot + output + `Stages` fields, single station pointer, one instance per slot, consume / pile / auto-equip order, component owns table + session + interpreter, IMC swap, ground camera transform on the component, station pose on the station, engage = tool hand or default Right, `DA_Type_Name`, `UCraftingRecipeDefinition`, `UCraftMovement` instanced modules, AnimRef TwoHanded slot after L/R combine for Guided crafts.
 
-Minigame stages (2026-09-05): ordered `FCraftStage` list on the recipe. Local `0–1` per stage; last stage commits, else `Phase++`. Morph sample + channel names live on the stage. `bProgressDrivesMontage` seeks the FPArms clip from Progress after intro. Presentations always sample Progress after intro. `IntroDone` lives only on the FPArms montage and reports time. Frozen bindings; layout pass may move actors onto the slot at E and R restores pre-layout sockets. Grind / Twist / Strip = one stage. Tie = three stages. Per-stage `Presentations` list. Item meshes stay without morphs.
+Minigame stages (2026-09-05): ordered `FCraftStage` list on the recipe. Local `0–1` per stage; last stage commits, else `Phase++`. `WorkRequired` on the stage. Morph sample + channel names + `Anchor` live on `FCraftPresentation`. `bProgressDrivesMontage` seeks the FPArms clip from Progress after intro. Presentations always sample Progress after intro. `IntroDone` lives only on the FPArms montage and reports time. Frozen bindings; layout pass may move actors onto the slot at E and R restores pre-layout sockets. Grind / Twist / Strip = one stage. Tie = three stages. Per-stage `Presentations` list. Item meshes stay without morphs.
 
 A2 MVP recipes: Grind and Twist. Strip follows the PoC. Station / Tie is A3.
 
-One interpreter. Presentation SKMs spawn at AnimRef / ArmsPivot.
+A2.3 GrindActive accepted in PIE (2026-09-06). Work frame = AnimRef mesh component. Module defaults kept. WorkRequired authored on the recipe stage. Visible Control Rig pole / elbow-with-wrist is a later polish card.
+
+One interpreter. Presentation SKMs spawn at `FCraftPresentation::Anchor`. Work frame = AnimRef mesh component (hands) or slot socket (station). `IA_CraftPointer` on `IMC_Crafting`. Moves emit normalized `dWork`.
 
 Resume later is an Item on selected long crafts (Form, Hammer). A2 Grind / Twist / Strip return the original items on R.
 
@@ -618,8 +642,10 @@ A2.2 Factory complete
 - Success order in §7. `bInstantComplete` so two Stones become a Sharpened Stone before motion exists
 
 A2.3 Grind
-- HeldItems `BeginCraftMotion` / `EndCraftMotion`
-- One-stage GrindActive. Empty Presentations. Always in contact. Volume + stroke `D` + speed gate/cap
+- HeldItems `BeginCraftMotion` / `EndCraftMotion` / `SetCraftAxisLocks`
+- One-stage GrindActive. Empty Presentations. Always in contact. Volume + speed gate/cap + `WorkRequired`
+- `IA_CraftPointer` on `IMC_Crafting`
+- TwoHanded stage montage play / `IntroDone` / pause
 - Interpreter `FindMove<T>(Phase)` (Phase stays 0)
 
 A2.4 Twist
@@ -630,7 +656,7 @@ Strip after that PoC plays (one stage, stalk + Unarmed → Plant Fiber only).
 
 **Shippable (after the loop plays)**
 
-- Grind workpiece `Morph` + `Lerp` follow-mesh on the planted stone. Abrader stays live cobble.
+- Grind workpiece `Morph` + `Lerp`, `Anchor = Secondary`. Abrader stays live cobble.
 - Strip presentation SKM.
 - Tie three-stage session + workpiece SKM + wrap SKM.
 

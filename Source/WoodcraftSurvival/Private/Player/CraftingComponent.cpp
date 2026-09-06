@@ -2,14 +2,27 @@
 
 #include "Player/CraftingComponent.h"
 #include "Crafting/Movements/CraftMovement.h"
+#include "Crafting/Movements/GrindActiveCraftMovement.h"
 #include "Items/ItemActor.h"
 #include "Items/ItemInstance.h"
 #include "Items/ItemFactorySubsystem.h"
 #include "Items/Fragments/DurabilityItemFragment.h"
 #include "Player/HeldItemsComponent.h"
+#include "Player/FPArmsAnimInstance.h"
 #include "Core/WoodcraftTypes.h"
+#include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "InputAction.h"
 #include "InputMappingContext.h"
+#include "Animation/AnimInstance.h"
+#include "Animation/AnimMontage.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "DrawDebugHelpers.h"
+#include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerController.h"
+#include "Engine/LocalPlayer.h"
+#include "Components/SceneComponent.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Engine/LocalPlayer.h"
@@ -22,7 +35,7 @@ namespace
 
 UCraftingComponent::UCraftingComponent()
 {
-	PrimaryComponentTick.bCanEverTick = false;
+	PrimaryComponentTick.bCanEverTick = true;
 }
 
 void UCraftingComponent::BeginPlay()
@@ -53,6 +66,20 @@ void UCraftingComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	}
 
 	Super::EndPlay(EndPlayReason);
+}
+
+void UCraftingComponent::TickComponent(float DeltaTime, ELevelTick TickType,
+	FActorComponentTickFunction* ThisTickFunction)
+{
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	if (!IsSessionActive()) return;
+
+	TickStageClock();
+	if (!IsSessionActive()) return;
+	if (Session.bIntroActive) return;
+
+	TickGrindActive(DeltaTime);
 }
 
 bool UCraftingComponent::IsSessionActive() const
@@ -102,6 +129,40 @@ void UCraftingComponent::NotifyOwnerDamaged()
 {
 	if (!IsSessionActive()) return;
 	EndSession();
+}
+
+void UCraftingComponent::BindInput(UInputComponent* PlayerInputComponent)
+{
+	UEnhancedInputComponent* EnhancedInput = Cast<UEnhancedInputComponent>(PlayerInputComponent);
+	if (!EnhancedInput) return;
+	if (!CraftPointerAction) return;
+
+	EnhancedInput->BindAction(
+		CraftPointerAction,
+		ETriggerEvent::Triggered,
+		this,
+		&UCraftingComponent::HandleCraftPointer);
+	EnhancedInput->BindAction(
+		CraftPointerAction,
+		ETriggerEvent::Completed,
+		this,
+		&UCraftingComponent::HandleCraftPointerCompleted);
+}
+
+void UCraftingComponent::HandleCraftPointer(const FInputActionValue& Value)
+{
+	if (!IsSessionActive())
+	{
+		CraftPointer = FVector2D::ZeroVector;
+		return;
+	}
+
+	CraftPointer = Value.Get<FVector2D>();
+}
+
+void UCraftingComponent::HandleCraftPointerCompleted()
+{
+	CraftPointer = FVector2D::ZeroVector;
 }
 
 void UCraftingComponent::CycleCraftMatch(int32 Delta)
@@ -229,11 +290,12 @@ void UCraftingComponent::UpdateDebugPrompt() const
 			10000.f,
 			FColor::Cyan,
 			FString::Printf(
-				TEXT("[R] Cancel  Stage %d/%d  %s  Intro=%s"),
+				TEXT("[R] Cancel  Stage %d/%d  %s  Intro=%s  P=%.2f"),
 				Session.Phase + 1,
 				StageCount,
 				Move ? *Move->GetClass()->GetName() : TEXT("None"),
-				Session.bIntroActive ? TEXT("1") : TEXT("0")));
+				Session.bIntroActive ? TEXT("1") : TEXT("0"),
+				Session.Progress));
 		return;
 	}
 
@@ -299,10 +361,18 @@ void UCraftingComponent::ApplyStage(int32 StageIndex)
 	const FCraftStage* Stage = Session.Recipe->GetStage(StageIndex);
 	if (!Stage) return;
 
+	EndCraftMotionBothHands();
+	StopStageMontage();
+
 	Session.Phase = StageIndex;
 	Session.Progress = 0.f;
-	Session.bIntroActive = !Stage->Montage.IsNull();
+	Session.AccumulatedWork = 0.f;
+	Session.bMotionStarted = false;
 	Session.IntroEndTime = 0.f;
+	Session.bIntroActive = !Stage->Montage.IsNull();
+
+	ApplyStagePresentation(*Stage);
+	PlayStageMontage(*Stage);
 
 	if (GbDebugCraft && GEngine)
 	{
@@ -328,6 +398,19 @@ void UCraftingComponent::NotifyCraftIntroDone(float MontagePosition)
 
 	Session.IntroEndTime = MontagePosition;
 	Session.bIntroActive = false;
+
+	const FCraftStage* Stage = Session.Recipe ? Session.Recipe->GetStage(Session.Phase) : nullptr;
+	const UCraftMovement* Move = Stage ? Stage->Move.Get() : nullptr;
+	if (HeldItems)
+	{
+		if (UFPArmsAnimInstance* ArmsAnim = HeldItems->GetArmsAnimInstance())
+		{
+			if (Session.PlayingMontage && (!Move || !Move->bProgressDrivesMontage))
+			{
+				ArmsAnim->Montage_SetPlayRate(Session.PlayingMontage, 0.f);
+			}
+		}
+	}
 
 	if (GbDebugCraft && GEngine)
 	{
@@ -484,7 +567,11 @@ void UCraftingComponent::CompleteCraft()
 
 void UCraftingComponent::EndSession()
 {
+	EndCraftMotionBothHands();
+	StopStageMontage();
+	RestoreBoundItemVisibility();
 	RestoreGroundCraftView();
+	CraftPointer = FVector2D::ZeroVector;
 	Session = FCraftingSession();
 	PopCraftingIMC();
 
@@ -609,4 +696,216 @@ UEnhancedInputLocalPlayerSubsystem* UCraftingComponent::GetInputSubsystem() cons
 	if (!LocalPlayer) return nullptr;
 
 	return LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>();
+}
+
+void UCraftingComponent::PlayStageMontage(const FCraftStage& Stage)
+{
+	StopStageMontage();
+	if (Stage.Montage.IsNull())
+	{
+		Session.bIntroActive = false;
+		return;
+	}
+
+	UAnimMontage* Montage = Stage.Montage.LoadSynchronous();
+	if (!Montage)
+	{
+		Session.bIntroActive = false;
+		return;
+	}
+
+	UFPArmsAnimInstance* ArmsAnim = HeldItems ? HeldItems->GetArmsAnimInstance() : nullptr;
+	if (!ArmsAnim)
+	{
+		Session.bIntroActive = false;
+		return;
+	}
+
+	ArmsAnim->Montage_Play(Montage);
+	Session.PlayingMontage = Montage;
+}
+
+void UCraftingComponent::StopStageMontage()
+{
+	if (HeldItems)
+	{
+		if (UFPArmsAnimInstance* ArmsAnim = HeldItems->GetArmsAnimInstance())
+		{
+			if (Session.PlayingMontage)
+			{
+				ArmsAnim->Montage_Stop(0.15f, Session.PlayingMontage);
+			}
+		}
+	}
+
+	Session.PlayingMontage = nullptr;
+}
+
+void UCraftingComponent::TickStageClock()
+{
+	if (!HeldItems) return;
+
+	UFPArmsAnimInstance* ArmsAnim = HeldItems->GetArmsAnimInstance();
+	if (!ArmsAnim) return;
+
+	if (Session.bIntroActive && Session.PlayingMontage)
+	{
+		if (!ArmsAnim->Montage_IsPlaying(Session.PlayingMontage))
+		{
+			NotifyCraftIntroDone(Session.PlayingMontage->GetPlayLength());
+		}
+		return;
+	}
+
+	const FCraftStage* Stage = Session.Recipe ? Session.Recipe->GetStage(Session.Phase) : nullptr;
+	const UCraftMovement* Move = Stage ? Stage->Move.Get() : nullptr;
+	if (!Move || !Move->bProgressDrivesMontage) return;
+	if (!Session.PlayingMontage) return;
+
+	const float Length = Session.PlayingMontage->GetPlayLength();
+	const float T = FMath::Lerp(Session.IntroEndTime, Length, Session.Progress);
+	ArmsAnim->Montage_SetPosition(Session.PlayingMontage, T);
+	ArmsAnim->Montage_SetPlayRate(Session.PlayingMontage, 0.f);
+}
+
+void UCraftingComponent::ApplyStagePresentation(const FCraftStage& Stage)
+{
+	RestoreBoundItemVisibility();
+	SetItemRenderHidden(GetBoundActor(EHand::Left), Stage.bHideLeft);
+	SetItemRenderHidden(GetBoundActor(EHand::Right), Stage.bHideRight);
+}
+
+void UCraftingComponent::RestoreBoundItemVisibility()
+{
+	SetItemRenderHidden(GetBoundActor(EHand::Left), false);
+	SetItemRenderHidden(GetBoundActor(EHand::Right), false);
+}
+
+void UCraftingComponent::SetItemRenderHidden(AItemActor* Item, bool bHidden) const
+{
+	if (!Item) return;
+
+	if (UStaticMeshComponent* Primary = Item->GetItemPrimaryMesh())
+	{
+		Primary->SetHiddenInGame(bHidden);
+	}
+	if (UStaticMeshComponent* Secondary = Item->GetItemSecondaryMesh())
+	{
+		Secondary->SetHiddenInGame(bHidden);
+	}
+}
+
+void UCraftingComponent::EndCraftMotionBothHands()
+{
+	if (!HeldItems) return;
+	HeldItems->EndCraftMotion(EHand::Left);
+	HeldItems->EndCraftMotion(EHand::Right);
+}
+
+EHand UCraftingComponent::GetSecondaryHand() const
+{
+	return (Session.EngageHand == EHand::Left) ? EHand::Right : EHand::Left;
+}
+
+AItemActor* UCraftingComponent::GetBoundActor(EHand Hand) const
+{
+	for (const FCraftingSlotBinding& Binding : Session.Bindings)
+	{
+		if (Binding.bStation) continue;
+		if (Binding.Hand == Hand) return Binding.Actor;
+	}
+	return HeldItems ? HeldItems->GetHeldItem(Hand) : nullptr;
+}
+
+void UCraftingComponent::TickGrindActive(float DeltaTime)
+{
+	if (!HeldItems || !Session.Recipe) return;
+
+	const UGrindActiveCraftMovement* Grind =
+		Session.Recipe->FindMove<UGrindActiveCraftMovement>(Session.Phase);
+	if (!Grind) return;
+
+	const FCraftStage* Stage = Session.Recipe->GetStage(Session.Phase);
+	if (!Stage) return;
+
+	const EHand WorkingHand = Session.EngageHand;
+	const EHand PlantedHand = GetSecondaryHand();
+	if (WorkingHand == EHand::None || PlantedHand == EHand::None) return;
+
+	if (!Session.bMotionStarted)
+	{
+		HeldItems->BeginCraftMotion(PlantedHand, Grind->PlantedLinearStrength, Grind->PlantedAngularStrength);
+		HeldItems->SetCraftAxisLocks(PlantedHand, true, true, true);
+		HeldItems->BeginCraftMotion(WorkingHand, Grind->WorkingLinearStrength, Grind->WorkingAngularStrength);
+		HeldItems->SetCraftAxisLocks(WorkingHand, false, false, true);
+		Session.bMotionStarted = true;
+	}
+
+	const FVector2D Pointer = CraftPointer;
+	CraftPointer = FVector2D::ZeroVector;
+
+	const FTransform BoneXform = HeldItems->GetHeldSpawnTransform(WorkingHand);
+	FQuat WorkRot = FQuat::Identity;
+	if (const USkeletalMeshComponent* Arms = HeldItems->GetAnimRefMesh())
+	{
+		WorkRot = Arms->GetComponentQuat();
+	}
+	else if (const APawn* OwnerPawn = Cast<APawn>(GetOwner()))
+	{
+		WorkRot = OwnerPawn->GetActorQuat();
+	}
+	const FTransform WorkFrame(WorkRot, BoneXform.GetLocation());
+
+	FVector WorkExtra = WorkFrame.InverseTransformVector(
+		BoneXform.TransformVector(HeldItems->GetCraftExtraOffset(WorkingHand)));
+	WorkExtra += FVector(-Pointer.X, Pointer.Y, 0.f) * Grind->PointerSensitivity;
+	WorkExtra.X = FMath::Clamp(WorkExtra.X, -Grind->WorkingVolumeHalfExtents.X, Grind->WorkingVolumeHalfExtents.X);
+	WorkExtra.Y = FMath::Clamp(WorkExtra.Y, -Grind->WorkingVolumeHalfExtents.Y, Grind->WorkingVolumeHalfExtents.Y);
+	WorkExtra.Z = 0.f;
+	HeldItems->SetCraftExtraOffset(
+		WorkingHand,
+		BoneXform.InverseTransformVector(WorkFrame.TransformVector(WorkExtra)));
+
+	AItemActor* WorkingItem = GetBoundActor(WorkingHand);
+	float PlanarSpeed = 0.f;
+	if (WorkingItem)
+	{
+		if (UStaticMeshComponent* Mesh = WorkingItem->GetItemPrimaryMesh())
+		{
+			const FVector WorkVel = WorkFrame.InverseTransformVector(Mesh->GetPhysicsLinearVelocity());
+			PlanarSpeed = FVector(WorkVel.X, WorkVel.Y, 0.f).Size();
+		}
+	}
+
+	if (PlanarSpeed >= Grind->MinStrokeSpeed)
+	{
+		const float Rate = FMath::Min(PlanarSpeed, Grind->MaxStrokeSpeed) / FMath::Max(Grind->MaxStrokeSpeed, 1.f);
+		Session.AccumulatedWork += Rate * DeltaTime;
+	}
+
+	const float Required = FMath::Max(Stage->WorkRequired, 0.01f);
+	Session.Progress = FMath::Clamp(Session.AccumulatedWork / Required, 0.f, 1.f);
+	UpdateDebugPrompt();
+
+	if (GbDebugCraft)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			DrawDebugBox(
+				World,
+				WorkFrame.GetLocation(),
+				Grind->WorkingVolumeHalfExtents,
+				WorkRot,
+				FColor::Cyan,
+				false,
+				0.f,
+				0,
+				1.f);
+		}
+	}
+
+	if (Session.Progress >= 1.f)
+	{
+		CompleteCurrentStage();
+	}
 }

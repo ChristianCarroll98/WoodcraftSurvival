@@ -24,8 +24,6 @@ Content/
 --Core/
 ---PhysMaterials/
 ---Game modes
---Crafting/
---- presentation SKMs (Twist fiber, later Tie stick / wrap). Recipe DAs live next to the primary output item.
 --Dev/
 --Effects/
 ---item pickup outline material other shared materials or effects
@@ -37,7 +35,7 @@ Content/
 ---Shared/ shared assets for resources like materials and such
 ---Resources/
 ----Stick/ specific resource item folders
------animations, materials, data asset, mesh, textures for stick. DA_Recipe_* lives next to the primary output item.
+-----animations, materials, data asset, mesh, textures for stick. DA_Recipe_* for the primary item. Presentation SKMs (Twist fiber, later Tie stick / wrap).
 ---Weapons/
 ----Hatchets/ item type organization subfolder. May add similar organization for resources later.
 -----Shared/ shared assets for all hatchets
@@ -47,7 +45,8 @@ Content/
 --Player/
 ---Animation/ anims, control rig, anim BPs, Mirror data table
 ---Input/ input mapping contexts
-----Actions/ input actions
+----DefaultActions/ input actions for IMC_Default
+----CraftingActions/ input actions for IMC_Crafting
 ---Mesh/ skin material, physics asset, skeletal mesh and skeleton assets.
 ---player BP
 --Structures/ similar to items but for structure types

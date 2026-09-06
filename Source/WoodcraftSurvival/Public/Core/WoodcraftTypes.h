@@ -105,6 +105,16 @@ enum class ECraftingSlotMatchMode : uint8
 	Sharpenable		UMETA(DisplayName = "Sharpenable"),
 };
 
+/** How a presentation SKM is parented during a stage. */
+UENUM(BlueprintType)
+enum class ECraftPresentationAnchor : uint8
+{
+	ArmsPivot	UMETA(DisplayName = "Arms Pivot"),
+	Primary		UMETA(DisplayName = "Primary Hand"),
+	Secondary	UMETA(DisplayName = "Secondary Hand"),
+	Station		UMETA(DisplayName = "Station Socket"),
+};
+
 /** How morph weights are sampled from progress. */
 UENUM(BlueprintType)
 enum class ECraftingMorphSampleMode : uint8

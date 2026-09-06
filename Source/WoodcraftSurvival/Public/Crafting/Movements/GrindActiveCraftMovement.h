@@ -7,7 +7,8 @@
 
 /**
  * Two-hand grind. Planted workpiece, working abrader.
- * Always in contact. Progress from XY strokes while the session is live.
+ * Always in contact. Emits normalized dWork from planar working-hand speed.
+ * Stage WorkRequired is the finish line (1 = one second at MaxStrokeSpeed).
  */
 UCLASS(EditInlineNew, DefaultToInstanced)
 class WOODCRAFTSURVIVAL_API UGrindActiveCraftMovement : public UCraftMovement
@@ -18,11 +19,11 @@ public:
 
 	UGrindActiveCraftMovement();
 
-	/** Travel distance that counts as one stroke before a reverse. */
+	/** Travel distance that fires a grind cue. Does not commit the stage. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grind", meta = (ClampMin = "0.1"))
 	float StrokeDistance = 8.f;
 
-	/** Half-extents of the working-hand travel box in craft space. */
+	/** Half-extents of the working-hand travel box in AnimRef mesh space (+X forward, +Y right, +Z up). */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grind")
 	FVector WorkingVolumeHalfExtents = FVector(12.f, 12.f, 8.f);
 
@@ -33,6 +34,10 @@ public:
 	/** Detected stroke speed is clamped to this when applying progress. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grind", meta = (ClampMin = "0.0"))
 	float MaxStrokeSpeed = 200.f;
+
+	/** World cm of working-item travel per unit of CraftPointer. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grind", meta = (ClampMin = "0.0"))
+	float PointerSensitivity = 0.25f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grind|Strength")
 	float PlantedLinearStrength = 1000.f;

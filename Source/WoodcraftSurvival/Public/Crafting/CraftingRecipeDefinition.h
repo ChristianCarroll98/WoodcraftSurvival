@@ -76,6 +76,20 @@ struct FCraftPresentation
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Presentation")
 	TSoftObjectPtr<UAnimMontage> Montage;
+
+	/**
+	 * ArmsPivot = Identity on AnimRef / ArmsPivot.
+	 * Primary / Secondary = that bound item’s primary-mesh world transform.
+	 * Station = slot socket Identity.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Presentation")
+	ECraftPresentationAnchor Anchor = ECraftPresentationAnchor::ArmsPivot;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Presentation")
+	ECraftingMorphSampleMode MorphSampleMode = ECraftingMorphSampleMode::Lerp;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Presentation")
+	TArray<FName> MorphChannelNames;
 };
 
 /**
@@ -96,11 +110,9 @@ struct FCraftStage
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Stage")
 	TArray<FCraftPresentation> Presentations;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Stage")
-	ECraftingMorphSampleMode MorphSampleMode = ECraftingMorphSampleMode::Lerp;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Stage")
-	TArray<FName> MorphChannelNames;
+	/** Stage meter target. 1 = one second at the move’s cap rate. Progress = AccumulatedWork / WorkRequired. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Stage", meta = (ClampMin = "0.01"))
+	float WorkRequired = 1.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Stage")
 	bool bGripIK_Left = true;

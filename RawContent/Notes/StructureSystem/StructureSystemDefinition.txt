@@ -85,7 +85,9 @@ Socket kinds:
 
 | Kind | Role | When it exists |
 |---|---|---|
-| **ItemSlot** | Park one non-stack item. Crafting may use it. | Only after every section is full. 0 or 1 per structure for now. |
+| **ItemSlot** | Park one non-stack item. Crafting work frame + presentation `Station` anchor. | Only after every section is full. 0 or 1 per structure for now. |
+| **CraftStand** | Player stand location. Child of the ItemSlot. | Station crafts (A3). |
+| **CraftCamera** | Camera offset. Child of the ItemSlot. | Station crafts (A3). |
 | **Attachment** | Child structure (rack over fire). | Later. Not an item socket. |
 | **Anim pivot** | Grindstone axle, etc. | Visual only. Q-place never sees it. |
 

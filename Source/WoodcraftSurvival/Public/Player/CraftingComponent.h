@@ -4,11 +4,16 @@
 
 #include "Crafting/CraftingRecipeDefinition.h"
 #include "Components/ActorComponent.h"
+#include "InputActionValue.h"
 #include "CraftingComponent.generated.h"
 
 class UHeldItemsComponent;
+class UInputAction;
+class UInputComponent;
 class UInputMappingContext;
 class USceneComponent;
+class UAnimMontage;
+class AItemActor;
 
 /**
  * Frozen craft while a minigame is live.
@@ -31,6 +36,11 @@ struct FCraftingSession
 	EHand EngageHand = EHand::Right;
 	bool bIntroActive = false;
 	float IntroEndTime = 0.f;
+	float AccumulatedWork = 0.f;
+	bool bMotionStarted = false;
+
+	UPROPERTY()
+	TObjectPtr<UAnimMontage> PlayingMontage;
 
 	UPROPERTY()
 	TObjectPtr<AActor> Presentation;
@@ -66,16 +76,22 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Crafting|Input")
 	int32 CraftingIMCPriority = 1;
 
+	/** Axis2D pointer for minigames. Map Mouse XY 2D on IMC_Crafting only. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Crafting|Input")
+	TObjectPtr<UInputAction> CraftPointerAction;
+
 	/** Shared FPCamera relative transform for every hands / ground craft. Station crafts use the station’s pose later. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Crafting|Camera")
 	FTransform GroundCraftCameraTransform = FTransform(FRotator(-50.f, 0.f, 0.f), FVector(25.f, 0.f, 65.f), FVector::OneVector);
 
-	/** A2.2 debug: Engage press completes the current stage. Last stage commits the recipe. */
+	/** Debug cheat: Engage press completes the current stage. Off for grind motion. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Crafting")
-	bool bInstantComplete = true;
+	bool bInstantComplete = false;
 
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	virtual void TickComponent(float DeltaTime, ELevelTick TickType,
+		FActorComponentTickFunction* ThisTickFunction) override;
 
 	UFUNCTION(BlueprintCallable, Category = "Crafting")
 	bool TryStartCraft();
@@ -109,6 +125,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Crafting")
 	EHand GetEngageHand() const;
 
+	/** Binds IA_CraftPointer. Call from AWoodcraftCharacter::SetupPlayerInputComponent. */
+	void BindInput(UInputComponent* PlayerInputComponent);
+
 private:
 
 	void ResolveRecipeAssets();
@@ -130,6 +149,18 @@ private:
 	void PushCraftingIMC();
 	void PopCraftingIMC();
 	class UEnhancedInputLocalPlayerSubsystem* GetInputSubsystem() const;
+	void HandleCraftPointer(const FInputActionValue& Value);
+	void HandleCraftPointerCompleted();
+	void PlayStageMontage(const FCraftStage& Stage);
+	void StopStageMontage();
+	void TickStageClock();
+	void TickGrindActive(float DeltaTime);
+	void ApplyStagePresentation(const FCraftStage& Stage);
+	void RestoreBoundItemVisibility();
+	void EndCraftMotionBothHands();
+	void SetItemRenderHidden(AItemActor* Item, bool bHidden) const;
+	EHand GetSecondaryHand() const;
+	AItemActor* GetBoundActor(EHand Hand) const;
 
 	UPROPERTY()
 	TObjectPtr<UHeldItemsComponent> HeldItems;
@@ -147,6 +178,7 @@ private:
 	bool bCraftViewApplied = false;
 	FTransform CachedCameraRelativeTransform = FTransform::Identity;
 	FRotator CachedControlRotation = FRotator::ZeroRotator;
+	FVector2D CraftPointer = FVector2D::ZeroVector;
 
 	/** Default working hand until handedness settings exist. */
 	EHand DefaultCraftHand = EHand::Right;
