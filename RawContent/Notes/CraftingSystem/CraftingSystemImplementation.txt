@@ -192,7 +192,7 @@ For each recipe, assign every slot to a snapshot socket.
 
 Several recipes may match one snapshot. That is a list.
 
-A2 two-hand working / planted split: Right = working / primary, Left = planted. Handedness settings can flip this later.
+A2 two-hand working / planted split: Right = working / primary, Left = planted. Settings DefaultHandedness flips this later for crafts with no layout hand.
 
 
 ### 6. Prompt and selection
@@ -467,7 +467,8 @@ Engage is per movement class. GrindActive is always in contact. GrindPassive cli
 
 **Strip** — one stage, `UGrabPullCraftMovement`, hands. `DA_Item_FibrousStalk` + Unarmed → `DA_Item_PlantFiber`.
 
-- After the Grind + Twist PoC. Planted hand holds the stalk. Unarmed hand is the working / peel hand.
+- After the Grind + Twist PoC. First version: Left planted holds the stalk, Unarmed Right is the working / peel hand, Engage Right.
+- One recipe DA. Engage-from-layout + TwoHanded Mirror when the stalk is Right: After Core Loop, after this craft plays.
 - Engage = grip a fiber strip. Valid pull of length `D` along the stalk axis adds progress.
 - Success: consume stalk, spawn Plant Fiber. Wood Scraps / Kindling: fire system.
 
@@ -512,7 +513,7 @@ On every `UCraftingRecipeDefinition`:
 
 - Exact stroke, slice, peel, hone, Form, and Tie slam numbers
 - Forge heat / knap map payloads
-- TwoHanded slot Mirror when working hand is Left (handedness settings)
+- TwoHanded slot Mirror when working hand is Left. After Core Loop, after Strip plays. One recipe DA. Engage from layout (`UnarmedHand` / `ToolHand` / `DefaultHand`); remap stage hides to planted/working; presentation follow or scale X −1. Settings DefaultHandedness (Right default) supplies `DefaultHand` for crafts with no layout hand (Grind two Stones, Twist two fibers) and flips the same authored Right-working clips.
 - AssistOffset two-hand IK for `bTwoHanded` items (ItemAnimationPipeline)
 - Kindling vs Wood Scraps naming (fire system)
 - In-progress item fragment + instance progress fields (Form / Hammer)
@@ -620,7 +621,7 @@ One interpreter. Presentation SKMs spawn at `FCraftPresentation::Anchor`. Work f
 
 Resume later is an Item on selected long crafts (Form, Hammer). A2 Grind / Twist / Strip return the original items on R.
 
-OPEN: TwoHanded slot handedness Mirror, AssistOffset two-hand item IK, discovery prompt setting, hide result Instance vs new def, knap/forge payloads, exact numbers, Wood Scraps vs Kindling name, in-progress item fragment shape, hint widget, Tie slam count / morph names.
+OPEN: TwoHanded slot Mirror after Strip (one recipe DA, Engage from layout or Settings DefaultHandedness), AssistOffset two-hand item IK, discovery prompt setting, hide result Instance vs new def, knap/forge payloads, exact numbers, Wood Scraps vs Kindling name, in-progress item fragment shape, hint widget, Tie slam count / morph names.
 
 
 ### 16. Fidelity tiers and A2 build order

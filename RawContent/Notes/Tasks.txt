@@ -118,7 +118,7 @@ Status: Backlog
 Blocking:
 Blocked By: GrindActive minigame; CircleAlternate minigame; Minigame stage list; Recipe owns stages
 Description:
-After the Grind + Twist PoC. One-stage minigame. Add UGrabPullCraftMovement. DA_Recipe_PlantFiber Stages length 1. Fibrous Stalk planted, Unarmed working hand, Engage grab, pull D along the stalk. Output DA_Item_PlantFiber. Wood Scraps / Kindling: fire system.
+After the Grind + Twist PoC. One-stage minigame. Add UGrabPullCraftMovement. DA_Recipe_PlantFiber Stages length 1. Fibrous Stalk Left planted, Unarmed Right working, Engage Right. Engage grab, pull D along the stalk. Output DA_Item_PlantFiber. Wood Scraps / Kindling: fire system. Handedness flip is a later card.
 
 (UPDATED) Title: Workbench slot + Tie
 Size: M
@@ -131,6 +131,15 @@ Station snapshot (looked-at workbench or slotted item). DA_Recipe_StoneHatchet a
 
 
 --- After core loop (listed so it is not lost) ---
+
+Title: Recipe handedness flip
+Size: S
+Labels: feature, polish
+Status: Backlog
+Blocking:
+Blocked By: GrabPull strip; Core loop playable (A2–A4)
+Description:
+After Core Loop, after peel already plays. One recipe DA. Engage from layout (UnarmedHand / ToolHand) or Settings DefaultHandedness for crafts with no layout hand (Grind two Stones, Twist two fibers). TwoHanded slot Mirror when EngageHand is Left. Remap bHideLeft / bHideRight to planted / working. Presentation follow or scale X −1 when mirrored. Strip first version stays Left planted / Right working. Settings card can land with this or after; default is Right.
 
 Title: Visible Control Rig IK pole
 Size: S
