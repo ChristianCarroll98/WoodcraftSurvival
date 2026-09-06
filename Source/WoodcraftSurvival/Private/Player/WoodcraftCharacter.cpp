@@ -33,5 +33,9 @@ void AWoodcraftCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInput
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 
+	if (CraftingComponent)
+	{
+		CraftingComponent->BindInput(PlayerInputComponent);
+	}
 }
 

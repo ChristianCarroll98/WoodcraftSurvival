@@ -8,7 +8,9 @@
 #include "Items/Fragments/DurabilityItemFragment.h"
 #include "Player/HeldItemsComponent.h"
 #include "Core/WoodcraftTypes.h"
+#include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "InputAction.h"
 #include "InputMappingContext.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
@@ -102,6 +104,40 @@ void UCraftingComponent::NotifyOwnerDamaged()
 {
 	if (!IsSessionActive()) return;
 	EndSession();
+}
+
+void UCraftingComponent::BindInput(UInputComponent* PlayerInputComponent)
+{
+	UEnhancedInputComponent* EnhancedInput = Cast<UEnhancedInputComponent>(PlayerInputComponent);
+	if (!EnhancedInput) return;
+	if (!CraftPointerAction) return;
+
+	EnhancedInput->BindAction(
+		CraftPointerAction,
+		ETriggerEvent::Triggered,
+		this,
+		&UCraftingComponent::HandleCraftPointer);
+	EnhancedInput->BindAction(
+		CraftPointerAction,
+		ETriggerEvent::Completed,
+		this,
+		&UCraftingComponent::HandleCraftPointerCompleted);
+}
+
+void UCraftingComponent::HandleCraftPointer(const FInputActionValue& Value)
+{
+	if (!IsSessionActive())
+	{
+		CraftPointer = FVector2D::ZeroVector;
+		return;
+	}
+
+	CraftPointer = Value.Get<FVector2D>();
+}
+
+void UCraftingComponent::HandleCraftPointerCompleted()
+{
+	CraftPointer = FVector2D::ZeroVector;
 }
 
 void UCraftingComponent::CycleCraftMatch(int32 Delta)
@@ -485,6 +521,7 @@ void UCraftingComponent::CompleteCraft()
 void UCraftingComponent::EndSession()
 {
 	RestoreGroundCraftView();
+	CraftPointer = FVector2D::ZeroVector;
 	Session = FCraftingSession();
 	PopCraftingIMC();
 

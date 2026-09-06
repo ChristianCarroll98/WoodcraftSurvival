@@ -7,7 +7,8 @@
 
 /**
  * Two-hand grind. Planted workpiece, working abrader.
- * Always in contact. Progress from XY strokes while the session is live.
+ * Always in contact. Emits normalized dWork from planar working-hand speed.
+ * Stage WorkRequired is the finish line (1 = one second at MaxStrokeSpeed).
  */
 UCLASS(EditInlineNew, DefaultToInstanced)
 class WOODCRAFTSURVIVAL_API UGrindActiveCraftMovement : public UCraftMovement
@@ -18,7 +19,7 @@ public:
 
 	UGrindActiveCraftMovement();
 
-	/** Travel distance that counts as one stroke before a reverse. */
+	/** Travel distance that fires a grind cue. Does not commit the stage. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grind", meta = (ClampMin = "0.1"))
 	float StrokeDistance = 8.f;
 
