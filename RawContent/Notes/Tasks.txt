@@ -99,17 +99,17 @@ Blocked By: Crafting session + cancel; Ground recipe commit; Twist presentation 
 Description:
 A2.4. One-stage. Presentation SKM from the Twist stage list, Anchor ArmsPivot. FindMove<UCircleAlternateCraftMovement>(Phase). Opposite-direction circle slices as the mouse detector, bHideLeft + bHideRight. Both grip IK off. Play the stage montage into AnimRef TwoHanded slot; Montage_SetPosition from slice. Fiber presentation samples Progress. Destroy presentations, stop slot, unhide leftovers on session end. Success consumes both fibers and auto-equips DA_Item_Cordage. Placeholder SKM is enough to start; Twist presentation mesh card can stay art-follow.
 
-
---- Backlog ---
-
 Title: Twist presentation mesh
 Size: S
 Labels: art-assets
-Status: Backlog
+Status: In Progress
 Blocking: CircleAlternate minigame
 Blocked By:
 Description:
 Skeletal mesh for CircleAlternate / cordage: two strands from the working wrist, two-ply growing with phase / Progress. Assign on DA_Recipe_Cordage stage 0 Presentations, Anchor ArmsPivot. Placeholder is acceptable to unblock the code card; replace with the real SKM when painted. Item meshes stay without morphs.
+
+
+--- Backlog ---
 
 (UPDATED) Title: GrabPull strip
 Size: S
@@ -131,6 +131,15 @@ Station snapshot (looked-at workbench or slotted item). DA_Recipe_StoneHatchet a
 
 
 --- After core loop (listed so it is not lost) ---
+
+Title: Craft success outro + camera lerp
+Size: S
+Labels: feature, polish
+Status: Backlog
+Blocking:
+Blocked By: Core loop playable (A2–A4)
+Description:
+Recipe OutroMontage optional. Last stage Progress >= 1 commits then bOutroActive. Pointer off, look off, craft camera held. Play OutroMontage into AnimRef TwoHanded if set; otherwise hold + blend. Clip end or hold duration, then lerp FPCamera / control rotation back before IMC_Default. R / damage during outro skip remaining outro. bInstantComplete skips. Same card as CraftingSystemImplementation §11.1 enter/exit lerp (station player+camera, ground camera only, look-forward then look down).
 
 Title: Recipe handedness flip
 Size: S

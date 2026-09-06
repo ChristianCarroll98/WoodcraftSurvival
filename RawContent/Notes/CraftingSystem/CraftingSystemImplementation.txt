@@ -76,6 +76,7 @@ One asset per craft (`DA_Recipe_SharpenedStone`, `DA_Recipe_Cordage`, `DA_Recipe
 - `Slots` — array of `FCraftingSlot` (usually 2, at most 3)
 - `Outputs` — array of `FCraftingOutput` (one or more)
 - `Stages` — `TArray<FCraftStage>` (length ≥ 1). Grind, Twist, and Strip author one stage. Tie authors three.
+- `OutroMontage` — optional FPArms TwoHanded clip after last-stage commit. Unset = short hold + blend. Ships with the enter/exit camera lerp.
 
 `FindMove<T>(int32 StageIndex)` on the recipe matches `UItemDefinition::FindFragment<T>()` against `Stages[StageIndex].Move`. The interpreter always asks for the session’s current stage.
 
@@ -159,6 +160,7 @@ Created on E, cleared on success, R, fail, or inbound player damage. Holds:
 - Engage state
 - `bIntroActive`
 - `IntroEndTime` — FPArms montage seconds at `IntroDone`
+- `bOutroActive` — after last-stage commit, until the recipe `OutroMontage` ends or the hold duration elapses
 - Live presentation pointer (session-only)
 
 The session is a struct on the component.
@@ -220,12 +222,12 @@ The recipe stays frozen for the life of the session. Snapshot rebuilds wait unti
 Station crafts that need a specific item on the slot (Tie: Stick) run a layout pass after freeze: if that item is in a hand and something else is slotted, swap those two actors with the same attach paths as Q place / retrieve. Remember the pre-layout sockets. Then `Phase = 0`, play Stage 1 intro if the arms montage has one, apply that stage’s grip-IK bools and hides.
 
 **Cancel (R)**
-Session cleared. IMC removed. Bindings return to the pre-layout sockets. A2 and every recipe that is not marked resumable leave the original items. Prompt may show again if the snapshot still matches.
+Session cleared. IMC removed. Bindings return to the pre-layout sockets. A2 and every recipe that is not marked resumable leave the original items. Prompt may show again if the snapshot still matches. After last-stage commit (`bOutroActive`), R ends the outro only.
 
 Engage **release** pauses GrabPull and GrindPassive. The session stays up.
 
 **Interrupt — any damage the player receives**
-Same teardown as R. Immediate. Includes combat hits, fall damage, and any later damage channel that hurts the player.
+Same teardown as R while the minigame is live. After last-stage commit, damage ends the outro only. Includes combat hits, fall damage, and any later damage channel that hurts the player.
 
 `UCraftingComponent::NotifyOwnerDamaged()` is the hook. Player BP / future health code calls it.
 
@@ -239,7 +241,11 @@ Order:
 3. Spawn each output via ItemFactory
 4. Auto-equip at most one output (see §8)
 5. Remaining outputs pile at craft origin as separate world actors
-6. Clear session, remove IMC
+6. Stop the interpreter and pointer. `EndCraftMotion`. `bOutroActive`.
+7. Play recipe `OutroMontage` into AnimRef TwoHanded if set; otherwise hold the craft camera for a short duration on the component and blend the stage montage out.
+8. Outro end (clip finished, hold elapsed, R, or damage) restores view and removes IMC.
+
+`bInstantComplete` skips the outro and tears down immediately. A2 still snaps the camera on teardown; lerp back ships with §11.1.
 
 **Fail**
 A minigame may own a fail meter `0–1`. When it fills: session ends, tools stay, `DurabilityCost` is skipped, fail outputs pile if the recipe lists them.
@@ -338,7 +344,7 @@ Work frame: recipe `Station` unset → FPArms AnimRef mesh component (`+Z` up, `
 
 Station crafts: player stand and camera are offsets from the slot socket. A3.
 
-Deferred enter/exit (after A2 snap). Short “move to place and sit and/or look down.” Station: lerp player location and camera to the station craft pose. Ground: camera only, to `GroundCraftCameraTransform`. Beat 1: brief look-forward while hide flags apply and stage presentation SKMs spawn at their `Anchor`. Beat 2: lerp camera down onto the work surface. Short. R / session end blends back.
+Deferred enter/exit (after A2 snap). Short “move to place and sit and/or look down.” Station: lerp player location and camera to the station craft pose. Ground: camera only, to `GroundCraftCameraTransform`. Beat 1: brief look-forward while hide flags apply and stage presentation SKMs spawn at their `Anchor`. Beat 2: lerp camera down onto the work surface. Short. Success outro holds look-off, then this card lerps the camera back before IMC_Default. R before commit snaps back.
 
 #### 11.2 Authority
 
@@ -351,7 +357,7 @@ HeldItems craft API:
 - `BeginCraftMotion(Hand, LinearStrength, AngularStrength)`
 - `SetCraftAxisLocks(Hand, LockX, LockY, LockZ)`
 - `EndCraftMotion(Hand)`
-- Guided TwoHanded slot play / `Montage_SetPosition` / stop — CraftingComponent on AnimRef (ItemAnimationPipeline §6.2). Stage intros use the same slot.
+- Guided TwoHanded slot play / `Montage_SetPosition` / stop — CraftingComponent on AnimRef (ItemAnimationPipeline §6.2). Stage intros and the recipe `OutroMontage` use the same slot.
 - Visible grip-IK bools per hand, written from the current stage
 
 Swing orientation and collision damage stay off for the whole session. Player BP gates extend on `IsSessionActive()`. Start requires both hands Neutral. Start fails if the recipe has `Stages.Num() < 1`.
@@ -417,6 +423,10 @@ Item meshes stay without morphs. Shape change is presentation only. Material `Cr
 The player holds `AItemActor` in A2.
 
 #### 11.5 Tuning fields
+
+On the recipe:
+
+- `OutroMontage` — optional. Unset = hold + blend. Same TwoHanded slot as stage `Montage`.
 
 On `FCraftStage`:
 
@@ -505,6 +515,7 @@ A minigame may list events (`FCraftMinigameEvent`: trigger, id, optional arm mon
 On every `UCraftingRecipeDefinition`:
 
 - `Stages` — `TArray<FCraftStage>`, length ≥ 1
+- `OutroMontage` — optional session-end TwoHanded clip
 - Events / checkpoints / fail: optional
 
 `FindMove<T>(Phase)` reads `Stages[Phase].Move`. Gesture numbers live on the movement class. `WorkRequired` lives on the stage.
@@ -518,6 +529,7 @@ On every `UCraftingRecipeDefinition`:
 - Kindling vs Wood Scraps naming (fire system)
 - In-progress item fragment + instance progress fields (Form / Hammer)
 - Hint widget (field is on the stage)
+- Success outro + camera lerp back (recipe `OutroMontage`, §11.1). After A2.
 
 #### 11.11 Stage machine
 
@@ -527,13 +539,13 @@ Each stage owns a local Progress `0–1`. Intro does not write progress. After `
 
 ```
 local >= 1
-  if Phase is last stage → CompleteCraft
+  if Phase is last stage → CompleteCraft (commit first), bOutroActive, play OutroMontage or hold, then EndSession
   else Phase++, local = 0, apply next stage IK / hides / presentations, play next intro
 ```
 
-`bInstantComplete` engage press calls `CompleteCurrentStage()` (same branch).
+`bInstantComplete` engage press calls `CompleteCurrentStage()` (same branch, outro skipped).
 
-Grind, Twist, and Strip: one stage. Local `>= 1` commits.
+Grind, Twist, and Strip: one stage. Local `>= 1` commits then outro when that card ships.
 
 Tie Cordage on the bench in Stages 1–2 is a hidden bound item or a presentation with no montage.
 
@@ -617,6 +629,8 @@ A2 MVP recipes: Grind and Twist. Strip follows the PoC. Station / Tie is A3.
 
 A2.3 GrindActive accepted in PIE (2026-09-06). Work frame = AnimRef mesh component. Module defaults kept. WorkRequired authored on the recipe stage. Visible Control Rig pole / elbow-with-wrist is a later polish card.
 
+Success outro locked 2026-09-06 (code later, with §11.1 camera lerp): optional `OutroMontage` on the recipe. Last stage commits first, then `bOutroActive`. Pointer off, look off, craft camera held. Clip end or hold duration restores view. R / damage during outro skip remaining outro. `bInstantComplete` skips. Unset montage = hold + blend.
+
 One interpreter. Presentation SKMs spawn at `FCraftPresentation::Anchor`. Work frame = AnimRef mesh component (hands) or slot socket (station). `IA_CraftPointer` on `IMC_Crafting`. Moves emit normalized `dWork`.
 
 Resume later is an Item on selected long crafts (Form, Hammer). A2 Grind / Twist / Strip return the original items on R.
@@ -660,6 +674,7 @@ Strip after that PoC plays (one stage, stalk + Unarmed → Plant Fiber only).
 - Grind workpiece `Morph` + `Lerp`, `Anchor = Secondary`. Abrader stays live cobble.
 - Strip presentation SKM.
 - Tie three-stage session + workpiece SKM + wrap SKM.
+- Recipe `OutroMontage` + camera lerp back (§11.1).
 
 **Vision**
 

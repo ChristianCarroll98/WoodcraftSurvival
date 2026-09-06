@@ -72,7 +72,7 @@ E. Needs + day cycle (stamina on swing/sprint, simple hunger, 24-min day).
 F. Combat verbs that expand the loop rather than close it: stab, throw, two-hand weapons beyond logs.
 G. Next progression tier (flint / leather), then copper.
 
-- Craft enter/exit lerp (CraftingSystemImplementation §11.1 deferred): station lerps player + camera to the station craft pose; ground lerps camera only to GroundCraftCameraTransform. Brief look-forward while hides apply and presentation SKMs spawn, then look down at the work surface. Short “sit and/or look down.” Session end blends back.
+- Craft enter/exit lerp + success outro (CraftingSystemImplementation §11.1): station lerps player + camera to the station craft pose; ground lerps camera only to GroundCraftCameraTransform. Brief look-forward while hides apply and presentation SKMs spawn, then look down at the work surface. Last stage commits first, then optional recipe OutroMontage (TwoHanded) or a short hold. Lerp camera back before IMC_Default.
 - Recipe handedness flip (CraftingSystemImplementation §11.10): one DA per craft. After Strip plays. Engage from layout or Settings DefaultHandedness (Grind / Twist working hand). TwoHanded slot Mirror when working hand is Left. Hide remap. Presentation follow or scale X −1.
 
 Parallel / anytime
