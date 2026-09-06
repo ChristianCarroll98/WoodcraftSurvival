@@ -23,7 +23,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grind", meta = (ClampMin = "0.1"))
 	float StrokeDistance = 8.f;
 
-	/** Half-extents of the working-hand travel box in craft space. */
+	/** Half-extents of the working-hand travel box in AnimRef mesh space (+X forward, +Y right, +Z up). */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grind")
 	FVector WorkingVolumeHalfExtents = FVector(12.f, 12.f, 8.f);
 

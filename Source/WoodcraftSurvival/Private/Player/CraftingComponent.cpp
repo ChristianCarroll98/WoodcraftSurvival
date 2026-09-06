@@ -844,19 +844,27 @@ void UCraftingComponent::TickGrindActive(float DeltaTime)
 	const FVector2D Pointer = CraftPointer;
 	CraftPointer = FVector2D::ZeroVector;
 
-	const APawn* OwnerPawn = Cast<APawn>(GetOwner());
-	const FVector WorldRight = OwnerPawn ? OwnerPawn->GetActorRightVector() : FVector::RightVector;
-	const FVector WorldForward = OwnerPawn ? OwnerPawn->GetActorForwardVector() : FVector::ForwardVector;
-	const FVector WorldDelta =
-		(WorldRight * Pointer.X + WorldForward * Pointer.Y) * Grind->PointerSensitivity;
-
 	const FTransform BoneXform = HeldItems->GetHeldSpawnTransform(WorkingHand);
-	FVector Extra = HeldItems->GetCraftExtraOffset(WorkingHand);
-	Extra += BoneXform.InverseTransformVector(WorldDelta);
-	Extra.X = FMath::Clamp(Extra.X, -Grind->WorkingVolumeHalfExtents.X, Grind->WorkingVolumeHalfExtents.X);
-	Extra.Y = FMath::Clamp(Extra.Y, -Grind->WorkingVolumeHalfExtents.Y, Grind->WorkingVolumeHalfExtents.Y);
-	Extra.Z = 0.f;
-	HeldItems->SetCraftExtraOffset(WorkingHand, Extra);
+	FQuat WorkRot = FQuat::Identity;
+	if (const USkeletalMeshComponent* Arms = HeldItems->GetAnimRefMesh())
+	{
+		WorkRot = Arms->GetComponentQuat();
+	}
+	else if (const APawn* OwnerPawn = Cast<APawn>(GetOwner()))
+	{
+		WorkRot = OwnerPawn->GetActorQuat();
+	}
+	const FTransform WorkFrame(WorkRot, BoneXform.GetLocation());
+
+	FVector WorkExtra = WorkFrame.InverseTransformVector(
+		BoneXform.TransformVector(HeldItems->GetCraftExtraOffset(WorkingHand)));
+	WorkExtra += FVector(Pointer.Y, Pointer.X, 0.f) * Grind->PointerSensitivity;
+	WorkExtra.X = FMath::Clamp(WorkExtra.X, -Grind->WorkingVolumeHalfExtents.X, Grind->WorkingVolumeHalfExtents.X);
+	WorkExtra.Y = FMath::Clamp(WorkExtra.Y, -Grind->WorkingVolumeHalfExtents.Y, Grind->WorkingVolumeHalfExtents.Y);
+	WorkExtra.Z = 0.f;
+	HeldItems->SetCraftExtraOffset(
+		WorkingHand,
+		BoneXform.InverseTransformVector(WorkFrame.TransformVector(WorkExtra)));
 
 	AItemActor* WorkingItem = GetBoundActor(WorkingHand);
 	float PlanarSpeed = 0.f;
@@ -864,8 +872,8 @@ void UCraftingComponent::TickGrindActive(float DeltaTime)
 	{
 		if (UStaticMeshComponent* Mesh = WorkingItem->GetItemPrimaryMesh())
 		{
-			const FVector Vel = Mesh->GetPhysicsLinearVelocity();
-			PlanarSpeed = FVector(Vel.X, Vel.Y, 0.f).Size();
+			const FVector WorkVel = WorkFrame.InverseTransformVector(Mesh->GetPhysicsLinearVelocity());
+			PlanarSpeed = FVector(WorkVel.X, WorkVel.Y, 0.f).Size();
 		}
 	}
 
@@ -883,12 +891,11 @@ void UCraftingComponent::TickGrindActive(float DeltaTime)
 	{
 		if (UWorld* World = GetWorld())
 		{
-			const FVector Origin = BoneXform.GetLocation();
 			DrawDebugBox(
 				World,
-				Origin,
+				WorkFrame.GetLocation(),
 				Grind->WorkingVolumeHalfExtents,
-				BoneXform.GetRotation(),
+				WorkRot,
 				FColor::Cyan,
 				false,
 				0.f,

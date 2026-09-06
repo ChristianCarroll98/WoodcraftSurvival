@@ -334,7 +334,7 @@ Audio and VFX are curated from meter events (engage, valid stroke / slice / pull
 
 Hands / ground: on E, set control pitch to 0 (`ArmsPivot` / arms level) and set `FPCamera` relative transform to `GroundCraftCameraTransform` on `UCraftingComponent` (scale forced to 1). Same transform for every ground craft. Locked default: location `25, 0, 65`, rotation `0, -50, 0` (pitch −50). Look stays off for the session. R restores control rotation and the camera relative transform. `FPCamera` parents on `ArmsPivot`. Camera `bUsePawnControlRotation` off. ArmsPivot on.
 
-Work frame: recipe `Station` unset → `ArmsPivot`. Recipe `Station` set → that station’s slot socket (`+Z` up, `+X` forward). Mouse plane and default travel volumes use this frame. Grind volume tracks the planted item inside the frame.
+Work frame: recipe `Station` unset → FPArms AnimRef mesh component (`+Z` up, `+X` forward). Recipe `Station` set → that station’s slot socket (`+Z` up, `+X` forward). Mouse plane and default travel volumes use this frame. Grind volume origin is the working WeaponBone; orientation is the work frame. Grind volume tracks the planted item inside the frame later.
 
 Station crafts: player stand and camera are offsets from the slot socket. A3.
 
@@ -614,7 +614,7 @@ Minigame stages (2026-09-05): ordered `FCraftStage` list on the recipe. Local `0
 
 A2 MVP recipes: Grind and Twist. Strip follows the PoC. Station / Tie is A3.
 
-One interpreter. Presentation SKMs spawn at `FCraftPresentation::Anchor`. Work frame = ArmsPivot (hands) or slot socket (station). `IA_CraftPointer` on `IMC_Crafting`. Moves emit normalized `dWork`.
+One interpreter. Presentation SKMs spawn at `FCraftPresentation::Anchor`. Work frame = AnimRef mesh component (hands) or slot socket (station). `IA_CraftPointer` on `IMC_Crafting`. Moves emit normalized `dWork`.
 
 Resume later is an Item on selected long crafts (Form, Hammer). A2 Grind / Twist / Strip return the original items on R.
 
