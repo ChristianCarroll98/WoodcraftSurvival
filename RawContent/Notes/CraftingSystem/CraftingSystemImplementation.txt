@@ -614,6 +614,8 @@ Minigame stages (2026-09-05): ordered `FCraftStage` list on the recipe. Local `0
 
 A2 MVP recipes: Grind and Twist. Strip follows the PoC. Station / Tie is A3.
 
+A2.3 GrindActive accepted in PIE (2026-09-06). Work frame = AnimRef mesh component. Module defaults kept. WorkRequired authored on the recipe stage. Visible Control Rig pole / elbow-with-wrist is a later polish card.
+
 One interpreter. Presentation SKMs spawn at `FCraftPresentation::Anchor`. Work frame = AnimRef mesh component (hands) or slot socket (station). `IA_CraftPointer` on `IMC_Crafting`. Moves emit normalized `dWork`.
 
 Resume later is an Item on selected long crafts (Form, Hammer). A2 Grind / Twist / Strip return the original items on R.
