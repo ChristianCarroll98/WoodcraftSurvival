@@ -858,7 +858,7 @@ void UCraftingComponent::TickGrindActive(float DeltaTime)
 
 	FVector WorkExtra = WorkFrame.InverseTransformVector(
 		BoneXform.TransformVector(HeldItems->GetCraftExtraOffset(WorkingHand)));
-	WorkExtra += FVector(Pointer.Y, Pointer.X, 0.f) * Grind->PointerSensitivity;
+	WorkExtra += FVector(-Pointer.X, Pointer.Y, 0.f) * Grind->PointerSensitivity;
 	WorkExtra.X = FMath::Clamp(WorkExtra.X, -Grind->WorkingVolumeHalfExtents.X, Grind->WorkingVolumeHalfExtents.X);
 	WorkExtra.Y = FMath::Clamp(WorkExtra.Y, -Grind->WorkingVolumeHalfExtents.Y, Grind->WorkingVolumeHalfExtents.Y);
 	WorkExtra.Z = 0.f;
